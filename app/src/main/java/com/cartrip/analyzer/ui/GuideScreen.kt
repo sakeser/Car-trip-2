@@ -51,9 +51,9 @@ fun GuideScreen(onBack: () -> Unit) {
                 GuideCard(
                     "Your three scores",
                     listOf(
-                        "Safety - risk-style score, à la Tesla. Penalizes the share of moving time you spend hard-braking (>0.30g), turning aggressively (>0.40g) or accelerating hard (>0.30g), plus speeding over the posted limit and high peak g-force.",
+                        "Safety - a Tesla-style risk score. Penalizes the share of moving time you spend hard-braking (>0.30g), turning aggressively (>0.40g) or accelerating hard (>0.30g), plus speeding over the posted limit and high peak g-force.",
                         "Comfort - how smooth the ride felt: hard events, jerk (how abruptly acceleration changed), stop-and-go idling, and harsh stops.",
-                        "Speed - 'you vs traffic': your actual time against Google's traffic estimate for that route and time. Matching Google ≈ 75; beating it climbs toward 100.",
+                        "Speed - 'you vs traffic': your actual time against Google's traffic estimate for that route and time. Matching Google is about 75; beating it climbs toward 100.",
                         "Drive (overall) - a weighted blend of the three."
                     )
                 )

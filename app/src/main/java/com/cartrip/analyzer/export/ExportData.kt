@@ -17,7 +17,13 @@ object ExportData {
         "MaxSpeed_kmh", "AvgMoving_kmh", "MaxAccel_mps2", "MaxBrake_mps2", "MaxLateral_mps2",
         "PeakG", "HardAccel", "HardBrake", "HardCorner", "Smoothness",
         "UsedFixes", "RawFixes", "StartLat", "StartLon", "EndLat", "EndLon",
-        "Status", "EndReason", "LocationSamples", "MotionSamples", "GpsGapCount"
+        "Status", "EndReason", "LocationSamples", "MotionSamples", "GpsGapCount",
+        // Exposure factors (fraction of moving time) + jerk
+        "HardBrakePct", "HardTurnPct", "HardAccelPct", "JerkyPct", "MaxJerk_mps3",
+        // Accelerometer-fusion road/ride metrics
+        "RoughRoadPct", "PotholeCount", "HarshStopCount",
+        // Speeding vs OSM limits
+        "SpeedingPct", "MaxOverLimit_kmh", "LimitCoverage"
     )
 
     val SAMPLE_HEADER = listOf(
@@ -59,7 +65,18 @@ object ExportData {
             trip.endReason,
             trip.locationSampleCount.toString(),
             trip.motionSampleCount.toString(),
-            trip.gpsGapCount.toString()
+            trip.gpsGapCount.toString(),
+            f(trip.hardBrakePct, 4),
+            f(trip.aggressiveTurnPct, 4),
+            f(trip.hardAccelPct, 4),
+            f(trip.jerkyPct, 4),
+            f(trip.maxJerk, 2),
+            f(trip.roughRoadPct, 4),
+            trip.potholeCount.toString(),
+            trip.harshStopCount.toString(),
+            f(trip.speedingPct, 4),
+            f(trip.maxOverLimitKmh, 1),
+            f(trip.limitCoverage, 3)
         )
     }
 

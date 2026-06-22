@@ -142,9 +142,12 @@ fun TripMap(
                 icon = stopIcon
             )
 
-            val byTime = remember(points) { points.associateBy { it.tMs } }
+            // Place each event at the nearest route point by time. analysis points are downsampled
+            // (≥1s gaps) and pothole events come from the 50 Hz motion clock, so an exact timestamp
+            // match would silently drop most markers. Only skip if the nearest point is absurdly far.
             events.forEach { event ->
-                val point = byTime[event.tMs] ?: return@forEach
+                val point = points.minByOrNull { kotlin.math.abs(it.tMs - event.tMs) } ?: return@forEach
+                if (kotlin.math.abs(point.tMs - event.tMs) > 15_000L) return@forEach
                 Marker(
                     state = MarkerState(LatLng(point.lat, point.lon)),
                     title = event.title(),

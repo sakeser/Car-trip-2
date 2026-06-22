@@ -99,9 +99,10 @@ data class TripAnalysis(
  * pseudo-measurements (ZUPT) so jitter at stops can't fabricate motion. Distance is the integral
  * of the smoothed speed, which is far less noisy than summing raw fix-to-fix haversines.
  *
- * Note: accelerometer samples are currently used only for peak g-force. Full fusion of the
- * accelerometer into longitudinal/lateral acceleration requires the device's orientation
- * (it can sit in any pose), which is not yet recorded — see RecordingService.
+ * The accelerometer (with the recorded gravity vector) is fused in via MotionFusion for peak
+ * g-force, potholes, rough-road exposure, and harsh stops. Hard brake/accel/corner events and
+ * jerk are still GPS-derived; folding the accelerometer/gyro into those (confidence-scored,
+ * device->vehicle projected) is the planned next step.
  */
 object TripAnalyzer {
 

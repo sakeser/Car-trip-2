@@ -178,6 +178,20 @@ fun TripDetailScreen(
                 }
             }
 
+            // --- Data quality (sensor confidence) ---
+            trip?.takeIf { !it.isSample }?.let { t ->
+                val q = TripDataQuality.from(t)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(q.color()))
+                    Text("Data quality: ${q.level.label}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = q.color())
+                    Text(q.detail(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
             // --- You vs traffic (moved up, reframed) ---
             trip?.let { t ->
                 EtaComparisonCard(
