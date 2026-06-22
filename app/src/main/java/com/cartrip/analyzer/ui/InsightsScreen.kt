@@ -221,13 +221,22 @@ private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>): Li
     val paceVsGoogle = trips
         .filter { it.googleEtaTrafficS > 0.0 && it.durationS > 0.0 }
         .map { ((it.googleEtaTrafficS - it.durationS) / 60.0).toFloat() }
+    // Accelerometer-fusion trends.
+    val roughRoad = trips.map { (it.roughRoadPct * 100.0).toFloat() }
+    val potholesPer100 = trips.map { (it.potholeCount / max(0.3, it.distanceM / 1000.0) * 100.0).toFloat() }
+    val harshStops = trips.map { it.harshStopCount.toFloat() }
+    val peakG = trips.map { it.peakGForce.toFloat() }
 
     val out = mutableListOf(
         StatSpec("Drive score", avg(overall).roundToInt().toString(), "Blended trip health", overall, Color(0xFF0EA5E9)),
         StatSpec("Safety", avg(safety).roundToInt().toString(), "Braking, turns, speed", safety, Color(0xFF10B981)),
         StatSpec("Comfort", avg(comfort).roundToInt().toString(), "Smoothness and idle", comfort, Color(0xFF38BDF8)),
         StatSpec("Distance / trip", String.format(Locale.US, "%.1f km", avg(dist)), "Average drive length", dist, Color(0xFF14B8A6)),
-        StatSpec("Hard events / 100 km", String.format(Locale.US, "%.1f", avg(eventRate)), "Lower is better", eventRate, Color(0xFFF59E0B))
+        StatSpec("Hard events / 100 km", String.format(Locale.US, "%.1f", avg(eventRate)), "Lower is better", eventRate, Color(0xFFF59E0B)),
+        StatSpec("Rough road", String.format(Locale.US, "%.0f%%", avg(roughRoad)), "Bumpy / vibrating road", roughRoad, Color(0xFFF59E0B)),
+        StatSpec("Potholes / 100 km", String.format(Locale.US, "%.1f", avg(potholesPer100)), "Big bumps detected", potholesPer100, Color(0xFF78716C)),
+        StatSpec("Harsh stops / trip", String.format(Locale.US, "%.1f", avg(harshStops)), "Jerky stops", harshStops, Color(0xFFEF4444)),
+        StatSpec("Peak g-force", String.format(Locale.US, "%.2fg", avg(peakG)), "Strongest jolt", peakG, Color(0xFF8B5CF6))
     )
     if (paceVsGoogle.isNotEmpty()) {
         val margin = avg(paceVsGoogle)
