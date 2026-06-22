@@ -16,7 +16,8 @@ object ExportData {
         "TripId", "Start", "End", "Distance_km", "Duration_min", "Idle_min",
         "MaxSpeed_kmh", "AvgMoving_kmh", "MaxAccel_mps2", "MaxBrake_mps2", "MaxLateral_mps2",
         "PeakG", "HardAccel", "HardBrake", "HardCorner", "Smoothness",
-        "UsedFixes", "RawFixes", "StartLat", "StartLon", "EndLat", "EndLon"
+        "UsedFixes", "RawFixes", "StartLat", "StartLon", "EndLat", "EndLon",
+        "Status", "EndReason", "LocationSamples", "MotionSamples", "GpsGapCount"
     )
 
     val SAMPLE_HEADER = listOf(
@@ -53,7 +54,12 @@ object ExportData {
             start?.let { f(it.lat, 6) } ?: "",
             start?.let { f(it.lon, 6) } ?: "",
             end?.let { f(it.lat, 6) } ?: "",
-            end?.let { f(it.lon, 6) } ?: ""
+            end?.let { f(it.lon, 6) } ?: "",
+            trip.status,
+            trip.endReason,
+            trip.locationSampleCount.toString(),
+            trip.motionSampleCount.toString(),
+            trip.gpsGapCount.toString()
         )
     }
 

@@ -1,5 +1,7 @@
 package com.cartrip.analyzer.ui
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,11 +10,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
@@ -32,11 +37,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.data.TripEntity
+import java.util.Locale
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,9 +97,11 @@ fun InsightsScreen(
             InsightWindow.ALL -> completed
         }.ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
+        val averages = ScoreAverages.from(wScores)
+        val driveSeries = Series("Drive", Color(0xFF0EA5E9), wScores.map { it.overall.toFloat() })
         val safetySeries = Series("Safety", Color(0xFF22C55E), wScores.map { it.safety.toFloat() })
         val comfortSeries = Series("Comfort", Color(0xFF38BDF8), wScores.map { it.comfort.toFloat() })
-        val speedSeries = Series("Speed", Color(0xFFF59E0B), wScores.map { (it.speed ?: it.overall).toFloat() })
+        val paceSeries = Series("Pace", Color(0xFF8B5CF6), wScores.map { (it.speed ?: it.overall).toFloat() })
         val best = windowTrips.maxByOrNull { it.smoothness }
         val worst = windowTrips.minByOrNull { it.smoothness }
         val longest = windowTrips.maxByOrNull { it.distanceM }
@@ -99,20 +113,28 @@ fun InsightsScreen(
         ) {
             item { WindowSelector(window) { window = it } }
 
+            item { DriveScoreHero(averages, wScores, windowTrips.size, window.label) }
+
             item { GoogleVsYouHero(windowTrips) }
 
             item {
-                SectionTitle("Scores over ${window.label.lowercase()}")
-                MultiSeriesChart(
-                    title = "Safety · Comfort · Speed",
-                    series = listOf(safetySeries, comfortSeries, speedSeries),
-                    yMin = 0f,
-                    yMax = 100f,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                SectionTitle("Score trends")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    MultiSeriesChart(
+                        title = "Drive score over ${window.label.lowercase()}",
+                        series = listOf(driveSeries, safetySeries, comfortSeries, paceSeries),
+                        yMin = 0f,
+                        yMax = 100f,
+                        modifier = Modifier.fillMaxWidth().padding(16.dp)
+                    )
+                }
             }
 
-            item { SectionTitle("Metrics over ${window.label.lowercase()}") }
+            item { SectionTitle("Health metrics") }
             items(miniStatSpecs(windowTrips, wScores).chunked(2)) { rowSpecs ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -124,10 +146,10 @@ fun InsightsScreen(
             }
 
             item {
-                SectionTitle("Standouts")
+                SectionTitle("Highlights")
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     best?.let {
-                        InsightTripCard("Best score", it, onClick = { onOpenTrip(it.id) })
+                        InsightTripCard("Best drive score", it, onClick = { onOpenTrip(it.id) })
                     }
                     worst?.let {
                         InsightTripCard("Needs attention", it, onClick = { onOpenTrip(it.id) })
@@ -157,19 +179,68 @@ private fun recentByDistance(completed: List<TripEntity>, meters: Double): List<
     return out.asReversed()
 }
 
-private class StatSpec(val title: String, val value: String, val series: List<Float>, val color: Color)
+private data class ScoreAverages(
+    val drive: Int,
+    val safety: Int,
+    val comfort: Int,
+    val pace: Int?
+) {
+    companion object {
+        fun from(scores: List<TripScores>): ScoreAverages {
+            fun avg(values: List<Int>): Int =
+                if (values.isEmpty()) 0 else values.average().roundToInt()
+            val paces = scores.mapNotNull { it.speed }
+            return ScoreAverages(
+                drive = avg(scores.map { it.overall }),
+                safety = avg(scores.map { it.safety }),
+                comfort = avg(scores.map { it.comfort }),
+                pace = paces.takeIf { it.isNotEmpty() }?.let(::avg)
+            )
+        }
+    }
+}
+
+private class StatSpec(
+    val title: String,
+    val value: String,
+    val caption: String,
+    val series: List<Float>,
+    val color: Color
+)
 
 private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>): List<StatSpec> {
     fun avg(l: List<Float>) = if (l.isEmpty()) 0.0 else l.map { it.toDouble() }.average()
     val overall = scores.map { it.overall.toFloat() }
+    val safety = scores.map { it.safety.toFloat() }
+    val comfort = scores.map { it.comfort.toFloat() }
     val dist = trips.map { (it.distanceM / 1000.0).toFloat() }
-    val spd = trips.map { (it.avgMovingSpeedMps * 3.6).toFloat() }
-    val ev = trips.map { (it.hardBrakeCount + it.hardAccelCount + it.hardCornerCount).toFloat() }
+    val eventRate = trips.map {
+        val km = max(0.3, it.distanceM / 1000.0)
+        ((it.hardBrakeCount + it.hardAccelCount + it.hardCornerCount) / km * 100.0).toFloat()
+    }
+    val paceVsGoogle = trips
+        .filter { it.googleEtaTrafficS > 0.0 && it.durationS > 0.0 }
+        .map { ((it.googleEtaTrafficS - it.durationS) / 60.0).toFloat() }
+
+    val out = mutableListOf(
+        StatSpec("Drive score", avg(overall).roundToInt().toString(), "Blended trip health", overall, Color(0xFF0EA5E9)),
+        StatSpec("Safety", avg(safety).roundToInt().toString(), "Braking, turns, speed", safety, Color(0xFF10B981)),
+        StatSpec("Comfort", avg(comfort).roundToInt().toString(), "Smoothness and idle", comfort, Color(0xFF38BDF8)),
+        StatSpec("Distance / trip", String.format(Locale.US, "%.1f km", avg(dist)), "Average drive length", dist, Color(0xFF14B8A6)),
+        StatSpec("Hard events / 100 km", String.format(Locale.US, "%.1f", avg(eventRate)), "Lower is better", eventRate, Color(0xFFF59E0B))
+    )
+    if (paceVsGoogle.isNotEmpty()) {
+        val margin = avg(paceVsGoogle)
+        out += StatSpec(
+            "Pace vs traffic",
+            String.format(Locale.US, "%+.1f min", margin),
+            "Positive means faster",
+            paceVsGoogle,
+            if (margin >= 0.0) Color(0xFF22C55E) else Color(0xFFEF4444)
+        )
+    }
     return listOf(
-        StatSpec("Overall score", avg(overall).roundToInt().toString(), overall, Color(0xFF22C55E)),
-        StatSpec("Avg speed", "${avg(spd).roundToInt()} km/h", spd, Color(0xFF38BDF8)),
-        StatSpec("Distance / trip", String.format(java.util.Locale.US, "%.1f km", avg(dist)), dist, Color(0xFF14B8A6)),
-        StatSpec("Hard events / trip", String.format(java.util.Locale.US, "%.1f", avg(ev)), ev, Color(0xFFF59E0B))
+        *out.toTypedArray()
     )
 }
 
@@ -188,44 +259,183 @@ private fun WindowSelector(selected: InsightWindow, onSelect: (InsightWindow) ->
 }
 
 @Composable
+private fun DriveScoreHero(averages: ScoreAverages, scores: List<TripScores>, tripCount: Int, windowLabel: String) {
+    val driveColor = TripScores.color(averages.drive)
+    val trend = driveTrendText(scores.map { it.overall })
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                DriveScoreRing(score = averages.drive, color = driveColor)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text(
+                        "Drive score",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "$tripCount trips - $windowLabel",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        scoreBand(averages.drive),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = driveColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ScorePill("Safety", averages.safety, Color(0xFF10B981), Modifier.weight(1f))
+                ScorePill("Comfort", averages.comfort, Color(0xFF38BDF8), Modifier.weight(1f))
+                ScorePill("Pace", averages.pace, Color(0xFF8B5CF6), Modifier.weight(1f))
+            }
+            Text(
+                trend,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DriveScoreRing(score: Int, color: Color) {
+    val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(118.dp)) {
+        Canvas(modifier = Modifier.size(118.dp)) {
+            val stroke = 13f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            val topLeft = Offset(stroke / 2f, stroke / 2f)
+            drawArc(
+                color = track,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = color,
+                startAngle = -90f,
+                sweepAngle = 360f * (score / 100f),
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                score.toString(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Text(
+                "drive",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScorePill(label: String, value: Int?, color: Color, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 9.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(color)
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            "$label ${value?.toString() ?: "-"}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+private fun scoreBand(score: Int): String = when {
+    score >= 90 -> "Excellent driving health"
+    score >= 80 -> "Strong driving health"
+    score >= 65 -> "Good, with room to smooth out"
+    score >= 50 -> "Needs attention"
+    else -> "High-risk pattern"
+}
+
+private fun driveTrendText(scores: List<Int>): String {
+    if (scores.size < 4) return "Trend will sharpen as more trips are recorded."
+    val segment = (scores.size / 3).coerceAtLeast(2)
+    val recent = scores.takeLast(segment).average()
+    val previous = scores.dropLast(segment).takeLast(segment).average()
+    val delta = (recent - previous).roundToInt()
+    return when {
+        delta >= 3 -> "Trend: improving by $delta points recently."
+        delta <= -3 -> "Trend: down ${-delta} points recently."
+        else -> "Trend: steady recently."
+    }
+}
+
+@Composable
 private fun GoogleVsYouHero(trips: List<TripEntity>) {
-    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
     val withEta = trips.filter { it.googleEtaTrafficS > 0 && it.durationS > 0 }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("You vs Google Maps", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = onContainer)
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text("Traffic pace", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             if (withEta.isEmpty()) {
                 Text(
                     "No Google estimates in this window yet.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = onContainer
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
                 val wins = withEta.count { it.durationS < it.googleEtaTrafficS }
                 val winRate = (wins * 100.0 / withEta.size).roundToInt()
                 val avgMargin = withEta.map { (it.googleEtaTrafficS - it.durationS) / 60.0 }.average()
+                val marginColor = if (avgMargin >= 0.0) Color(0xFF22C55E) else Color(0xFFEF4444)
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("$winRate%", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = onContainer)
+                    Text("$winRate%", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = marginColor)
                     Text(
-                        "faster than Google\non $wins of ${withEta.size} trips",
+                        "faster than Google\n$wins of ${withEta.size} trips",
                         style = MaterialTheme.typography.bodySmall,
-                        color = onContainer,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
                 MiniSparkline(
                     values = withEta.map { ((it.googleEtaTrafficS - it.durationS) / 60.0).toFloat() },
-                    color = onContainer,
+                    color = marginColor,
                     zeroBaseline = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    String.format(java.util.Locale.US, "Avg %+.1f min vs estimate  ·  above the line = you were faster", avgMargin),
+                    String.format(Locale.US, "Avg %+.1f min vs estimate", avgMargin),
                     style = MaterialTheme.typography.labelSmall,
-                    color = onContainer
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -236,11 +446,13 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
 private fun MiniStatCard(spec: StatSpec, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(spec.title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(spec.value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(spec.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(spec.value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(spec.caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             MiniSparkline(values = spec.series, color = spec.color, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -260,7 +472,8 @@ private fun SectionTitle(text: String) {
 private fun InsightTripCard(title: String, trip: TripEntity, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -274,7 +487,7 @@ private fun InsightTripCard(title: String, trip: TripEntity, onClick: () -> Unit
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "${Format.distance(trip.distanceM)}  ${Format.duration(trip.durationS)}",
+                    "${Format.distance(trip.distanceM)}  |  ${Format.duration(trip.durationS)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

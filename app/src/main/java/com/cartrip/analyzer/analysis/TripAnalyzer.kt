@@ -37,7 +37,7 @@ object GeoUtils {
     fun angleDiffDeg(a: Double, b: Double): Double = (a - b + 540) % 360 - 180
 }
 
-enum class EventType { ACCEL, BRAKE, CORNER }
+enum class EventType { ACCEL, BRAKE, CORNER, POTHOLE }
 
 data class DriveEvent(val tMs: Long, val type: EventType, val magnitude: Double)
 
@@ -47,7 +47,8 @@ data class TrackPoint(
     val lon: Double,
     val speedKmh: Double,
     val longAccel: Double,
-    val latAccel: Double
+    val latAccel: Double,
+    val speedLimitKmh: Double = 0.0
 )
 
 data class DriveMetrics(
@@ -66,7 +67,19 @@ data class DriveMetrics(
     val hardCornerCount: Int = 0,
     val smoothness: Int = 100,
     val rawFixes: Int = 0,
-    val usedFixes: Int = 0
+    val usedFixes: Int = 0,
+    // Fraction of moving time spent over a g threshold (hard brake >0.30g, turn >0.40g, accel >0.30g).
+    val hardBrakePct: Double = 0.0,
+    val aggressiveTurnPct: Double = 0.0,
+    val hardAccelPct: Double = 0.0,
+    // Jerk = rate of change of acceleration. maxJerk in m/s^3; jerkyPct = fraction of moving time
+    // the ride was jerky (abrupt accel changes that feel worse than the g level alone).
+    val maxJerk: Double = 0.0,
+    val jerkyPct: Double = 0.0,
+    // Accelerometer-fusion outputs (need recorded gravity): rough-road exposure, potholes, harsh stops.
+    val roughRoadPct: Double = 0.0,
+    val potholeCount: Int = 0,
+    val harshStopCount: Int = 0
 )
 
 data class TripAnalysis(
@@ -112,6 +125,13 @@ object TripAnalyzer {
     private const val JERK_PSD = 4.0           // (m/s^3)^2 process noise for the accel state
     private const val ZUPT_SPEED = 0.6         // both Doppler & position below this => stopped
     private const val ZUPT_R = 0.02            // tight noise on the zero-velocity pseudo-measurement
+
+    // --- Exposure-factor thresholds (g), aligned with Tesla's Safety Score ---
+    private const val G = 9.80665
+    private const val HARD_BRAKE_G = 0.30 * G   // ~2.94 m/s^2
+    private const val AGGR_TURN_G = 0.40 * G    // ~3.92 m/s^2
+    private const val HARD_ACCEL_G = 0.30 * G   // ~2.94 m/s^2
+    private const val JERKY_THRESHOLD = 1.5     // m/s^3, abrupt change in acceleration
 
     /** A cleaned, validated fix. speed/bearing are -1 when the chip did not report them. */
     private data class Clean(
@@ -179,11 +199,24 @@ object TripAnalyzer {
         var maxAccel = 0.0
         var maxBrake = 0.0
         var maxLat = 0.0
+        var brakeTime = 0.0
+        var turnTime = 0.0
+        var accelTime = 0.0
+        var jerkyTime = 0.0
+        var maxJerk = 0.0
         for (i in 0 until n) {
             if (i > 0) {
                 val avg = 0.5 * (vS[i - 1] + vS[i])
                 dist += avg * dt[i]
-                if (vS[i] > IDLE_SPEED) { moving += dt[i]; sumMovingSpeedDt += vS[i] * dt[i] } else idle += dt[i]
+                val jerk = abs(aS[i] - aS[i - 1]) / dt[i]
+                if (jerk > maxJerk) maxJerk = jerk
+                if (vS[i] > IDLE_SPEED) {
+                    moving += dt[i]; sumMovingSpeedDt += vS[i] * dt[i]
+                    if (-aS[i] >= HARD_BRAKE_G) brakeTime += dt[i]
+                    if (abs(latS[i]) >= AGGR_TURN_G) turnTime += dt[i]
+                    if (aS[i] >= HARD_ACCEL_G) accelTime += dt[i]
+                    if (jerk >= JERKY_THRESHOLD) jerkyTime += dt[i]
+                } else idle += dt[i]
             }
             if (vS[i] > maxSpeed) maxSpeed = vS[i]
             if (aS[i] > maxAccel) maxAccel = aS[i]
@@ -221,6 +254,10 @@ object TripAnalyzer {
             }
         }
 
+        // Accelerometer/gravity fusion: potholes, rough road, harsh stops.
+        val fusion = MotionFusion.analyze(motions, points)
+        val allEvents = (events + fusion.events).sortedBy { it.tMs }
+
         val duration = (clean.last().t - clean.first().t) / 1000.0
         val avgMoving = if (moving > 0) sumMovingSpeedDt / moving else 0.0
         val km = maxOf(0.1, dist / 1000.0)
@@ -243,9 +280,17 @@ object TripAnalyzer {
             hardCornerCount = hardCorner,
             smoothness = smoothness,
             rawFixes = locs.size,
-            usedFixes = clean.size
+            usedFixes = clean.size,
+            hardBrakePct = if (moving > 0) brakeTime / moving else 0.0,
+            aggressiveTurnPct = if (moving > 0) turnTime / moving else 0.0,
+            hardAccelPct = if (moving > 0) accelTime / moving else 0.0,
+            maxJerk = maxJerk,
+            jerkyPct = if (moving > 0) jerkyTime / moving else 0.0,
+            roughRoadPct = fusion.roughRoadPct,
+            potholeCount = fusion.potholeCount,
+            harshStopCount = fusion.harshStopCount
         )
-        return TripAnalysis(metrics, points, events)
+        return TripAnalysis(metrics, points, allEvents)
     }
 
     /**

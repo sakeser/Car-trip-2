@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ShowChart
@@ -23,6 +24,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -61,6 +63,7 @@ fun HomeScreen(
     onLoadDemoData: () -> Unit,
     onConnectCloud: () -> Unit,
     onDisconnectCloud: () -> Unit,
+    onOpenGuide: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val live by RecordingState.state.collectAsStateWithLifecycle()
@@ -74,11 +77,20 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Car Trip Analyzer",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Car Trip Analyzer",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = onOpenGuide) {
+                Icon(Icons.Filled.Info, contentDescription = "How it works")
+            }
+        }
 
         if (live.recording) {
             Text(
@@ -88,7 +100,7 @@ fun HomeScreen(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "${Format.speedKmh(live.speedKmh)}  ·  ${Format.distance(live.distanceM)}",
+                text = "${Format.speedKmh(live.speedKmh)}  |  ${Format.distance(live.distanceM)}",
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -103,10 +115,24 @@ fun HomeScreen(
             )
             if (live.gpsFixes == 0) {
                 Text(
-                    "Waiting for GPS fix… make sure location is on and you have sky view.",
+                    "Waiting for GPS fix... make sure location is on and you have sky view.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            if (live.gpsSignalLost) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED))
+                ) {
+                    Text(
+                        "GPS signal lost ${Format.tripMinutes(live.lastGpsAgeS.toDouble())} ago. Still recording motion locally; ending now will save this as a partial trip.",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF9A3412)
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))

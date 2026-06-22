@@ -24,22 +24,22 @@ import androidx.core.app.NotificationCompat
 import com.cartrip.analyzer.MainActivity
 import com.cartrip.analyzer.R
 import com.cartrip.analyzer.analysis.GeoUtils
-import com.cartrip.analyzer.analysis.DriveEvent
-import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalyzer
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
-import com.cartrip.analyzer.cloud.CloudSync
 import com.cartrip.analyzer.cloud.GoogleAuth
 import com.cartrip.analyzer.cloud.RoutesClient
 import com.cartrip.analyzer.cloud.RoutesConfig
+import com.cartrip.analyzer.cloud.SpeedLimits
+import com.cartrip.analyzer.cloud.TripSync
 import com.cartrip.analyzer.analysis.TripAnalysis
-import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.AppDatabase
-import com.cartrip.analyzer.data.DriveEventEntity
 import com.cartrip.analyzer.data.LocationSample
 import com.cartrip.analyzer.data.MotionSample
+import com.cartrip.analyzer.data.TripEndReason
 import com.cartrip.analyzer.data.TripEntity
+import com.cartrip.analyzer.data.TripFinalizer
+import com.cartrip.analyzer.data.TripStatus
 import com.cartrip.analyzer.export.TripExcel
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -55,6 +55,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.min
@@ -95,10 +96,18 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     // latest sensor values
     private var ax = 0.0; private var ay = 0.0; private var az = 0.0
     private var gx = 0.0; private var gy = 0.0; private var gz = 0.0
+    private var grx = 0.0; private var gry = 0.0; private var grz = 0.0
     private var lastMotionWrite = 0L
     private var sawDriving = false
     private var lastDrivingLocT = 0L
     private var autoStopRequested = false
+    private var locationSampleCount = 0
+    private var motionSampleCount = 0
+    private var lastLocationAtWall = 0L
+    private var lastMotionAtWall = 0L
+    private var gpsGapCount = 0
+    private var gpsGapOpen = false
+    private var stoppingNormally = false
 
     private data class TrimCutoff(val locationT: Long, val motionT: Long)
 
@@ -124,7 +133,16 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         startInForeground()
         scope.launch {
             val startWall = System.currentTimeMillis()
-            val id = db.tripDao().insertTrip(TripEntity(startTime = startWall, endTime = 0))
+            TripFinalizer.recoverInterruptedTrips(db.tripDao(), startWall)
+            val id = db.tripDao().insertTrip(
+                TripEntity(
+                    startTime = startWall,
+                    endTime = 0,
+                    status = TripStatus.RECORDING,
+                    endReason = "",
+                    lastCheckpointAt = startWall
+                )
+            )
             tripId = id
             recording = true
             withContext(Dispatchers.Main) {
@@ -140,10 +158,28 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     private fun stopRecording(trimCutoff: TrimCutoff? = null) {
         if (!recording) {
-            stopForegroundCompat()
-            stopSelf()
+            scope.launch {
+                val recovered = db.tripDao().getLatestTripWithStatus(TripStatus.RECORDING)
+                val recoveredId = recovered?.id
+                if (recoveredId != null) {
+                    val endWall = System.currentTimeMillis()
+                    TripFinalizer.finalizeTrip(
+                        dao = db.tripDao(),
+                        tripId = recoveredId,
+                        endWall = endWall,
+                        requestedStatus = TripStatus.PARTIAL,
+                        requestedReason = TripEndReason.APP_RECOVERY
+                    )
+                    RecordingState.completeTrip(recoveredId)
+                }
+                withContext(Dispatchers.Main) {
+                    stopForegroundCompat()
+                    stopSelf()
+                }
+            }
             return
         }
+        stoppingNormally = true
         recording = false
         tickerJob?.cancel()
         try {
@@ -160,79 +196,73 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         }
         val finishedId = tripId
         scope.launch {
-            flushBuffers()
+            flushBuffers(writeCheckpoint = false)
             val dao = db.tripDao()
+            writeCheckpoint()
             if (trimCutoff != null) {
                 dao.deleteLocationsAfter(finishedId, trimCutoff.locationT)
                 dao.deleteMotionsAfter(finishedId, trimCutoff.motionT)
             }
-            val locs = dao.getLocations(finishedId)
-            val motions = dao.getMotions(finishedId)
-            val analysis = TripAnalyzer.analyze(locs, motions)
-            val trip = dao.getTrip(finishedId)
-            if (trip != null) {
-                val m = analysis.metrics
-                val eta = fetchLiveEta(analysis)
-                dao.updateTrip(
-                    trip.copy(
-                        endTime = System.currentTimeMillis(),
-                        distanceM = m.distanceM,
-                        durationS = m.durationS,
-                        movingS = m.movingS,
-                        idleS = m.idleS,
-                        maxSpeedMps = m.maxSpeedMps,
-                        avgMovingSpeedMps = m.avgMovingSpeedMps,
-                        maxAccelMps2 = m.maxAccelMps2,
-                        maxBrakeMps2 = m.maxBrakeMps2,
-                        maxLateralMps2 = m.maxLateralMps2,
-                        peakGForce = m.peakGForce,
-                        hardAccelCount = m.hardAccelCount,
-                        hardBrakeCount = m.hardBrakeCount,
-                        hardCornerCount = m.hardCornerCount,
-                        smoothness = m.smoothness,
-                        analyzed = true,
-                        googleEtaTrafficS = eta?.trafficS ?: trip.googleEtaTrafficS,
-                        googleEtaFreeFlowS = eta?.freeFlowS ?: trip.googleEtaFreeFlowS,
-                        etaSource = if (eta != null) "live" else trip.etaSource,
-                        etaFetchedAt = if (eta != null) System.currentTimeMillis() else trip.etaFetchedAt
-                    )
-                )
-                persistAnalysis(finishedId, analysis.points, analysis.events)
+            val finalized = TripFinalizer.finalizeTrip(
+                dao = dao,
+                tripId = finishedId,
+                endWall = System.currentTimeMillis(),
+                requestedStatus = TripStatus.COMPLETED,
+                requestedReason = if (trimCutoff == null) TripEndReason.MANUAL_STOP else TripEndReason.AUTO_STOP
+            )
+            if (finalized != null) {
                 purgeExpiredRawSamples()
+                val status = mutableListOf<String>()
+                val updated = finalized.trip
+                val analysis = finalized.analysis
 
-                // Local Excel export + optional Google Sheets append.
-                val updated = dao.getTrip(finishedId)
-                if (updated != null) {
-                    val status = mutableListOf<String>()
-                    runCatching {
-                        TripExcel.write(applicationContext, updated, analysis)
-                    }.onSuccess { file ->
-                        status += "Excel saved: ${file.name}"
-                    }.onFailure { e ->
-                        status += "Excel export failed: ${e.userMessage()}"
-                    }
-
-                    if (CloudPrefs.autoSync(applicationContext) &&
-                        GoogleAuth.lastAccount(applicationContext) != null
-                    ) {
-                        CloudState.set {
-                            it.copy(
-                                syncing = true,
-                                lastMessage = (status + "Syncing Google Sheets...").joinToString(" ")
+                if (updated.status == TripStatus.COMPLETED) {
+                    val eta = fetchLiveEta(analysis)
+                    if (eta != null) {
+                        dao.updateTrip(
+                            updated.copy(
+                                googleEtaTrafficS = eta.trafficS,
+                                googleEtaFreeFlowS = eta.freeFlowS,
+                                etaSource = "live",
+                                etaFetchedAt = System.currentTimeMillis()
                             )
-                        }
-                        val sync = CloudSync.syncTrip(applicationContext, updated, analysis)
-                        sync.onSuccess {
-                            status += "Google Sheets sync complete."
-                        }.onFailure { e ->
-                            status += "Google Sheets sync failed: ${e.userMessage()}"
-                        }
-                        CloudState.set {
-                            it.copy(syncing = false, lastMessage = status.joinToString(" "))
-                        }
-                    } else {
-                        CloudState.set { it.copy(lastMessage = status.joinToString(" ")) }
+                        )
                     }
+                    // Annotate the route with OSM speed limits + compute speeding (fails soft).
+                    runCatching { SpeedLimits.refreshForTrip(dao, finishedId) }
+                } else {
+                    status += "Trip saved as partial; GPS signal was incomplete."
+                }
+
+                val exportTrip = dao.getTrip(finishedId) ?: updated
+                runCatching {
+                    TripExcel.write(applicationContext, exportTrip, analysis)
+                }.onSuccess { file ->
+                    status += "Excel saved: ${file.name}"
+                }.onFailure { e ->
+                    status += "Excel export failed: ${e.userMessage()}"
+                }
+
+                if (CloudPrefs.autoSync(applicationContext) &&
+                    GoogleAuth.lastAccount(applicationContext) != null
+                ) {
+                    CloudState.set {
+                        it.copy(
+                            syncing = true,
+                            lastMessage = (status + "Syncing Google Sheets...").joinToString(" ")
+                        )
+                    }
+                    val sync = TripSync.syncOne(applicationContext, dao, finishedId, force = false)
+                    sync.onSuccess {
+                        status += "Google Sheets sync complete."
+                    }.onFailure { e ->
+                        status += "Sheets sync failed (will retry next time the app opens): ${e.userMessage()}"
+                    }
+                    CloudState.set {
+                        it.copy(syncing = false, lastMessage = status.joinToString(" "))
+                    }
+                } else {
+                    CloudState.set { it.copy(lastMessage = status.joinToString(" ")) }
                 }
             }
             RecordingState.completeTrip(finishedId)
@@ -259,23 +289,13 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         lastDrivingLocT = 0L
         autoStopRequested = false
         lastMotionWrite = 0L
-    }
-
-    private suspend fun persistAnalysis(
-        finishedId: Long,
-        points: List<TrackPoint>,
-        events: List<DriveEvent>
-    ) {
-        val dao = db.tripDao()
-        val sampledPoints = samplePoints(points)
-        dao.deleteAnalysisPoints(finishedId)
-        dao.deleteDriveEvents(finishedId)
-        if (sampledPoints.isNotEmpty()) {
-            dao.insertAnalysisPoints(sampledPoints.map { it.toEntity(finishedId) })
-        }
-        if (events.isNotEmpty()) {
-            dao.insertDriveEvents(events.map { it.toEntity(finishedId) })
-        }
+        locationSampleCount = 0
+        motionSampleCount = 0
+        lastLocationAtWall = 0L
+        lastMotionAtWall = 0L
+        gpsGapCount = 0
+        gpsGapOpen = false
+        stoppingNormally = false
     }
 
     /**
@@ -307,39 +327,6 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         dao.deleteRawMotionsForCompletedTripsBefore(cutoff)
     }
 
-    private fun samplePoints(points: List<TrackPoint>, minGapMs: Long = 1000L): List<TrackPoint> {
-        if (points.size <= 2) return points
-        val out = ArrayList<TrackPoint>()
-        var lastT = Long.MIN_VALUE
-        points.forEach { point ->
-            if (out.isEmpty() || point.tMs - lastT >= minGapMs) {
-                out += point
-                lastT = point.tMs
-            }
-        }
-        if (out.lastOrNull()?.tMs != points.last().tMs) out += points.last()
-        return out
-    }
-
-    private fun TrackPoint.toEntity(tripId: Long): AnalysisPointEntity =
-        AnalysisPointEntity(
-            tripId = tripId,
-            t = tMs,
-            lat = lat,
-            lon = lon,
-            speedKmh = speedKmh,
-            longAccel = longAccel,
-            latAccel = latAccel
-        )
-
-    private fun DriveEvent.toEntity(tripId: Long): DriveEventEntity =
-        DriveEventEntity(
-            tripId = tripId,
-            t = tMs,
-            type = type.name,
-            magnitude = magnitude
-        )
-
     private fun Throwable.userMessage(): String =
         message?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
 
@@ -347,11 +334,15 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         val linear = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val gyro = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        val gravity = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
         if (linear != null) {
             sensorManager.registerListener(this, linear, SensorManager.SENSOR_DELAY_GAME)
         }
         if (gyro != null) {
             sensorManager.registerListener(this, gyro, SensorManager.SENSOR_DELAY_GAME)
+        }
+        if (gravity != null) {
+            sensorManager.registerListener(this, gravity, SensorManager.SENSOR_DELAY_GAME)
         }
     }
 
@@ -398,15 +389,27 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             while (recording) {
                 delay(1000)
                 counter++
+                val now = System.currentTimeMillis()
                 val start = RecordingState.state.value.startTime
-                val elapsed = if (start > 0) (System.currentTimeMillis() - start) / 1000 else 0
-                RecordingState.update { it.copy(elapsedS = elapsed) }
+                val elapsed = if (start > 0) (now - start) / 1000 else 0
+                val gpsSignalLost = lastLocationAtWall > 0L && now - lastLocationAtWall >= GPS_SIGNAL_LOST_MS
+                if (gpsSignalLost && !gpsGapOpen) {
+                    gpsGapOpen = true
+                    gpsGapCount++
+                }
+                RecordingState.update {
+                    it.copy(
+                        elapsedS = elapsed,
+                        gpsSignalLost = gpsSignalLost,
+                        lastGpsAgeS = if (lastLocationAtWall > 0L) (now - lastLocationAtWall) / 1000 else 0L
+                    )
+                }
                 if (counter % 2 == 0) flushBuffers()
             }
         }
     }
 
-    private suspend fun flushBuffers() {
+    private suspend fun flushBuffers(writeCheckpoint: Boolean = true) {
         val locs: List<LocationSample>
         val motions: List<MotionSample>
         synchronized(bufferLock) {
@@ -415,14 +418,40 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         }
         if (locs.isNotEmpty()) db.tripDao().insertLocations(locs)
         if (motions.isNotEmpty()) db.tripDao().insertMotions(motions)
+        if (writeCheckpoint && tripId > 0L) {
+            writeCheckpoint()
+        }
+    }
+
+    private suspend fun writeCheckpoint() {
+        val id = tripId
+        if (id <= 0L) return
+        val start = RecordingState.state.value.startTime
+        val now = System.currentTimeMillis()
+        db.tripDao().updateRecordingCheckpoint(
+            id = id,
+            durationS = if (start > 0L) (now - start) / 1000.0 else 0.0,
+            distanceM = liveDistance,
+            maxSpeedMps = maxSpeedMps,
+            hardAccelCount = accelCount,
+            hardBrakeCount = brakeCount,
+            hardCornerCount = cornerCount,
+            checkpointAt = now,
+            lastLocationAt = lastLocationAtWall,
+            lastMotionAt = lastMotionAtWall,
+            locationSampleCount = locationSampleCount,
+            motionSampleCount = motionSampleCount,
+            gpsGapCount = gpsGapCount
+        )
     }
 
     // ---- Location handling (shared by fused callback and GPS listener) ----
 
     private fun handleLocation(loc: Location) {
         if (!recording || tripId == 0L) return
+        val nowWall = System.currentTimeMillis()
         val tMono = if (loc.elapsedRealtimeNanos > 0) loc.elapsedRealtimeNanos / 1_000_000L
-        else System.currentTimeMillis()
+        else SystemClock.elapsedRealtime()
         val gpsSpeed =
             if (loc.hasSpeed() && loc.speed >= 0f && loc.speed <= MAX_SPEED) loc.speed.toDouble()
             else -1.0
@@ -437,6 +466,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             accuracy = if (loc.hasAccuracy()) loc.accuracy.toDouble() else 0.0
         )
         synchronized(bufferLock) { locBuffer.add(sample) }
+        locationSampleCount++
+        lastLocationAtWall = nowWall
+        gpsGapOpen = false
         gpsFixes++
 
         val prev = lastLoc
@@ -494,7 +526,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 hardBrake = brakeCount,
                 hardAccel = accelCount,
                 hardCorner = cornerCount,
-                gpsFixes = gpsFixes
+                gpsFixes = gpsFixes,
+                gpsSignalLost = false,
+                lastGpsAgeS = 0L
             )
         }
     }
@@ -543,15 +577,23 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                     lastMotionWrite = now
                     val sample = MotionSample(
                         tripId = tripId, t = now,
-                        ax = ax, ay = ay, az = az, gx = gx, gy = gy, gz = gz
+                        ax = ax, ay = ay, az = az, gx = gx, gy = gy, gz = gz,
+                        grx = grx, gry = gry, grz = grz
                     )
                     synchronized(bufferLock) { motionBuffer.add(sample) }
+                    motionSampleCount++
+                    lastMotionAtWall = System.currentTimeMillis()
                 }
             }
             Sensor.TYPE_GYROSCOPE -> {
                 gx = event.values[0].toDouble()
                 gy = event.values[1].toDouble()
                 gz = event.values[2].toDouble()
+            }
+            Sensor.TYPE_GRAVITY -> {
+                grx = event.values[0].toDouble()
+                gry = event.values[1].toDouble()
+                grz = event.values[2].toDouble()
             }
         }
     }
@@ -613,8 +655,34 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        val interruptedTripId = if (recording && !stoppingNormally) tripId else 0L
         recording = false
         tickerJob?.cancel()
+        try {
+            sensorManager.unregisterListener(this)
+        } catch (_: Exception) {
+        }
+        try {
+            if (usingFused) locationCallback?.let { fusedClient?.removeLocationUpdates(it) }
+        } catch (_: Exception) {
+        }
+        try {
+            locationManager.removeUpdates(this)
+        } catch (_: Exception) {
+        }
+        if (interruptedTripId > 0L) {
+            runBlocking(Dispatchers.IO) {
+                flushBuffers(writeCheckpoint = false)
+                writeCheckpoint()
+                TripFinalizer.finalizeTrip(
+                    dao = db.tripDao(),
+                    tripId = interruptedTripId,
+                    endWall = System.currentTimeMillis(),
+                    requestedStatus = TripStatus.PARTIAL,
+                    requestedReason = TripEndReason.SERVICE_DESTROYED
+                )
+            }
+        }
         serviceJob.cancel()
     }
 
@@ -625,6 +693,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         private const val NOTIF_ID = 42
         private const val MAX_SPEED = 75.0 // m/s (~270 km/h) plausibility cap
         private const val RAW_SENSOR_RETENTION_MS = 30L * 24L * 60L * 60L * 1000L
+        private const val GPS_SIGNAL_LOST_MS = 2L * 60L * 1000L
         private const val AUTO_STOP_DRIVING_SPEED_MPS = 3.0 // ~11 km/h
         private const val AUTO_STOP_IDLE_SPEED_MPS = 1.0 // ~4 km/h
         private const val MIN_AUTO_STOP_TRIP_MS = 3L * 60L * 1000L

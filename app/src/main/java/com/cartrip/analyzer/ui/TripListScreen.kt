@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,6 +54,7 @@ fun TripListScreen(
     onBack: () -> Unit
 ) {
     val trips by viewModel.trips.collectAsStateWithLifecycle()
+    var showClearAllDialog by remember { mutableStateOf(false) }
     val heatPoints by produceState(initialValue = emptyList<AnalysisPointEntity>(), trips) {
         value = viewModel.loadHeatmapPoints(30)
     }
@@ -67,6 +69,14 @@ fun TripListScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (trips.isNotEmpty()) {
+                        TextButton(onClick = { showClearAllDialog = true }) {
+                            Icon(Icons.Filled.Delete, contentDescription = null)
+                            Text("Clear all")
+                        }
                     }
                 }
             )
@@ -137,6 +147,29 @@ fun TripListScreen(
             }
         }
     }
+
+    if (showClearAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllDialog = false },
+            title = { Text("Clear all trips?") },
+            text = { Text("This removes every recorded and sample trip from history.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearAllDialog = false
+                        viewModel.clearAllTrips()
+                    }
+                ) {
+                    Text("Clear all", color = Color(0xFFEF4444))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -152,6 +185,7 @@ private fun TripRow(
     var showDeleteDialog by remember { mutableStateOf(false) }
     val finished = trip.endTime != 0L
     val scores = if (finished) TripScores.from(trip) else null
+    val partial = trip.isPartialRecording()
 
     Card(
         modifier = Modifier
@@ -172,12 +206,27 @@ private fun TripRow(
                 modifier = Modifier.width(22.dp)
             )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (trip.isSample) SampleBadge()
+                }
+                if (partial) {
+                    Text(
+                        text = "Partial - ${trip.partialReasonText()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFD97706),
+                        maxLines = 1
+                    )
+                }
                 if (finished) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -217,7 +266,7 @@ private fun TripRow(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete this trip?") },
-            text = { Text("$label — ${Format.dateTime(trip.startTime)}") },
+            text = { Text("$label - ${Format.dateTime(trip.startTime)}") },
             confirmButton = {
                 TextButton(onClick = { showDeleteDialog = false; onDelete() }) {
                     Text("Delete", color = Color(0xFFEF4444))
@@ -261,6 +310,20 @@ private val SCORE_COL_WIDTH = 40.dp
 private val SCORE_COL_GAP = 8.dp
 
 @Composable
+private fun SampleBadge() {
+    Text(
+        text = "SAMPLE",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = Color(0xFF6366F1),
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0x1A6366F1))
+            .padding(horizontal = 6.dp, vertical = 1.dp)
+    )
+}
+
+@Composable
 private fun TripListHeader() {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp),
@@ -293,7 +356,7 @@ private fun MiniScore(value: Int?) {
     val color = value?.let { TripScores.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
     Box(modifier = Modifier.width(SCORE_COL_WIDTH), contentAlignment = Alignment.Center) {
         Text(
-            value?.toString() ?: "—",
+            value?.toString() ?: "-",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = color

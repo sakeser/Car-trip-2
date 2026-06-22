@@ -21,14 +21,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CrisisAlert
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Directions
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -80,10 +81,12 @@ fun TripDetailScreen(
 ) {
     var etaRefresh by remember { mutableStateOf(0) }
     var fetchingEta by remember { mutableStateOf(false) }
+    var fetchingLimits by remember { mutableStateOf(false) }
+    var fetchingSync by remember { mutableStateOf(false) }
     val trip by produceState<TripEntity?>(initialValue = null, tripId, etaRefresh) {
         value = viewModel.loadTrip(tripId)
     }
-    val analysis by produceState<TripAnalysis?>(initialValue = null, tripId) {
+    val analysis by produceState<TripAnalysis?>(initialValue = null, tripId, etaRefresh) {
         value = viewModel.loadAnalysis(tripId)
     }
 
@@ -134,18 +137,59 @@ fun TripDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (scores != null) {
-                ScorePanel(scores)
-            } else {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    ScoreRing(m.smoothness)
+            val ctx = LocalContext.current
+            val actionScope = rememberCoroutineScope()
+            val startPt = a.points.firstOrNull()
+            val endPt = a.points.lastOrNull()
+            val primaryStats = listOf(
+                Stat("Distance", Format.distance(m.distanceM)),
+                Stat("Duration", Format.duration(m.durationS)),
+                Stat("Max speed", Format.speedKmh(m.maxSpeedMps * 3.6)),
+                Stat("Avg moving", Format.speedKmh(m.avgMovingSpeedMps * 3.6))
+            )
+            val detailedStats = listOf(
+                Stat("Idle time", Format.duration(m.idleS)),
+                Stat("Peak g-force", Format.gforce(m.peakGForce)),
+                Stat("Hard brakes", "${m.hardBrakeCount}", Color(0xFFEF4444)),
+                Stat("Hard accels", "${m.hardAccelCount}", Color(0xFFF59E0B)),
+                Stat("Hard corners", "${m.hardCornerCount}", Color(0xFFF59E0B)),
+                Stat("Max braking", Format.accel(m.maxBrakeMps2), Color(0xFFEF4444)),
+                Stat("Max accel", Format.accel(m.maxAccelMps2), Color(0xFFF59E0B)),
+                Stat("Max lateral", Format.accel(m.maxLateralMps2))
+            )
+
+            trip?.takeIf { it.isPartialRecording() }?.let { partialTrip ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Filled.ReportProblem, contentDescription = null, tint = Color(0xFFD97706))
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(
+                                "Partial recording",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF9A3412)
+                            )
+                            Text(
+                                "${partialTrip.partialReasonText()} Distance, route, and end time may be estimated from saved samples.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF9A3412)
+                            )
+                        }
+                    }
                 }
             }
 
             trip?.let { t ->
                 val endMs = if (t.endTime > 0) t.endTime else t.startTime + (m.durationS * 1000).toLong()
                 Text(
-                    "${Format.dateOnly(t.startTime)}   ·   ${Format.timeOfDay(t.startTime)} → ${Format.timeOfDay(endMs)}   ·   ${Format.duration(m.durationS)}",
+                    "${Format.dateOnly(t.startTime)}   |   ${Format.timeOfDay(t.startTime)} -> ${Format.timeOfDay(endMs)}   |   ${Format.duration(m.durationS)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -153,60 +197,35 @@ fun TripDetailScreen(
                 )
             }
 
-            StatGrid(
-                stats = listOf(
-                    Stat("Distance", Format.distance(m.distanceM)),
-                    Stat("Duration", Format.duration(m.durationS)),
-                    Stat("Max speed", Format.speedKmh(m.maxSpeedMps * 3.6)),
-                    Stat("Avg moving", Format.speedKmh(m.avgMovingSpeedMps * 3.6)),
-                    Stat("Idle time", Format.duration(m.idleS)),
-                    Stat("Peak g-force", Format.gforce(m.peakGForce)),
-                    Stat("Hard brakes", "${m.hardBrakeCount}", Color(0xFFEF4444)),
-                    Stat("Hard accels", "${m.hardAccelCount}", Color(0xFFF59E0B)),
-                    Stat("Hard corners", "${m.hardCornerCount}", Color(0xFFF59E0B)),
-                    Stat("Max braking", Format.accel(m.maxBrakeMps2), Color(0xFFEF4444)),
-                    Stat("Max accel", Format.accel(m.maxAccelMps2), Color(0xFFF59E0B)),
-                    Stat("Max lateral", Format.accel(m.maxLateralMps2))
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            val ctx = LocalContext.current
-            val actionScope = rememberCoroutineScope()
-            val startPt = a.points.firstOrNull()
-            val endPt = a.points.lastOrNull()
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                ActionButton("Start", Icons.Filled.Place, Modifier.weight(1f)) {
-                    startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") }
-                }
-                ActionButton("End", Icons.Filled.Flag, Modifier.weight(1f)) {
-                    endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "End") }
-                }
-                ActionButton("Route", Icons.Filled.Directions, Modifier.weight(1f)) {
-                    if (startPt != null && endPt != null) {
-                        TripActions.routeInMaps(ctx, startPt.lat, startPt.lon, endPt.lat, endPt.lon)
+            trip?.let { t ->
+                SafetyFactorsCard(
+                    trip = t,
+                    checking = fetchingLimits,
+                    onCheckLimits = {
+                        fetchingLimits = true
+                        actionScope.launch {
+                            val error = viewModel.fetchSpeedLimits(tripId)
+                            fetchingLimits = false
+                            etaRefresh++
+                            if (error != null) Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
+                        }
                     }
-                }
-                ActionButton("Excel", Icons.Filled.Share, Modifier.weight(1f)) {
-                    trip?.let { t -> actionScope.launch { TripActions.shareExcel(ctx, t, displayAnalysis) } }
-                }
+                )
             }
 
+            trip?.let { t -> RoadRideCard(t) }
+
             trip?.let { t ->
-                EtaComparisonCard(
+                SyncStatusRow(
                     trip = t,
-                    actualS = m.durationS,
-                    fetching = fetchingEta,
-                    onFetch = {
-                        fetchingEta = true
+                    syncing = fetchingSync,
+                    onSync = {
+                        fetchingSync = true
                         actionScope.launch {
-                            val error = viewModel.fetchTypicalEstimate(tripId)
-                            fetchingEta = false
-                            if (error == null) etaRefresh++
-                            else Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
+                            val error = viewModel.resyncTrip(tripId)
+                            fetchingSync = false
+                            etaRefresh++
+                            if (error != null) Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
                         }
                     }
                 )
@@ -246,6 +265,51 @@ fun TripDetailScreen(
                 )
             }
 
+            TripLinksCard(
+                startEnabled = startPt != null,
+                stopEnabled = endPt != null,
+                routeEnabled = startPt != null && endPt != null,
+                exportEnabled = trip != null,
+                onStart = { startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") } },
+                onStop = { endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Stop") } },
+                onRoute = {
+                    if (startPt != null && endPt != null) {
+                        TripActions.routeInMaps(ctx, startPt.lat, startPt.lon, endPt.lat, endPt.lon)
+                    }
+                },
+                onExport = { trip?.let { t -> actionScope.launch { TripActions.shareExcel(ctx, t, displayAnalysis) } } }
+            )
+
+            if (scores != null) {
+                ScorePanel(scores)
+            } else {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    ScoreRing(m.smoothness)
+                }
+            }
+
+            StatGrid(
+                stats = primaryStats,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            trip?.let { t ->
+                EtaComparisonCard(
+                    trip = t,
+                    actualS = m.durationS,
+                    fetching = fetchingEta,
+                    onFetch = {
+                        fetchingEta = true
+                        actionScope.launch {
+                            val error = viewModel.fetchTypicalEstimate(tripId)
+                            fetchingEta = false
+                            if (error == null) etaRefresh++
+                            else Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                )
+            }
+
             EventsSection(
                 points = a.points,
                 events = a.events,
@@ -265,23 +329,213 @@ fun TripDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 selectedIndex = scaledIndex(safeSelectedIndex, a.points.size, speed.size)
             )
+
+            Text("Detailed metrics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            StatGrid(
+                stats = detailedStats,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
 @Composable
-private fun ActionButton(label: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun SafetyFactorsCard(trip: TripEntity, checking: Boolean, onCheckLimits: () -> Unit) {
+    val hasLimits = trip.limitCoverage >= 0.4
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Safety factors", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Share of moving time spent in each behaviour (lower is safer).",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FactorCell("Braking", trip.hardBrakePct, Color(0xFFEF4444), Modifier.weight(1f))
+                FactorCell("Turns", trip.aggressiveTurnPct, Color(0xFFF59E0B), Modifier.weight(1f))
+                FactorCell("Accel", trip.hardAccelPct, Color(0xFFF59E0B), Modifier.weight(1f))
+                FactorCell("Jerky", trip.jerkyPct, Color(0xFF8B5CF6), Modifier.weight(1f))
+            }
+            if (trip.maxJerk > 0) {
+                Text(
+                    "Peak jerk ${"%.1f".format(trip.maxJerk)} m/s³ — how abruptly acceleration changed.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (hasLimits) {
+                val pct = trip.speedingPct * 100
+                val color = if (trip.speedingPct > 0.15) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurface
+                Text(
+                    "Speeding: ${"%.0f".format(pct)}% of the way over the posted limit" +
+                        (if (trip.maxOverLimitKmh >= 1) " (peak ${"%.0f".format(trip.maxOverLimitKmh)} km/h over)" else ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Text(
+                    "Red on the map = over the limit. Limits matched for " +
+                        "${"%.0f".format(trip.limitCoverage * 100)}% of the route (OpenStreetMap).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "Speeding: no posted-limit data looked up for this route yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(onClick = onCheckLimits, enabled = !checking) {
+                    if (checking) {
+                        CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Check speed limits (OSM)")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncStatusRow(trip: TripEntity, syncing: Boolean, onSync: () -> Unit) {
+    if (trip.isSample) {
+        Text(
+            "Sample trip — not synced to Google Sheets.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+    val (label, color) = when {
+        trip.syncedAt > 0L -> "Synced to Google Sheets" to Color(0xFF22C55E)
+        trip.syncError.isNotEmpty() -> "Sync failed — tap to retry" to Color(0xFFEF4444)
+        else -> "Not synced to Google Sheets" to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = color, modifier = Modifier.weight(1f))
+        OutlinedButton(onClick = onSync, enabled = !syncing) {
+            if (syncing) {
+                CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
+            } else {
+                Text(if (trip.syncedAt > 0L) "Re-sync" else "Sync now")
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoadRideCard(trip: TripEntity) {
+    // Only meaningful for real trips that carried accelerometer + gravity data.
+    val hasData = trip.potholeCount > 0 || trip.roughRoadPct > 0.0 || trip.harshStopCount > 0
+    if (!hasData) return
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Road & ride", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "From the accelerometer — the road's condition and how the car settled.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RoadCell("Potholes / bumps", trip.potholeCount.toString(), Color(0xFF78716C), Modifier.weight(1f))
+                RoadCell("Rough road", "${"%.0f".format(trip.roughRoadPct * 100)}%", Color(0xFFF59E0B), Modifier.weight(1f))
+                RoadCell("Harsh stops", trip.harshStopCount.toString(), Color(0xFFEF4444), Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoadCell(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun FactorCell(label: String, fraction: Double, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            "${"%.1f".format(fraction * 100)}%",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun TripLinksCard(
+    startEnabled: Boolean,
+    stopEnabled: Boolean,
+    routeEnabled: Boolean,
+    exportEnabled: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onRoute: () -> Unit,
+    onExport: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Filled.Route, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Map links", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ActionButton("Start", Icons.Filled.PlayArrow, Modifier.weight(1f), startEnabled, onStart)
+                ActionButton("Stop", Icons.Filled.StopCircle, Modifier.weight(1f), stopEnabled, onStop)
+                ActionButton("Route", Icons.Filled.Route, Modifier.weight(1f), routeEnabled, onRoute)
+                ActionButton("Excel", Icons.Filled.Share, Modifier.weight(1f), exportEnabled, onExport)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionButton(
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val iconColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    val textColor = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(enabled = enabled, onClick = onClick)
+            .background(MaterialTheme.colorScheme.surface)
+            .height(66.dp)
             .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, contentDescription = label, tint = iconColor, modifier = Modifier.size(22.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
     }
 }
 
@@ -433,7 +687,7 @@ private fun ScoreMeter(label: String, value: Int?) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.labelLarge)
             Text(
-                value?.toString() ?: "—",
+                value?.toString() ?: "-",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = color
@@ -489,26 +743,29 @@ private class EventStyle(val label: String, val color: Color, val icon: ImageVec
 /** Human-readable name, severity colour and icon for a drive event, by type + magnitude. */
 private fun eventStyle(event: DriveEvent): EventStyle = when (event.type) {
     EventType.BRAKE ->
-        if (event.magnitude >= 4.5) EventStyle("Very hard brake", Color(0xFFDC2626), Icons.Filled.Warning)
-        else EventStyle("Hard brake", Color(0xFFEF4444), Icons.Filled.Warning)
+        if (event.magnitude >= 4.5) EventStyle("Very hard brake", Color(0xFFDC2626), Icons.Filled.CrisisAlert)
+        else EventStyle("Hard brake", Color(0xFFEF4444), Icons.Filled.StopCircle)
     EventType.ACCEL ->
-        if (event.magnitude >= 3.5) EventStyle("Very hard acceleration", Color(0xFFDC2626), Icons.Filled.KeyboardArrowUp)
-        else EventStyle("Hard acceleration", Color(0xFFF59E0B), Icons.Filled.KeyboardArrowUp)
+        if (event.magnitude >= 3.5) EventStyle("Very hard acceleration", Color(0xFFDC2626), Icons.Filled.CrisisAlert)
+        else EventStyle("Hard acceleration", Color(0xFFF59E0B), Icons.Filled.Speed)
     EventType.CORNER ->
-        if (event.magnitude >= 5.0) EventStyle("Very sharp turn", Color(0xFFDC2626), Icons.Filled.Refresh)
-        else EventStyle("Sharp turn", Color(0xFFF59E0B), Icons.Filled.Refresh)
+        if (event.magnitude >= 5.0) EventStyle("Very sharp turn", Color(0xFFDC2626), Icons.Filled.CrisisAlert)
+        else EventStyle("Sharp turn", Color(0xFFF59E0B), Icons.Filled.Route)
+    EventType.POTHOLE ->
+        EventStyle("Pothole / big bump", Color(0xFF78716C), Icons.Filled.ReportProblem)
 }
 
 /** A plain-language explanation of what the magnitude means. */
 private fun eventExplanation(event: DriveEvent): String {
     val g = event.magnitude / 9.81
     val intensity = when (event.type) {
-        EventType.BRAKE -> if (event.magnitude >= 4.5) "Sudden, heavy braking — passengers thrown forward."
+        EventType.BRAKE -> if (event.magnitude >= 4.5) "Sudden, heavy braking - passengers thrown forward."
         else "Firm braking, harder than a smooth stop."
-        EventType.ACCEL -> if (event.magnitude >= 3.5) "Aggressive launch — heavy throttle."
+        EventType.ACCEL -> if (event.magnitude >= 3.5) "Aggressive launch - heavy throttle."
         else "Brisk acceleration, firmer than normal."
-        EventType.CORNER -> if (event.magnitude >= 5.0) "Tight, fast cornering — strong sideways force."
+        EventType.CORNER -> if (event.magnitude >= 5.0) "Tight, fast cornering - strong sideways force."
         else "Quick cornering with noticeable lean."
+        EventType.POTHOLE -> "A sharp vertical jolt - pothole, speed bump, or rough patch."
     }
     return "$intensity  (${"%.2f".format(g)} g)"
 }
@@ -522,7 +779,7 @@ private fun EventsSection(
     Text("What happened", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     if (events.isEmpty()) {
         Text(
-            "Smooth trip — no hard braking, acceleration or cornering recorded.",
+            "Smooth trip - no hard braking, acceleration or cornering recorded.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -575,7 +832,7 @@ private fun EventRow(event: DriveEvent, points: List<TrackPoint>, firstT: Long, 
     val style = eventStyle(event)
     val point = points.getOrNull(nearestPointIndex(points, event.tMs))
     val intoTrip = Format.duration((event.tMs - firstT).coerceAtLeast(0) / 1000.0)
-    val speed = point?.let { Format.speedKmh(it.speedKmh) } ?: "—"
+    val speed = point?.let { Format.speedKmh(it.speedKmh) } ?: "-"
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -600,13 +857,13 @@ private fun EventRow(event: DriveEvent, points: List<TrackPoint>, firstT: Long, 
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "$intoTrip into trip · at $speed",
+                    "$intoTrip into trip | at $speed",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Icon(
-                Icons.Filled.Place,
+                Icons.Filled.MyLocation,
                 contentDescription = "Show on map",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )

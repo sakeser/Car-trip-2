@@ -36,6 +36,7 @@ import androidx.navigation.navArgument
 import com.cartrip.analyzer.record.RecordingService
 import com.cartrip.analyzer.record.RecordingState
 import com.cartrip.analyzer.ui.CarTripTheme
+import com.cartrip.analyzer.ui.GuideScreen
 import com.cartrip.analyzer.ui.HomeScreen
 import com.cartrip.analyzer.ui.InsightsScreen
 import com.cartrip.analyzer.ui.TripDetailScreen
@@ -82,7 +83,20 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
+        val repaired = vm.recoverInterruptedTrips()
         CloudState.set { it.copy(email = CloudPrefs.email(context)) }
+        if (repaired > 0) {
+            CloudState.set {
+                it.copy(lastMessage = "Recovered $repaired interrupted trip${if (repaired == 1) "" else "s"} as partial.")
+            }
+        }
+        // Sync anything that ended without a normal stop (recovered partials, past failures).
+        val synced = vm.syncPendingTrips()
+        if (synced > 0) {
+            CloudState.set {
+                it.copy(lastMessage = "Synced $synced pending trip${if (synced == 1) "" else "s"} to Google Sheets.")
+            }
+        }
     }
 
     LaunchedEffect(live.completedTripId) {
@@ -148,8 +162,12 @@ private fun AppRoot() {
                     CloudState.set { it.copy(lastMessage = "Loading 30 days of sample trips...") }
                 },
                 onConnectCloud = { connectCloud() },
-                onDisconnectCloud = { disconnectCloud() }
+                onDisconnectCloud = { disconnectCloud() },
+                onOpenGuide = { nav.navigate("guide") }
             )
+        }
+        composable("guide") {
+            GuideScreen(onBack = { nav.popBackStack() })
         }
         composable("insights") {
             InsightsScreen(

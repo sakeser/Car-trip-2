@@ -13,11 +13,14 @@ import com.cartrip.analyzer.analysis.TripAnalyzer
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.cloud.RoutesClient
 import com.cartrip.analyzer.cloud.RoutesConfig
+import com.cartrip.analyzer.cloud.SpeedLimits
+import com.cartrip.analyzer.cloud.TripSync
 import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.AppDatabase
 import com.cartrip.analyzer.data.DriveEventEntity
 import com.cartrip.analyzer.data.SampleData
 import com.cartrip.analyzer.data.TripEntity
+import com.cartrip.analyzer.data.TripFinalizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,6 +36,38 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         dao.observeTrips().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     suspend fun loadTrip(id: Long): TripEntity? = withContext(Dispatchers.IO) { dao.getTrip(id) }
+
+    suspend fun recoverInterruptedTrips(): Int = withContext(Dispatchers.IO) {
+        TripFinalizer.recoverInterruptedTrips(dao)
+    }
+
+    /** Sweep any finished-but-unsynced trips to Google Sheets (recovered partials, past failures). */
+    suspend fun syncPendingTrips(): Int = withContext(Dispatchers.IO) {
+        TripSync.syncPending(getApplication(), dao)
+    }
+
+    /** Force a re-sync of one trip (the per-trip "Sync now" button). Null on success, else a message. */
+    suspend fun resyncTrip(id: Long): String? = withContext(Dispatchers.IO) {
+        val result = TripSync.syncOne(getApplication(), dao, id, force = true)
+        if (result.isSuccess) null else (result.exceptionOrNull()?.message ?: "Sync failed.")
+    }
+
+    /**
+     * Look up OSM speed limits for a trip on demand (colours the route + computes speeding).
+     * Returns null on success, or a short message to surface to the user.
+     */
+    suspend fun fetchSpeedLimits(id: Long): String? = withContext(Dispatchers.IO) {
+        val attempt = runCatching { SpeedLimits.refreshForTrip(dao, id) }
+        val result = attempt.getOrNull()
+        when {
+            attempt.isFailure -> "Speed-limit lookup failed: ${attempt.exceptionOrNull()?.message}"
+            result == null ->
+                "Couldn't fetch speed limits. ${SpeedLimits.lastDiagnostic()}".trim()
+            result.coverage < 0.4 ->
+                "Limits found for only ${(result.coverage * 100).toInt()}% of the route — not enough to score speeding."
+            else -> null
+        }
+    }
 
     /**
      * Fetch a "typical for this time of day" Google estimate for an existing trip and persist it.
@@ -105,6 +140,17 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun clearAllTrips() {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteAllLocations()
+            dao.deleteAllMotions()
+            dao.deleteAllAnalysisPoints()
+            dao.deleteAllDriveEvents()
+            dao.deleteAllTrips()
+            CloudState.set { it.copy(lastMessage = "Cleared all trips.") }
+        }
+    }
+
     fun loadDemoData() {
         viewModelScope.launch(Dispatchers.IO) {
             SampleData.resetWithDemoTrips(getApplication(), dao)
@@ -159,7 +205,8 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
                     lon = it.lon,
                     speedKmh = it.speedKmh,
                     longAccel = it.longAccel,
-                    latAccel = it.latAccel
+                    latAccel = it.latAccel,
+                    speedLimitKmh = it.speedLimitKmh
                 )
             },
             events = events.mapNotNull { e ->

@@ -19,6 +19,8 @@ object RecordingState {
         val hardAccel: Int = 0,
         val hardCorner: Int = 0,
         val gpsFixes: Int = 0,
+        val gpsSignalLost: Boolean = false,
+        val lastGpsAgeS: Long = 0,
         val completedTripId: Long? = null
     )
 

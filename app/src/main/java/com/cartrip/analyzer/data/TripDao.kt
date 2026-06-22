@@ -3,6 +3,7 @@ package com.cartrip.analyzer.data
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -14,6 +15,20 @@ interface TripDao {
 
     @Update
     suspend fun updateTrip(trip: TripEntity)
+
+    /** Atomically replace a trip's row + its analysis points/events, so finalize can't half-apply. */
+    @Transaction
+    suspend fun finalizeTripTx(
+        trip: TripEntity,
+        points: List<AnalysisPointEntity>,
+        events: List<DriveEventEntity>
+    ) {
+        updateTrip(trip)
+        deleteAnalysisPoints(trip.id)
+        deleteDriveEvents(trip.id)
+        if (points.isNotEmpty()) insertAnalysisPoints(points)
+        if (events.isNotEmpty()) insertDriveEvents(events)
+    }
 
     @Insert
     suspend fun insertLocations(items: List<LocationSample>)
@@ -32,6 +47,36 @@ interface TripDao {
 
     @Query("SELECT * FROM trips WHERE id = :id")
     suspend fun getTrip(id: Long): TripEntity?
+
+    /**
+     * Real (non-sample), finished, analyzed trips not yet synced — the auto-sync retry queue.
+     * Sample/demo trips are excluded: they're synthetic and must not pollute the user's real Sheet
+     * (and syncing dozens at once would blow the Sheets per-minute quota).
+     */
+    @Query(
+        "SELECT * FROM trips WHERE analyzed = 1 AND endTime > 0 AND syncedAt = 0 AND isSample = 0 " +
+            "ORDER BY startTime ASC"
+    )
+    suspend fun getUnsyncedTrips(): List<TripEntity>
+
+    @Query(
+        """
+        SELECT * FROM trips
+        WHERE status = :status OR endTime = 0
+        ORDER BY startTime ASC
+        """
+    )
+    suspend fun getTripsWithStatus(status: String): List<TripEntity>
+
+    @Query(
+        """
+        SELECT * FROM trips
+        WHERE status = :status OR endTime = 0
+        ORDER BY startTime DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getLatestTripWithStatus(status: String): TripEntity?
 
     @Query("SELECT * FROM locations WHERE tripId = :id ORDER BY t ASC")
     suspend fun getLocations(id: Long): List<LocationSample>
@@ -54,6 +99,40 @@ interface TripDao {
 
     @Query("SELECT * FROM drive_events WHERE tripId = :id ORDER BY t ASC")
     suspend fun getDriveEvents(id: Long): List<DriveEventEntity>
+
+    @Query(
+        """
+        UPDATE trips SET
+            durationS = :durationS,
+            distanceM = :distanceM,
+            maxSpeedMps = :maxSpeedMps,
+            hardAccelCount = :hardAccelCount,
+            hardBrakeCount = :hardBrakeCount,
+            hardCornerCount = :hardCornerCount,
+            lastCheckpointAt = :checkpointAt,
+            lastLocationAt = :lastLocationAt,
+            lastMotionAt = :lastMotionAt,
+            locationSampleCount = :locationSampleCount,
+            motionSampleCount = :motionSampleCount,
+            gpsGapCount = :gpsGapCount
+        WHERE id = :id
+        """
+    )
+    suspend fun updateRecordingCheckpoint(
+        id: Long,
+        durationS: Double,
+        distanceM: Double,
+        maxSpeedMps: Double,
+        hardAccelCount: Int,
+        hardBrakeCount: Int,
+        hardCornerCount: Int,
+        checkpointAt: Long,
+        lastLocationAt: Long,
+        lastMotionAt: Long,
+        locationSampleCount: Int,
+        motionSampleCount: Int,
+        gpsGapCount: Int
+    )
 
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun deleteTrip(id: Long)
@@ -127,4 +206,20 @@ interface TripDao {
 
     @Query("DELETE FROM trips")
     suspend fun deleteAllTrips()
+
+    // --- Sample-only deletes: "Load demo data" must never touch real recorded trips ---
+    @Query("DELETE FROM locations WHERE tripId IN (SELECT id FROM trips WHERE isSample = 1)")
+    suspend fun deleteSampleLocations()
+
+    @Query("DELETE FROM motions WHERE tripId IN (SELECT id FROM trips WHERE isSample = 1)")
+    suspend fun deleteSampleMotions()
+
+    @Query("DELETE FROM analysis_points WHERE tripId IN (SELECT id FROM trips WHERE isSample = 1)")
+    suspend fun deleteSampleAnalysisPoints()
+
+    @Query("DELETE FROM drive_events WHERE tripId IN (SELECT id FROM trips WHERE isSample = 1)")
+    suspend fun deleteSampleDriveEvents()
+
+    @Query("DELETE FROM trips WHERE isSample = 1")
+    suspend fun deleteSampleTrips()
 }

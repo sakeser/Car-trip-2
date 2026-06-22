@@ -1,23 +1,32 @@
 package com.cartrip.analyzer.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Lightweight time-series line chart drawn on a Canvas (no third-party chart lib).
@@ -52,18 +61,22 @@ fun TimeSeriesChart(
         var maxV = values.max()
         if (zeroCentered) {
             val a = max(maxV, -minV)
-            maxV = a; minV = -a
+            maxV = a
+            minV = -a
         }
-        if (maxV - minV < 0.001f) { maxV += 1f; minV -= 1f }
+        if (maxV - minV < 0.001f) {
+            maxV += 1f
+            minV -= 1f
+        }
 
-        val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-        val baselineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f)
+        val baselineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
         val cursorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
 
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(124.dp)
                 .padding(top = 6.dp)
         ) {
             val w = size.width
@@ -71,7 +84,6 @@ fun TimeSeriesChart(
             fun xAt(i: Int) = w * i / (values.size - 1)
             fun yAt(v: Float) = h - (v - minV) / (maxV - minV) * h
 
-            // top/bottom grid lines
             drawLine(gridColor, Offset(0f, 0f), Offset(w, 0f), 1f)
             drawLine(gridColor, Offset(0f, h), Offset(w, h), 1f)
 
@@ -85,7 +97,15 @@ fun TimeSeriesChart(
             for (i in 1 until values.size) {
                 path.lineTo(xAt(i), yAt(values[i]))
             }
-            drawPath(path, color, style = Stroke(width = 3f))
+            val fill = Path().apply {
+                addPath(path)
+                lineTo(w, h)
+                lineTo(0f, h)
+                close()
+            }
+            drawPath(fill, color.copy(alpha = 0.10f))
+            drawPath(path, color, style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCircle(color, radius = 4.5f, center = Offset(xAt(values.lastIndex), yAt(values.last())))
 
             selectedIndex?.coerceIn(0, values.size - 1)?.let { selected ->
                 val x = xAt(selected)
@@ -111,7 +131,7 @@ fun TimeSeriesChart(
 /** One named series for [MultiSeriesChart]. */
 class Series(val label: String, val color: Color, val values: List<Float>)
 
-/** A tiny inline line, no axes — for small-multiples and hero cards. */
+/** A tiny inline line, no axes - for small-multiples and hero cards. */
 @Composable
 fun MiniSparkline(
     values: List<Float>,
@@ -127,8 +147,15 @@ fun MiniSparkline(
     Canvas(modifier = modifier.fillMaxWidth().height(34.dp)) {
         var mn = values.min()
         var mx = values.max()
-        if (zeroBaseline) { val a = max(mx, -mn); mx = a; mn = -a }
-        if (mx - mn < 0.001f) { mx += 1f; mn -= 1f }
+        if (zeroBaseline) {
+            val a = max(mx, -mn)
+            mx = a
+            mn = -a
+        }
+        if (mx - mn < 0.001f) {
+            mx += 1f
+            mn -= 1f
+        }
         val w = size.width
         val h = size.height
         fun xAt(i: Int) = w * i / (values.size - 1)
@@ -140,13 +167,21 @@ fun MiniSparkline(
         val path = Path()
         path.moveTo(xAt(0), yAt(values[0]))
         for (i in 1 until values.size) path.lineTo(xAt(i), yAt(values[i]))
-        drawPath(path, color, style = Stroke(width = 2.5f))
+        val fill = Path().apply {
+            addPath(path)
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+        drawPath(fill, color.copy(alpha = 0.11f))
+        drawPath(path, color, style = Stroke(width = 3f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawCircle(color, radius = 3.6f, center = Offset(xAt(values.lastIndex), yAt(values.last())))
     }
 }
 
 /**
- * Overlays several series on a shared, fixed y-range ([yMin]..[yMax]) — built for the 0–100
- * driving scores so Safety/Comfort/Speed can be compared on one set of axes over time.
+ * Overlays several series on a shared, fixed y-range ([yMin]..[yMax]) - built for the 0-100
+ * driving scores so Safety/Comfort/Pace can be compared on one set of axes over time.
  */
 @Composable
 fun MultiSeriesChart(
@@ -159,17 +194,32 @@ fun MultiSeriesChart(
     Column(modifier = modifier) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface
         )
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             series.forEach { s ->
-                Row(modifier = Modifier.padding(end = 14.dp)) {
-                    Text("●", color = s.color, style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(s.color.copy(alpha = 0.11f))
+                        .padding(horizontal = 9.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(s.color)
+                    )
+                    Spacer(Modifier.width(5.dp))
                     Text(
-                        "  ${s.label}",
+                        s.label,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -183,18 +233,19 @@ fun MultiSeriesChart(
             )
             return
         }
-        val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f)
+        val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
         Canvas(
-            modifier = Modifier.fillMaxWidth().height(140.dp).padding(top = 6.dp)
+            modifier = Modifier.fillMaxWidth().height(164.dp).padding(top = 8.dp)
         ) {
             val w = size.width
             val h = size.height
             val span = (yMax - yMin).coerceAtLeast(0.001f)
             fun yAt(v: Float) = h - (v - yMin) / span * h
 
-            drawLine(gridColor, Offset(0f, 0f), Offset(w, 0f), 1f)
-            drawLine(gridColor, Offset(0f, h / 2), Offset(w, h / 2), 1f)
-            drawLine(gridColor, Offset(0f, h), Offset(w, h), 1f)
+            listOf(0f, 0.25f, 0.5f, 0.75f, 1f).forEach { frac ->
+                val y = h * frac
+                drawLine(gridColor, Offset(0f, y), Offset(w, y), 1f)
+            }
 
             series.forEach { s ->
                 if (s.values.size < 2) return@forEach
@@ -202,7 +253,8 @@ fun MultiSeriesChart(
                 val path = Path()
                 path.moveTo(xAt(0), yAt(s.values[0]))
                 for (i in 1 until s.values.size) path.lineTo(xAt(i), yAt(s.values[i]))
-                drawPath(path, s.color, style = Stroke(width = 3f))
+                drawPath(path, s.color, style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawCircle(s.color, radius = 4f, center = Offset(xAt(s.values.lastIndex), yAt(s.values.last())))
             }
         }
     }

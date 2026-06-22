@@ -64,26 +64,34 @@ object SampleData {
         Place("Scarborough Town", 43.7764, -79.2574),
         Place("Vaughan Mills", 43.8256, -79.5396),
         Place("North York Centre", 43.7685, -79.4126),
-        Place("The Beaches", 43.6692, -79.2996)
+        Place("The Beaches", 43.6692, -79.2996),
+        Place("Yonge and Eglinton", 43.7064, -79.3986),
+        Place("Liberty Village", 43.6371, -79.4246),
+        Place("Distillery District", 43.6503, -79.3596),
+        Place("Kensington Market", 43.6545, -79.4004),
+        Place("Danforth", 43.6783, -79.3487),
+        Place("Etobicoke", 43.6205, -79.5132),
+        Place("Downsview", 43.7387, -79.4897)
     )
 
     /** Set after [resetWithDemoTrips] if Routes API geometry was unavailable; null when all good. */
     fun lastRouteWarning(): String? = routeWarning
 
     suspend fun resetWithDemoTrips(context: Context, dao: TripDao) {
-        dao.deleteAllLocations()
-        dao.deleteAllMotions()
-        dao.deleteAllAnalysisPoints()
-        dao.deleteAllDriveEvents()
-        dao.deleteAllTrips()
+        // Only ever clear previously-generated sample trips — real recorded drives are preserved.
+        dao.deleteSampleLocations()
+        dao.deleteSampleMotions()
+        dao.deleteSampleAnalysisPoints()
+        dao.deleteSampleDriveEvents()
+        dao.deleteSampleTrips()
 
         routeWarning = null
         val creds = RoutesConfig.apiKey(context)?.let {
             Creds(it, RoutesConfig.androidPackage(context), RoutesConfig.signingSha1(context))
         }
-        if (creds == null) routeWarning = "No Maps API key — demo routes are straight-line only."
+        if (creds == null) routeWarning = "No Maps API key - demo routes use varied local fallback paths."
 
-        val rng = Random(CTA_SEED)
+        val rng = Random(System.currentTimeMillis())
         val start = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -133,7 +141,7 @@ object SampleData {
         // calmer drivers but give a meaningful tail of aggressive ones.
         val aggression = rng.nextDouble().let { it * it }.let { it + rng.nextDouble() * 0.25 }.coerceIn(0.0, 1.0)
 
-        val routing = resolveRouting(creds, startPlace, endPlace, startTime, commute)
+        val routing = resolveRouting(creds, rng, startPlace, endPlace, startTime, commute)
         // Prefer the real traffic/free-flow ratio for this route+time so the 401 actually crawls
         // at rush hour; fall back to a random factor only when no Google estimate is available.
         // A per-trip "pace" then makes some drives beat traffic and others fall behind it.
@@ -164,6 +172,24 @@ object SampleData {
             .coerceIn(40.0, 99.0)
             .toInt()
 
+        // Exposure factors (fraction of moving time over a g threshold). The synthetic track only
+        // spikes events instantaneously, so synthesize realistic sustained percentages from the
+        // driver's aggression instead — this is what the Tesla-style safety score reads.
+        val sq = aggression * aggression
+        val hardBrakePct = (sq * 0.05 + rng.nextDouble() * 0.008).coerceIn(0.0, 0.09)
+        val aggressiveTurnPct = (sq * 0.03 + rng.nextDouble() * 0.005).coerceIn(0.0, 0.06)
+        val hardAccelPct = (sq * 0.035 + rng.nextDouble() * 0.006).coerceIn(0.0, 0.07)
+        val speedBias = 1.0 + aggression * 0.42
+        val speedingPct = (((speedBias - 1.0) * 2.2) * (0.4 + 0.6 * congestion))
+            .coerceIn(0.0, 0.85)
+        val maxOverLimitKmh = ((speedBias - 1.0) * 55.0).coerceIn(0.0, 35.0) + rng.nextDouble() * 5.0
+        val limitCoverage = 0.85 + rng.nextDouble() * 0.15
+        val jerkyPct = (sq * 0.045 + rng.nextDouble() * 0.01).coerceIn(0.0, 0.10)
+        val maxJerk = 1.0 + aggression * 6.0 + rng.nextDouble() * 1.5
+        val roughRoadPct = (rng.nextDouble() * 0.18).coerceIn(0.0, 0.30)
+        val potholeCount = if (rng.nextDouble() < 0.4) rng.nextInt(1, 4) else 0
+        val harshStopCount = (aggression * rng.nextInt(0, 4)).toInt()
+
         val tripId = dao.insertTrip(
             TripEntity(
                 startTime = startTime,
@@ -186,7 +212,19 @@ object SampleData {
                 googleEtaTrafficS = routing.trafficS,
                 googleEtaFreeFlowS = routing.freeFlowS,
                 etaSource = routing.source,
-                etaFetchedAt = if (routing.source.isNotEmpty()) System.currentTimeMillis() else 0L
+                etaFetchedAt = if (routing.source.isNotEmpty()) System.currentTimeMillis() else 0L,
+                hardBrakePct = hardBrakePct,
+                aggressiveTurnPct = aggressiveTurnPct,
+                hardAccelPct = hardAccelPct,
+                speedingPct = speedingPct,
+                maxOverLimitKmh = maxOverLimitKmh,
+                limitCoverage = limitCoverage,
+                maxJerk = maxJerk,
+                jerkyPct = jerkyPct,
+                isSample = true,
+                roughRoadPct = roughRoadPct,
+                potholeCount = potholeCount,
+                harshStopCount = harshStopCount
             )
         )
         dao.insertAnalysisPoints(track.map { it.copy(tripId = tripId) })
@@ -199,6 +237,7 @@ object SampleData {
      */
     private fun resolveRouting(
         creds: Creds?,
+        rng: Random,
         start: Place,
         end: Place,
         startTime: Long,
@@ -224,10 +263,10 @@ object SampleData {
             }
             val msg = res.exceptionOrNull()?.message
             if (routeWarning == null && msg != null) {
-                routeWarning = "Routes API unavailable — using straight-line demo routes. ($msg)"
+                routeWarning = "Routes API unavailable - using varied local fallback routes. ($msg)"
             }
         }
-        return Routing(routeFor(start, end, commute), 0.0, 0.0, "", null)
+        return Routing(routeFor(start, end, commute, rng), 0.0, 0.0, "", null)
     }
 
     /**
@@ -282,7 +321,7 @@ object SampleData {
     }
 
     /** Road-aligned polyline with a cruise speed (km/h) for the segment leading to each point. */
-    private fun routeFor(start: Place, end: Place, commute: Boolean): List<RoutePt> {
+    private fun routeFor(start: Place, end: Place, commute: Boolean, rng: Random): List<RoutePt> {
         if (commute) {
             // Harrison Garden <-> Speakman roughly follows Hwy 401/403 west.
             val highway = listOf(
@@ -297,15 +336,22 @@ object SampleData {
             )
             return if (start.name == home.name) highway else highway.reversed()
         }
-        // Local arterial drive: a bent two-leg path at city speeds with frequent lights.
+        // Local arterial drive: varied bent paths at city speeds with frequent lights.
+        val bend = if (rng.nextBoolean()) 1.0 else -1.0
         val mid = RoutePt(
-            lat = (start.lat + end.lat) / 2 + if (end.lon > start.lon) 0.012 else -0.007,
-            lon = (start.lon + end.lon) / 2 + if (end.lat > start.lat) 0.010 else -0.010,
-            cruiseKmh = 55.0
+            lat = (start.lat + end.lat) / 2 + bend * 0.010 + rng.nextDouble(-0.012, 0.012),
+            lon = (start.lon + end.lon) / 2 - bend * 0.010 + rng.nextDouble(-0.012, 0.012),
+            cruiseKmh = 45.0 + rng.nextDouble() * 18.0
+        )
+        val extra = RoutePt(
+            lat = mid.lat + rng.nextDouble(-0.010, 0.010),
+            lon = mid.lon + rng.nextDouble(-0.010, 0.010),
+            cruiseKmh = 42.0 + rng.nextDouble() * 16.0
         )
         return listOf(
             RoutePt(start.lat, start.lon, 45.0),
             mid,
+            extra,
             RoutePt(end.lat, end.lon, 45.0)
         )
     }
@@ -505,5 +551,4 @@ object SampleData {
     private fun min(a: Double, b: Double) = if (a < b) a else b
     private fun lerp(a: Double, b: Double, f: Double): Double = a + (b - a) * f
 
-    private const val CTA_SEED = 20260621
 }
