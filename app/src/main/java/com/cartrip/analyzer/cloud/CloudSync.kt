@@ -24,15 +24,24 @@ object CloudSync {
                     ?: return@withContext Result.failure(IllegalStateException("Not signed in"))
                 val token = GoogleAuth.token(context, account)
 
+                val headerSig = (
+                    ExportData.SUMMARY_HEADER.toString() +
+                        ExportData.SAMPLE_HEADER + ExportData.EVENT_HEADER
+                    ).hashCode()
+
                 var id = CloudPrefs.spreadsheetId(context)
                 if (id == null) {
                     id = SheetsClient.createSpreadsheet(
                         token, SHEET_TITLE, listOf(SUMMARY, SAMPLES, EVENTS)
                     )
-                    SheetsClient.writeHeader(token, id, SUMMARY, ExportData.SUMMARY_HEADER)
-                    SheetsClient.writeHeader(token, id, SAMPLES, ExportData.SAMPLE_HEADER)
-                    SheetsClient.writeHeader(token, id, EVENTS, ExportData.EVENT_HEADER)
                     CloudPrefs.setSpreadsheetId(context, id)
+                    writeHeaders(token, id)
+                    CloudPrefs.setHeaderSig(context, headerSig)
+                } else if (CloudPrefs.headerSig(context) != headerSig) {
+                    // Schema changed since this sheet was created — refresh the header row (a PUT to
+                    // A1 overwrites in place) so labels line up with the wider rows we now append.
+                    writeHeaders(token, id)
+                    CloudPrefs.setHeaderSig(context, headerSig)
                 }
 
                 SheetsClient.appendRows(token, id, SUMMARY, listOf(ExportData.summaryRow(trip, a)))
@@ -43,6 +52,12 @@ object CloudSync {
                 Result.failure(e)
             }
         }
+
+    private fun writeHeaders(token: String, id: String) {
+        SheetsClient.writeHeader(token, id, SUMMARY, ExportData.SUMMARY_HEADER)
+        SheetsClient.writeHeader(token, id, SAMPLES, ExportData.SAMPLE_HEADER)
+        SheetsClient.writeHeader(token, id, EVENTS, ExportData.EVENT_HEADER)
+    }
 
     /**
      * Forces an access-token fetch to trigger the one-time consent dialog.

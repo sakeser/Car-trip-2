@@ -15,4 +15,9 @@ object CloudPrefs {
 
     fun email(c: Context): String? = p(c).getString("email", null)
     fun setEmail(c: Context, v: String?) = p(c).edit().putString("email", v).apply()
+
+    // Signature of the export header layout last written to the sheet, so a schema change
+    // re-writes headers instead of leaving old labels above wider rows. 0 = never written.
+    fun headerSig(c: Context): Int = p(c).getInt("headerSig", 0)
+    fun setHeaderSig(c: Context, v: Int) = p(c).edit().putInt("headerSig", v).apply()
 }

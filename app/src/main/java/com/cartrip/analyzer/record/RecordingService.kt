@@ -556,9 +556,12 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             tLoc - lastDrivingLocT >= AUTO_STOP_IDLE_MS
         ) {
             autoStopRequested = true
-            val trimLocationT = lastDrivingLocT + AUTO_STOP_TRIM_GRACE_MS
-            val trimMotionT = System.currentTimeMillis() - (tLoc - trimLocationT)
-            stopRecording(TrimCutoff(trimLocationT, trimMotionT))
+            // Location fixes (loc.elapsedRealtimeNanos) and motion samples (SystemClock.elapsedRealtime)
+            // share the monotonic clock, so the same cutoff trims both. Earlier this derived the motion
+            // cutoff from wall time, which never matched a monotonic sample t — so post-drive idle motion
+            // leaked into rough-road / pothole / peak-G / fused counts.
+            val trimT = lastDrivingLocT + AUTO_STOP_TRIM_GRACE_MS
+            stopRecording(TrimCutoff(trimT, trimT))
         }
     }
 
