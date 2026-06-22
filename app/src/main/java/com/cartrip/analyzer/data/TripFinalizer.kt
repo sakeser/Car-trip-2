@@ -88,6 +88,10 @@ object TripFinalizer {
      */
     suspend fun reanalyzeTrip(dao: TripDao, tripId: Long): Result? {
         val trip = dao.getTrip(tripId) ?: return null
+        // Guard: if the raw GPS/motion was already purged, finalizeTrip would re-derive an empty
+        // analysis, wipe the stored points/events and reclassify the trip as no_gps_track. Only
+        // re-analyze when enough raw remains to reconstruct it.
+        if (dao.getLocations(tripId).size < 2 || dao.getMotions(tripId).isEmpty()) return null
         val endWall = trip.endTime.takeIf { it > 0L } ?: System.currentTimeMillis()
         return finalizeTrip(dao, tripId, endWall, trip.status, trip.endReason)
     }

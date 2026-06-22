@@ -134,6 +134,9 @@ interface TripDao {
         gpsGapCount: Int
     )
 
+    @Query("UPDATE trips SET name = :name WHERE id = :id")
+    suspend fun renameTrip(id: Long, name: String)
+
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun deleteTrip(id: Long)
 

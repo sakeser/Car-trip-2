@@ -139,6 +139,10 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         TripFinalizer.reanalyzeTrip(dao, id) != null
     }
 
+    fun renameTrip(id: Long, name: String) {
+        viewModelScope.launch(Dispatchers.IO) { dao.renameTrip(id, name.trim()) }
+    }
+
     fun deleteTrip(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             dao.deleteLocations(id)

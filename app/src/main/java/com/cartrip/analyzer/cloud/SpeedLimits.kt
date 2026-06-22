@@ -15,11 +15,11 @@ import kotlin.math.hypot
 /**
  * Posted speed limits from OpenStreetMap via the free Overpass API.
  *
- * For a trip we query OSM `way`s tagged with `maxspeed` near the route, match each track point to
- * the nearest such way, and compute how much of the (covered) driving was over the limit. Coverage
- * is reported separately so the speeding number can be trusted only when OSM actually knew the
- * limits for enough of the route. Everything fails soft: on any error the result is null and the
- * speeding factor simply doesn't apply.
+ * For a trip we query OSM drivable `way`s near the route, match each track point to the nearest
+ * way, and compute how much of the (covered) driving was over the limit. We use the posted
+ * `maxspeed` where OSM has one, and otherwise assume a limit from the road class (residential 40,
+ * arterial 50, freeway higher) so local streets that lack a posted value can still be scored.
+ * Everything fails soft: on any error the result is null and the speeding factor simply doesn't apply.
  */
 object SpeedLimits {
 
@@ -126,7 +126,11 @@ object SpeedLimits {
         val bbox = "%.6f,%.6f,%.6f,%.6f".format(
             loc, minLat - BBOX_PAD_DEG, minLon - BBOX_PAD_DEG, maxLat + BBOX_PAD_DEG, maxLon + BBOX_PAD_DEG
         )
-        val query = "[out:json][timeout:20];way[\"maxspeed\"]($bbox);out geom;"
+        // Fetch all drivable roads (not just those tagged maxspeed) so we can assume a limit by road
+        // class where OSM has no posted value — otherwise most local streets have no coverage at all.
+        val query = "[out:json][timeout:20];" +
+            "way[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$\"]($bbox);" +
+            "out geom;"
         val body = "data=${URLEncoder.encode(query, "UTF-8")}".toRequestBody(FORM)
 
         val diag = StringBuilder()
@@ -163,7 +167,11 @@ object SpeedLimits {
         for (i in 0 until elements.length()) {
             val el = elements.getJSONObject(i)
             if (el.optString("type") != "way") continue
-            val limit = parseMaxspeedKmh(el.optJSONObject("tags")?.optString("maxspeed")) ?: continue
+            val tags = el.optJSONObject("tags")
+            // Use the posted maxspeed when present; otherwise assume a limit from the road class.
+            val limit = parseMaxspeedKmh(tags?.optString("maxspeed"))
+                ?: assumedLimitFor(tags?.optString("highway").orEmpty())
+                ?: continue
             val geomArr = el.optJSONArray("geometry") ?: continue
             val nodes = ArrayList<DoubleArray>(geomArr.length())
             for (j in 0 until geomArr.length()) {
@@ -200,6 +208,18 @@ object SpeedLimits {
         if (dx == 0.0 && dy == 0.0) return hypot(px - ax, py - ay)
         val t = (((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)).coerceIn(0.0, 1.0)
         return hypot(px - (ax + t * dx), py - (ay + t * dy))
+    }
+
+    /**
+     * Assumed limit (km/h) for a road class when OSM has no posted maxspeed. Residential streets →
+     * 40, ordinary arterials → 50, freeways → higher so a highway run isn't flagged as speeding.
+     */
+    private fun assumedLimitFor(highway: String): Double? = when (highway) {
+        "residential", "living_street", "unclassified", "service", "road" -> 40.0
+        "tertiary", "tertiary_link", "secondary", "secondary_link", "primary", "primary_link" -> 50.0
+        "trunk", "trunk_link" -> 80.0
+        "motorway", "motorway_link" -> 100.0
+        else -> null
     }
 
     /** Parse an OSM maxspeed tag to km/h. Handles "50", "30 mph"; ignores "none"/"signals"/etc. */

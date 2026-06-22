@@ -27,8 +27,7 @@ object FusedEventDetector {
     private const val G = 9.80665
     private const val HARD_LONG_G = 0.25          // horizontal-accel spike → brake/accel candidate
     private const val HARD_CORNER_G = 0.27        // sustained lateral-g (speed × yaw) → corner
-    private const val SWERVE_YAW = 0.50           // rad/s, both lobes of a reversal → swerve
-    private const val SWERVE_REVERSAL_MS = 2000L  // opposite-sign strong yaw within this = one swerve
+    private const val SWERVE_YAW = 0.45           // rad/s, a sharp yaw flick (not a sustained corner)
     private const val SLOPE_MIN = 0.5             // m/s^2 GPS slope needed to call brake vs accel
     private const val MOVING_MPS = 8.0 / 3.6
     private const val LONG_GAP_MS = 2500L         // debounce: one brake/accel maneuver
@@ -102,11 +101,12 @@ object FusedEventDetector {
         val confidence = if (energy > 1e-6) (fMag / energy).coerceIn(0.0, 1.0) else 0.0
 
         // 3. Magnitude-first multi-channel detection.
+        // Event magnitudes are stored in m/s^2 (× G), matching GPS/pothole events so the two lists
+        // can share the map / timeline / export / formatters without a unit mismatch.
         val events = ArrayList<DriveEvent>()
         var brake = 0; var accel = 0; var turn = 0
         var maxHorizG = 0.0
         var lastLong = Long.MIN_VALUE; var lastTurn = Long.MIN_VALUE; var lastSwerve = Long.MIN_VALUE
-        var prevStrongSign = 0; var prevStrongT = 0L
         for (m in motions) {
             if (sqrt(m.grx * m.grx + m.gry * m.gry + m.grz * m.grz) < MIN_GRAVITY) continue
             val sp = speedAt(m.t)
@@ -118,34 +118,28 @@ object FusedEventDetector {
             val yaw = m.gx * dx + m.gy * dy + m.gz * dz
             val yawLatG = sp * abs(yaw) / G
 
-            // Swerve: a genuine yaw-rate reversal (both lobes strong, within the window).
-            if (abs(yaw) >= SWERVE_YAW) {
-                val s = if (yaw > 0) 1 else -1
-                if (prevStrongSign != 0 && s != prevStrongSign &&
-                    m.t - prevStrongT <= SWERVE_REVERSAL_MS &&
-                    debounced(m.t, lastSwerve, TURN_GAP_MS)
-                ) {
-                    events.add(DriveEvent(m.t, EventType.SWERVE, yawLatG, "fused", 0.7))
-                    turn++; lastSwerve = m.t; lastTurn = m.t
-                }
-                prevStrongSign = s; prevStrongT = m.t
-            }
-            // Corner: sustained lateral-g, long debounce so one turn = one event.
+            // Corner: sustained lateral-g (takes precedence over a swerve), one event per turn.
             if (yawLatG >= HARD_CORNER_G && debounced(m.t, lastTurn, TURN_GAP_MS)) {
-                events.add(DriveEvent(m.t, EventType.CORNER, yawLatG, "fused", 0.8))
+                events.add(DriveEvent(m.t, EventType.CORNER, yawLatG * G, "fused", 0.8))
                 turn++; lastTurn = m.t
+            }
+            // Swerve: a sharp yaw flick that isn't a sustained corner (low lateral-g, usually low speed).
+            else if (abs(yaw) >= SWERVE_YAW && yawLatG < HARD_CORNER_G && debounced(m.t, lastSwerve, TURN_GAP_MS)) {
+                events.add(DriveEvent(m.t, EventType.SWERVE, yawLatG * G, "fused", 0.7))
+                turn++; lastSwerve = m.t; lastTurn = m.t
             }
             // Longitudinal: horizontal spike not dominated by turning → brake/accel via GPS slope.
             if (hMagG >= HARD_LONG_G && yawLatG < 0.6 * hMagG && debounced(m.t, lastLong, LONG_GAP_MS)) {
                 val gl = gpsSlope(m.t)
+                val magMps2 = hMagG * G
                 when {
-                    gl <= -SLOPE_MIN -> { events.add(DriveEvent(m.t, EventType.BRAKE, hMagG, "fused", 0.9)); brake++ }
-                    gl >= SLOPE_MIN -> { events.add(DriveEvent(m.t, EventType.ACCEL, hMagG, "fused", 0.9)); accel++ }
+                    gl <= -SLOPE_MIN -> { events.add(DriveEvent(m.t, EventType.BRAKE, magMps2, "fused", 0.9)); brake++ }
+                    gl >= SLOPE_MIN -> { events.add(DriveEvent(m.t, EventType.ACCEL, magMps2, "fused", 0.9)); accel++ }
                     else -> {
                         // Ambiguous GPS slope — emit, but low confidence; lean on the forward-axis sign.
                         val lf = u * (fU / (fMag + 1e-9)) + v * (fV / (fMag + 1e-9))
-                        if (lf < 0) { events.add(DriveEvent(m.t, EventType.BRAKE, hMagG, "fused", 0.4)); brake++ }
-                        else { events.add(DriveEvent(m.t, EventType.ACCEL, hMagG, "fused", 0.4)); accel++ }
+                        if (lf < 0) { events.add(DriveEvent(m.t, EventType.BRAKE, magMps2, "fused", 0.4)); brake++ }
+                        else { events.add(DriveEvent(m.t, EventType.ACCEL, magMps2, "fused", 0.4)); accel++ }
                     }
                 }
                 lastLong = m.t

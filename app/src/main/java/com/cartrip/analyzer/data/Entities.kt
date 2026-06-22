@@ -7,6 +7,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "trips")
 data class TripEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    // User-given trip name (empty = fall back to the auto label / date).
+    val name: String = "",
     val startTime: Long,
     val endTime: Long,
     val distanceM: Double = 0.0,

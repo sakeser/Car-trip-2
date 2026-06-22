@@ -32,7 +32,7 @@ object ExportData {
         "TripId", "Time_s", "Lat", "Lon", "Speed_kmh", "LongAccel_mps2", "LatAccel_mps2"
     )
 
-    val EVENT_HEADER = listOf("TripId", "Time_s", "Type", "Magnitude_mps2")
+    val EVENT_HEADER = listOf("TripId", "Time_s", "Type", "Magnitude_mps2", "Source", "Confidence")
 
     private val iso = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
@@ -115,12 +115,15 @@ object ExportData {
 
     fun eventRows(tripId: Long, a: TripAnalysis): List<List<String>> {
         val t0 = a.points.firstOrNull()?.tMs ?: 0L
-        return a.events.map {
+        // Both GPS/pothole and fused events — magnitudes are uniformly m/s^2 now.
+        return (a.events + a.fusedEvents).sortedBy { it.tMs }.map {
             listOf(
                 tripId.toString(),
                 f((it.tMs - t0) / 1000.0, 1),
                 it.type.name,
-                f(it.magnitude, 2)
+                f(it.magnitude, 2),
+                it.source,
+                f(it.confidence, 2)
             )
         }
     }
