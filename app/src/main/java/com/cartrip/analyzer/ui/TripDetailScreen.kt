@@ -1,6 +1,7 @@
 package com.cartrip.analyzer.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +24,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CrisisAlert
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Route
@@ -35,6 +40,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,7 +61,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
@@ -83,6 +93,9 @@ fun TripDetailScreen(
     var fetchingEta by remember { mutableStateOf(false) }
     var fetchingLimits by remember { mutableStateOf(false) }
     var fetchingSync by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    val actionScope = rememberCoroutineScope()
     val trip by produceState<TripEntity?>(initialValue = null, tripId, etaRefresh) {
         value = viewModel.loadTrip(tripId)
     }
@@ -93,18 +106,31 @@ fun TripDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(trip?.let { Format.dateTime(it.startTime) } ?: "Trip") },
+                title = { Text(trip?.let { Format.dateOnly(it.startTime) } ?: "Trip") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        viewModel.deleteTrip(tripId)
-                        onDeleted()
-                    }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Share Excel") },
+                            leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                val t = trip; val an = analysis
+                                if (t != null && an != null) actionScope.launch { TripActions.shareExcel(ctx, t, an) }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete trip") },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                            onClick = { showMenu = false; viewModel.deleteTrip(tripId); onDeleted() }
+                        )
                     }
                 }
             )
@@ -134,165 +160,25 @@ fun TripDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val ctx = LocalContext.current
-            val actionScope = rememberCoroutineScope()
             val startPt = a.points.firstOrNull()
             val endPt = a.points.lastOrNull()
-            val primaryStats = listOf(
-                Stat("Distance", Format.distance(m.distanceM)),
-                Stat("Duration", Format.duration(m.durationS)),
-                Stat("Max speed", Format.speedKmh(m.maxSpeedMps * 3.6)),
-                Stat("Avg moving", Format.speedKmh(m.avgMovingSpeedMps * 3.6))
-            )
-            val detailedStats = listOf(
-                Stat("Idle time", Format.duration(m.idleS)),
-                Stat("Peak g-force", Format.gforce(m.peakGForce)),
-                Stat("Hard brakes", "${m.hardBrakeCount}", Color(0xFFEF4444)),
-                Stat("Hard accels", "${m.hardAccelCount}", Color(0xFFF59E0B)),
-                Stat("Hard corners", "${m.hardCornerCount}", Color(0xFFF59E0B)),
-                Stat("Max braking", Format.accel(m.maxBrakeMps2), Color(0xFFEF4444)),
-                Stat("Max accel", Format.accel(m.maxAccelMps2), Color(0xFFF59E0B)),
-                Stat("Max lateral", Format.accel(m.maxLateralMps2))
-            )
 
-            trip?.takeIf { it.isPartialRecording() }?.let { partialTrip ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED))
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(Icons.Filled.ReportProblem, contentDescription = null, tint = Color(0xFFD97706))
-                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(
-                                "Partial recording",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF9A3412)
-                            )
-                            Text(
-                                "${partialTrip.partialReasonText()} Distance, route, and end time may be estimated from saved samples.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9A3412)
-                            )
-                        }
-                    }
-                }
-            }
+            // --- Partial banner ---
+            trip?.takeIf { it.isPartialRecording() }?.let { PartialBanner(it) }
 
-            trip?.let { t ->
-                val endMs = if (t.endTime > 0) t.endTime else t.startTime + (m.durationS * 1000).toLong()
-                Text(
-                    "${Format.dateOnly(t.startTime)}   |   ${Format.timeOfDay(t.startTime)} -> ${Format.timeOfDay(endMs)}   |   ${Format.duration(m.durationS)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            trip?.let { t ->
-                SafetyFactorsCard(
-                    trip = t,
-                    checking = fetchingLimits,
-                    onCheckLimits = {
-                        fetchingLimits = true
-                        actionScope.launch {
-                            val error = viewModel.fetchSpeedLimits(tripId)
-                            fetchingLimits = false
-                            etaRefresh++
-                            if (error != null) Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
-                        }
-                    }
-                )
-            }
-
-            trip?.let { t -> RoadRideCard(t) }
-
-            trip?.let { t ->
-                SyncStatusRow(
-                    trip = t,
-                    syncing = fetchingSync,
-                    onSync = {
-                        fetchingSync = true
-                        actionScope.launch {
-                            val error = viewModel.resyncTrip(tripId)
-                            fetchingSync = false
-                            etaRefresh++
-                            if (error != null) Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
-                        }
-                    }
-                )
-            }
-
-            Text("Route", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "Used ${m.usedFixes} of ${m.rawFixes} GPS fixes after filtering",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (a.points.size >= 2) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .onGloballyPositioned { mapAnchorY = it.positionInParent().y.roundToInt() }
-                ) {
-                    TripMap(
-                        points = a.points,
-                        events = a.events,
-                        selectedPoint = selectedPoint,
-                        focusKey = focusKey,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                ReplayControls(
-                    points = a.points,
-                    selectedIndex = safeSelectedIndex,
-                    onSelectedIndex = { selectedIndex = it.coerceIn(0, maxPointIndex) }
-                )
-            } else {
-                Text(
-                    "No GPS track recorded for this trip.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            TripLinksCard(
-                startEnabled = startPt != null,
-                stopEnabled = endPt != null,
-                routeEnabled = startPt != null && endPt != null,
-                exportEnabled = trip != null,
-                onStart = { startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") } },
-                onStop = { endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Stop") } },
-                onRoute = {
-                    if (startPt != null && endPt != null) {
-                        TripActions.routeInMaps(ctx, startPt.lat, startPt.lon, endPt.lat, endPt.lon)
-                    }
-                },
-                onExport = { trip?.let { t -> actionScope.launch { TripActions.shareExcel(ctx, t, displayAnalysis) } } }
-            )
-
-            if (scores != null) {
-                ScorePanel(scores)
+            // --- Hero: overall score + clean time/duration/distance, sub-scores ---
+            if (scores != null && trip != null) {
+                TripHero(trip!!, m, scores)
             } else {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     ScoreRing(m.smoothness)
                 }
             }
 
-            StatGrid(
-                stats = primaryStats,
-                modifier = Modifier.fillMaxWidth()
-            )
-
+            // --- You vs traffic (moved up, reframed) ---
             trip?.let { t ->
                 EtaComparisonCard(
                     trip = t,
@@ -310,31 +196,324 @@ fun TripDetailScreen(
                 )
             }
 
-            EventsSection(
-                points = a.points,
-                events = a.events,
-                onEventClick = { event ->
-                    selectedIndex = nearestPointIndex(a.points, event.tMs).coerceIn(0, maxPointIndex)
-                    focusKey++
-                    actionScope.launch { scrollState.animateScrollTo(mapAnchorY) }
+            // --- Map + replay timeline ---
+            if (a.points.size >= 2) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .onGloballyPositioned { mapAnchorY = it.positionInParent().y.roundToInt() }
+                ) {
+                    TripMap(
+                        points = a.points,
+                        events = a.events,
+                        selectedPoint = selectedPoint,
+                        focusKey = focusKey,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    MapActions(
+                        modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                        onStart = { startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") } },
+                        onStop = { endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Stop") } },
+                        onRoute = {
+                            if (startPt != null && endPt != null) {
+                                TripActions.routeInMaps(ctx, startPt.lat, startPt.lon, endPt.lat, endPt.lon)
+                            }
+                        }
+                    )
                 }
-            )
 
-            val speed = downsample(a.points.map { it.speedKmh.toFloat() }, 700)
-            TimeSeriesChart(
-                title = "Speed (km/h)",
-                values = speed,
-                unit = "",
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.fillMaxWidth(),
-                selectedIndex = scaledIndex(safeSelectedIndex, a.points.size, speed.size)
-            )
+                ReplayTimeline(
+                    points = a.points,
+                    events = a.events,
+                    selectedIndex = safeSelectedIndex,
+                    onSelectedIndex = { selectedIndex = it.coerceIn(0, maxPointIndex) },
+                    onEventJump = { event ->
+                        selectedIndex = nearestPointIndex(a.points, event.tMs).coerceIn(0, maxPointIndex)
+                        focusKey++
+                        actionScope.launch { scrollState.animateScrollTo(mapAnchorY) }
+                    }
+                )
+            } else {
+                Text(
+                    "No GPS track recorded for this trip.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
-            Text("Detailed metrics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            StatGrid(
-                stats = detailedStats,
-                modifier = Modifier.fillMaxWidth()
+            // --- Driving factors + road & ride (quiet, visual) ---
+            trip?.let { t ->
+                SafetyFactorsCard(
+                    trip = t,
+                    checking = fetchingLimits,
+                    onCheckLimits = {
+                        fetchingLimits = true
+                        actionScope.launch {
+                            val error = viewModel.fetchSpeedLimits(tripId)
+                            fetchingLimits = false
+                            etaRefresh++
+                            if (error != null) Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                )
+            }
+            trip?.let { t -> RoadRideCard(t) }
+
+            // --- Advanced (collapsed): charts, raw metrics, per-event detail ---
+            AdvancedSection(metrics = m, events = a.events, points = a.points)
+
+            // --- Sync footer ---
+            trip?.let { t ->
+                SyncStatusRow(
+                    trip = t,
+                    syncing = fetchingSync,
+                    onSync = {
+                        fetchingSync = true
+                        actionScope.launch {
+                            val error = viewModel.resyncTrip(tripId)
+                            fetchingSync = false
+                            etaRefresh++
+                            if (error != null) Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PartialBanner(trip: TripEntity) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(Icons.Filled.ReportProblem, contentDescription = null, tint = Color(0xFFD97706))
+            Column {
+                Text("Partial recording", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF9A3412))
+                Text(trip.partialReasonText(), style = MaterialTheme.typography.bodySmall, color = Color(0xFF9A3412))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
+    val endMs = if (trip.endTime > 0) trip.endTime else trip.startTime + (m.durationS * 1000).toLong()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            ScoreRing(scores.overall, ringSize = 78.dp)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "${Format.timeOfDay(trip.startTime)} – ${Format.timeOfDay(endMs)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${Format.tripMinutes(m.durationS)}  ·  ${Format.tripDistance(m.distanceM)}  ·  ${Format.speedKmh(m.avgMovingSpeedMps * 3.6)} avg",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HeroScore("Safety", scores.safety)
+                    HeroScore("Comfort", scores.comfort)
+                    HeroScore("Pace", scores.speed)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroScore(label: String, value: Int?) {
+    val color = value?.let { TripScores.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Box(modifier = Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(color))
+        Text(
+            "$label ${value ?: "—"}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Small map-action chips over the map: Start / Route / End in Google Maps. */
+@Composable
+private fun MapActions(modifier: Modifier = Modifier, onStart: () -> Unit, onStop: () -> Unit, onRoute: () -> Unit) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        MapChip(Icons.Filled.MyLocation, "Start in Maps", onStart)
+        MapChip(Icons.Filled.Route, "Route in Maps", onRoute)
+        MapChip(Icons.Filled.Place, "End in Maps", onStop)
+    }
+}
+
+@Composable
+private fun MapChip(icon: ImageVector, desc: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = desc, tint = Color(0xFF185FA5), modifier = Modifier.size(19.dp))
+    }
+}
+
+/**
+ * Waze-style replay strip: the speed curve is the timeline, event glyphs sit on it at their moment
+ * (tap to jump), and a scrubber + a one-line readout sit below. Speed chart and replay in one.
+ */
+@Composable
+private fun ReplayTimeline(
+    points: List<TrackPoint>,
+    events: List<DriveEvent>,
+    selectedIndex: Int,
+    onSelectedIndex: (Int) -> Unit,
+    onEventJump: (DriveEvent) -> Unit
+) {
+    val t0 = points.first().tMs
+    val tN = points.last().tMs.coerceAtLeast(t0 + 1)
+    val speeds = remember(points) { points.map { it.speedKmh.toFloat() } }
+    val maxSpeed = (speeds.maxOrNull() ?: 1f).coerceAtLeast(1f)
+    val selFrac = if (points.size > 1) selectedIndex.toFloat() / (points.size - 1) else 0f
+    val lineColor = MaterialTheme.colorScheme.primary
+    val cursorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val density = LocalDensity.current
+    val point = points.getOrNull(selectedIndex)
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                if (events.isEmpty()) "Replay" else "Replay · ${events.size} event${if (events.size == 1) "" else "s"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (point != null) {
+                Text(
+                    "${Format.duration((point.tMs - t0).coerceAtLeast(0) / 1000.0)} · ${Format.speedKmh(point.speedKmh)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(60.dp)) {
+            val wPx = with(density) { maxWidth.toPx() }
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width; val h = size.height
+                if (speeds.size >= 2) {
+                    fun xAt(i: Int) = w * i / (speeds.size - 1)
+                    fun yAt(v: Float) = h - (v / maxSpeed) * h * 0.88f - h * 0.06f
+                    val path = Path()
+                    path.moveTo(0f, yAt(speeds[0]))
+                    for (i in 1 until speeds.size) path.lineTo(xAt(i), yAt(speeds[i]))
+                    val fill = Path().apply { addPath(path); lineTo(w, h); lineTo(0f, h); close() }
+                    drawPath(fill, lineColor.copy(alpha = 0.12f))
+                    drawPath(path, lineColor, style = Stroke(width = 3f))
+                }
+                drawLine(cursorColor, Offset(selFrac * w, 0f), Offset(selFrac * w, h), 2f)
+            }
+            events.forEach { event ->
+                val frac = ((event.tMs - t0).toFloat() / (tN - t0)).coerceIn(0f, 1f)
+                val style = eventStyle(event)
+                Box(
+                    modifier = Modifier
+                        .offset(x = with(density) { (frac * wPx).toDp() } - 9.dp, y = (-2).dp)
+                        .size(18.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(style.color)
+                        .clickable { onEventJump(event) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(style.icon, contentDescription = style.label, tint = Color.White, modifier = Modifier.size(11.dp))
+                }
+            }
+        }
+        Slider(
+            value = selectedIndex.toFloat(),
+            onValueChange = { onSelectedIndex(it.roundToInt()) },
+            valueRange = 0f..(points.size - 1).coerceAtLeast(1).toFloat()
+        )
+    }
+}
+
+@Composable
+private fun AdvancedSection(metrics: DriveMetrics, events: List<DriveEvent>, points: List<TrackPoint>) {
+    var expanded by remember { mutableStateOf(false) }
+    val m = metrics
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Advanced & charts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Icon(
+                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (expanded) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatGrid(
+                        stats = listOf(
+                            Stat("Max speed", Format.speedKmh(m.maxSpeedMps * 3.6)),
+                            Stat("Idle time", Format.duration(m.idleS)),
+                            Stat("Peak g-force", Format.gforce(m.peakGForce)),
+                            Stat("Max braking", Format.accelG(m.maxBrakeMps2), Color(0xFFEF4444)),
+                            Stat("Max accel", Format.accelG(m.maxAccelMps2), Color(0xFFF59E0B)),
+                            Stat("Max lateral", Format.accelG(m.maxLateralMps2))
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Used ${m.usedFixes} of ${m.rawFixes} GPS fixes after filtering.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (events.isNotEmpty()) {
+                        val firstT = points.firstOrNull()?.tMs ?: 0L
+                        Text("Events", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        events.sortedBy { it.tMs }.forEach { event ->
+                            val style = eventStyle(event)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("${style.label}", style = MaterialTheme.typography.bodySmall, color = style.color)
+                                Text(
+                                    "${Format.duration((event.tMs - firstT).coerceAtLeast(0) / 1000.0)} · ${Format.accelG(event.magnitude)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -346,57 +525,55 @@ private fun SafetyFactorsCard(trip: TripEntity, checking: Boolean, onCheckLimits
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Safety factors", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "Share of moving time spent in each behaviour (lower is safer).",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FactorCell("Braking", trip.hardBrakePct, Color(0xFFEF4444), Modifier.weight(1f))
-                FactorCell("Turns", trip.aggressiveTurnPct, Color(0xFFF59E0B), Modifier.weight(1f))
-                FactorCell("Accel", trip.hardAccelPct, Color(0xFFF59E0B), Modifier.weight(1f))
-                FactorCell("Jerky", trip.jerkyPct, Color(0xFF8B5CF6), Modifier.weight(1f))
-            }
-            if (trip.maxJerk > 0) {
-                Text(
-                    "Peak jerk ${"%.1f".format(trip.maxJerk)} m/s³ — how abruptly acceleration changed.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Driving", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            FactorBar("Braking", trip.hardBrakePct, Color(0xFFEF4444))
+            FactorBar("Turns", trip.aggressiveTurnPct, Color(0xFFF59E0B))
+            FactorBar("Accel", trip.hardAccelPct, Color(0xFFF59E0B))
+            FactorBar("Jerky", trip.jerkyPct, Color(0xFF8B5CF6))
             if (hasLimits) {
-                val pct = trip.speedingPct * 100
-                val color = if (trip.speedingPct > 0.15) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurface
+                val notable = trip.speedingPct > 0.05
                 Text(
-                    "Speeding: ${"%.0f".format(pct)}% of the way over the posted limit" +
-                        (if (trip.maxOverLimitKmh >= 1) " (peak ${"%.0f".format(trip.maxOverLimitKmh)} km/h over)" else ""),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = color
-                )
-                Text(
-                    "Red on the map = over the limit. Limits matched for " +
-                        "${"%.0f".format(trip.limitCoverage * 100)}% of the route (OpenStreetMap).",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    if (notable) "Speeding ${"%.0f".format(trip.speedingPct * 100)}% of the way" +
+                        (if (trip.maxOverLimitKmh >= 1) " · peak ${"%.0f".format(trip.maxOverLimitKmh)} over" else "")
+                    else "No notable speeding · red on map = over limit",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (notable) FontWeight.Bold else FontWeight.Normal,
+                    color = if (notable) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                Text(
-                    "Speeding: no posted-limit data looked up for this route yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 OutlinedButton(onClick = onCheckLimits, enabled = !checking) {
                     if (checking) {
                         CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Check speed limits (OSM)")
+                        Text("Check speed limits")
                     }
                 }
             }
         }
+    }
+}
+
+/** Quiet factor bar: muted when the value is low/safe, accented only when notable (≥1% of time). */
+@Composable
+private fun FactorBar(label: String, fraction: Double, accent: Color) {
+    val notable = fraction >= 0.01
+    val barFrac = (fraction / 0.06).coerceIn(0.015, 1.0).toFloat()
+    val color = if (notable) accent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(54.dp))
+        Box(
+            modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(barFrac).height(6.dp).clip(RoundedCornerShape(3.dp)).background(color))
+        }
+        Text(
+            "${"%.1f".format(fraction * 100)}%",
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            modifier = Modifier.width(36.dp)
+        )
     }
 }
 
@@ -551,12 +728,12 @@ private fun EtaComparisonCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("vs Google Maps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             if (!hasEta) {
                 Text(
-                    "No Google estimate for this trip yet.",
+                    "No traffic comparison for this trip yet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -564,42 +741,41 @@ private fun EtaComparisonCard(
                     if (fetching) {
                         CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Get typical estimate")
+                        Text("Compare to traffic")
                     }
                 }
                 return@Column
             }
 
-            val faster = actualS <= trip.googleEtaTrafficS
-            val youColor = if (faster) Color(0xFF22C55E) else Color(0xFFEF4444)
-
-            EtaTimeline(
-                freeFlowS = trip.googleEtaFreeFlowS,
-                googleS = trip.googleEtaTrafficS,
-                youS = actualS,
-                youColor = youColor
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                EtaCell("Free-flow", trip.googleEtaFreeFlowS, Color(0xFF38BDF8), Modifier.weight(1f))
-                EtaCell("Google ETA", trip.googleEtaTrafficS, MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
-                EtaCell("You", actualS, youColor, Modifier.weight(1f))
-            }
-
+            val youColor = if (actualS <= trip.googleEtaTrafficS) Color(0xFF22C55E) else Color(0xFFEF4444)
             val deltaS = actualS - trip.googleEtaTrafficS
             val absMin = (kotlin.math.abs(deltaS) / 60.0).roundToInt()
             val (verdict, color) = when {
-                deltaS < -45 -> "$absMin min faster than Google's estimate" to Color(0xFF22C55E)
-                deltaS > 45 -> "$absMin min slower than Google's estimate" to Color(0xFFEF4444)
-                else -> "About the same as Google's estimate" to MaterialTheme.colorScheme.onSurface
+                deltaS < -45 -> "$absMin min faster than usual traffic" to Color(0xFF22C55E)
+                deltaS > 45 -> "$absMin min slower than usual traffic" to Color(0xFFEF4444)
+                else -> "About the same as usual traffic" to MaterialTheme.colorScheme.onSurface
             }
-            Text(verdict, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = color)
+            Text(verdict, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
+
+            // Three bars, shortest on top, widths to scale — a compact at-a-glance comparison.
+            val bars = listOf(
+                Triple("Free-flow", trip.googleEtaFreeFlowS, Color(0xFF38BDF8)),
+                Triple("Typical", trip.googleEtaTrafficS, MaterialTheme.colorScheme.onSurfaceVariant),
+                Triple("You", actualS, youColor)
+            ).sortedBy { it.second }
+            val maxS = bars.maxOf { it.second }.coerceAtLeast(1.0)
+            bars.forEach { (label, s, c) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(58.dp))
+                    Box(modifier = Modifier.weight(1f).height(13.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))) {
+                        Box(modifier = Modifier.fillMaxWidth((s / maxS).toFloat().coerceIn(0.04f, 1f)).height(13.dp).clip(RoundedCornerShape(4.dp)).background(c))
+                    }
+                    Text(Format.tripMinutes(s), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.width(44.dp))
+                }
+            }
+
             Text(
-                if (trip.etaSource == "live") "Estimate captured live when the trip ended."
-                else "Typical traffic for this day & time.",
+                (if (trip.etaSource == "live") "Live traffic at trip end" else "Typical traffic for this time") + " · via Google",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

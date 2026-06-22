@@ -170,10 +170,10 @@ fun TripMap(
 
 private fun DriveEvent.title(): String =
     when (type) {
-        EventType.BRAKE -> "Hard brake ${"%.1f".format(magnitude)} m/s2"
-        EventType.ACCEL -> "Hard accel ${"%.1f".format(magnitude)} m/s2"
-        EventType.CORNER -> "Hard corner ${"%.1f".format(magnitude)} m/s2"
-        EventType.POTHOLE -> "Pothole ${"%.1f".format(magnitude)} m/s2"
+        EventType.BRAKE -> "Hard brake ${"%.2fg".format(magnitude / 9.80665)}"
+        EventType.ACCEL -> "Hard accel ${"%.2fg".format(magnitude / 9.80665)}"
+        EventType.CORNER -> "Hard corner ${"%.2fg".format(magnitude / 9.80665)}"
+        EventType.POTHOLE -> "Pothole ${"%.2fg".format(magnitude / 9.80665)}"
     }
 
 private enum class MarkerGlyph { START, STOP, HAZARD, REPLAY }

@@ -109,7 +109,7 @@ fun InsightsScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item { WindowSelector(window) { window = it } }
 
@@ -404,11 +404,11 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Text("Traffic pace", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (withEta.isEmpty()) {
                 Text(
-                    "No Google estimates in this window yet.",
+                    "No traffic comparisons in this window yet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -420,7 +420,7 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("$winRate%", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = marginColor)
                     Text(
-                        "faster than Google\n$wins of ${withEta.size} trips",
+                        "of trips beat\nusual traffic",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 6.dp)
@@ -433,7 +433,7 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    String.format(Locale.US, "Avg %+.1f min vs estimate", avgMargin),
+                    String.format(Locale.US, "Avg %+.1f min vs typical · via Google", avgMargin),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

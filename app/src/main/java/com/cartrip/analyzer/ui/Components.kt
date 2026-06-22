@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 data class Stat(val label: String, val value: String, val color: Color? = null)
@@ -64,19 +65,20 @@ fun StatGrid(stats: List<Stat>, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ScoreRing(score: Int, modifier: Modifier = Modifier) {
+fun ScoreRing(score: Int, modifier: Modifier = Modifier, ringSize: Dp = 120.dp) {
     val color = when {
         score >= 80 -> Color(0xFF22C55E)
         score >= 60 -> Color(0xFFF59E0B)
         else -> Color(0xFFEF4444)
     }
     val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-    Box(contentAlignment = Alignment.Center, modifier = modifier.size(120.dp)) {
+    val small = ringSize < 100.dp
+    Box(contentAlignment = Alignment.Center, modifier = modifier.size(ringSize)) {
         Box(
             modifier = Modifier
-                .size(120.dp)
+                .size(ringSize)
                 .drawBehind {
-                    val stroke = 14f
+                    val stroke = size.minDimension * 0.12f
                     val s = Size(size.width - stroke, size.height - stroke)
                     val topLeft = Offset(stroke / 2, stroke / 2)
                     drawArc(
@@ -102,15 +104,17 @@ fun ScoreRing(score: Int, modifier: Modifier = Modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "$score",
-                style = MaterialTheme.typography.headlineMedium,
+                style = if (small) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = color
             )
-            Text(
-                text = "score",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (!small) {
+                Text(
+                    text = "score",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

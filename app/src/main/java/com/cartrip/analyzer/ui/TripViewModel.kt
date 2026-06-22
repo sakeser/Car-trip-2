@@ -140,14 +140,15 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun clearAllTrips() {
+    /** Clears only sample/demo trips — real recorded trips are never touched. */
+    fun clearSampleTrips() {
         viewModelScope.launch(Dispatchers.IO) {
-            dao.deleteAllLocations()
-            dao.deleteAllMotions()
-            dao.deleteAllAnalysisPoints()
-            dao.deleteAllDriveEvents()
-            dao.deleteAllTrips()
-            CloudState.set { it.copy(lastMessage = "Cleared all trips.") }
+            dao.deleteSampleLocations()
+            dao.deleteSampleMotions()
+            dao.deleteSampleAnalysisPoints()
+            dao.deleteSampleDriveEvents()
+            dao.deleteSampleTrips()
+            CloudState.set { it.copy(lastMessage = "Cleared sample trips. Your real trips are untouched.") }
         }
     }
 

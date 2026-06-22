@@ -16,7 +16,10 @@ object Format {
 
     fun accel(mps2: Double): String = String.format(Locale.US, "%.1f m/s²", mps2)
 
-    fun gforce(g: Double): String = String.format(Locale.US, "%.2f g", g)
+    /** Acceleration as a g-force, e.g. "0.43g" — the human-friendly form (no m/s²). */
+    fun accelG(mps2: Double): String = String.format(Locale.US, "%.2fg", mps2 / 9.80665)
+
+    fun gforce(g: Double): String = String.format(Locale.US, "%.2fg", g)
 
     fun duration(seconds: Double): String {
         val s = seconds.toLong()

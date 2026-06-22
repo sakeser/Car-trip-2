@@ -72,10 +72,10 @@ fun TripListScreen(
                     }
                 },
                 actions = {
-                    if (trips.isNotEmpty()) {
+                    if (trips.any { it.isSample }) {
                         TextButton(onClick = { showClearAllDialog = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = null)
-                            Text("Clear all")
+                            Text("Clear samples")
                         }
                     }
                 }
@@ -151,16 +151,16 @@ fun TripListScreen(
     if (showClearAllDialog) {
         AlertDialog(
             onDismissRequest = { showClearAllDialog = false },
-            title = { Text("Clear all trips?") },
-            text = { Text("This removes every recorded and sample trip from history.") },
+            title = { Text("Clear sample trips?") },
+            text = { Text("Removes only the demo trips marked SAMPLE. Your real recorded trips are kept. (Delete a real trip by long-pressing it.)") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showClearAllDialog = false
-                        viewModel.clearAllTrips()
+                        viewModel.clearSampleTrips()
                     }
                 ) {
-                    Text("Clear all", color = Color(0xFFEF4444))
+                    Text("Clear samples", color = Color(0xFFEF4444))
                 }
             },
             dismissButton = {
