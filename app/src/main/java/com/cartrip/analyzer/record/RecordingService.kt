@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.cartrip.analyzer.MainActivity
@@ -57,6 +58,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -70,6 +72,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     private var fusedClient: FusedLocationProviderClient? = null
     private var locationCallback: LocationCallback? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     @Volatile private var usingFused = false
 
     @Volatile private var recording = false
@@ -131,6 +134,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         if (recording) return
         resetSessionState()
         startInForeground()
+        acquireWakeLock()
         scope.launch {
             val startWall = System.currentTimeMillis()
             TripFinalizer.recoverInterruptedTrips(db.tripDao(), startWall)
@@ -212,60 +216,47 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             )
             if (finalized != null) {
                 purgeExpiredRawSamples()
-                val status = mutableListOf<String>()
+                // The trip is analyzed and persisted — open the summary NOW. Network enrichment
+                // (traffic ETA, OSM speed limits, Sheets sync) must never block the UI.
+                RecordingState.completeTrip(finishedId)
+
                 val updated = finalized.trip
                 val analysis = finalized.analysis
-
-                if (updated.status == TripStatus.COMPLETED) {
-                    val eta = fetchLiveEta(analysis)
-                    if (eta != null) {
-                        dao.updateTrip(
-                            updated.copy(
-                                googleEtaTrafficS = eta.trafficS,
-                                googleEtaFreeFlowS = eta.freeFlowS,
-                                etaSource = "live",
-                                etaFetchedAt = System.currentTimeMillis()
+                // Best-effort, time-bounded so a slow/hung network can't keep the service alive.
+                withTimeoutOrNull(120_000L) {
+                    if (updated.status == TripStatus.COMPLETED) {
+                        val eta = fetchLiveEta(analysis)
+                        if (eta != null) {
+                            dao.updateTrip(
+                                updated.copy(
+                                    googleEtaTrafficS = eta.trafficS,
+                                    googleEtaFreeFlowS = eta.freeFlowS,
+                                    etaSource = "live",
+                                    etaFetchedAt = System.currentTimeMillis()
+                                )
                             )
-                        )
+                        }
+                        runCatching { SpeedLimits.refreshForTrip(dao, finishedId) }
                     }
-                    // Annotate the route with OSM speed limits + compute speeding (fails soft).
-                    runCatching { SpeedLimits.refreshForTrip(dao, finishedId) }
-                } else {
-                    status += "Trip saved as partial; GPS signal was incomplete."
+                    val exportTrip = dao.getTrip(finishedId) ?: updated
+                    runCatching { TripExcel.write(applicationContext, exportTrip, analysis) }
+                    if (CloudPrefs.autoSync(applicationContext) &&
+                        GoogleAuth.lastAccount(applicationContext) != null
+                    ) {
+                        CloudState.set { it.copy(syncing = true) }
+                        val sync = TripSync.syncOne(applicationContext, dao, finishedId, force = false)
+                        CloudState.set {
+                            it.copy(
+                                syncing = false,
+                                lastMessage = if (sync.isSuccess) "Trip synced to Google Sheets."
+                                else "Sheets sync will retry next time the app opens."
+                            )
+                        }
+                    }
                 }
-
-                val exportTrip = dao.getTrip(finishedId) ?: updated
-                runCatching {
-                    TripExcel.write(applicationContext, exportTrip, analysis)
-                }.onSuccess { file ->
-                    status += "Excel saved: ${file.name}"
-                }.onFailure { e ->
-                    status += "Excel export failed: ${e.userMessage()}"
-                }
-
-                if (CloudPrefs.autoSync(applicationContext) &&
-                    GoogleAuth.lastAccount(applicationContext) != null
-                ) {
-                    CloudState.set {
-                        it.copy(
-                            syncing = true,
-                            lastMessage = (status + "Syncing Google Sheets...").joinToString(" ")
-                        )
-                    }
-                    val sync = TripSync.syncOne(applicationContext, dao, finishedId, force = false)
-                    sync.onSuccess {
-                        status += "Google Sheets sync complete."
-                    }.onFailure { e ->
-                        status += "Sheets sync failed (will retry next time the app opens): ${e.userMessage()}"
-                    }
-                    CloudState.set {
-                        it.copy(syncing = false, lastMessage = status.joinToString(" "))
-                    }
-                } else {
-                    CloudState.set { it.copy(lastMessage = status.joinToString(" ")) }
-                }
+            } else {
+                RecordingState.completeTrip(finishedId)
             }
-            RecordingState.completeTrip(finishedId)
             withContext(Dispatchers.Main) {
                 stopForegroundCompat()
                 stopSelf()
@@ -329,6 +320,25 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     private fun Throwable.userMessage(): String =
         message?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
+
+    /**
+     * Hold a partial wake lock while recording so the CPU stays awake with the screen off —
+     * otherwise non-wakeup sensors (accelerometer/gyro/gravity) stop delivering and the motion
+     * track gets gaps. Capped at 6h as a safety net against leaks.
+     */
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "cartrip:recording").apply {
+            setReferenceCounted(false)
+            runCatching { acquire(6L * 60L * 60L * 1000L) }
+        }
+    }
+
+    private fun releaseWakeLock() {
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        wakeLock = null
+    }
 
     private fun registerSensors() {
         val linear = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
@@ -573,7 +583,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 // Monotonic clock, matching the location time base so motion can be time-aligned
                 // with GPS for fusion and event-location mapping.
                 val now = SystemClock.elapsedRealtime()
-                if (now - lastMotionWrite >= 40) { // ~25 Hz
+                if (now - lastMotionWrite >= 20) { // ~50 Hz — verbose for sensor calibration
                     lastMotionWrite = now
                     val sample = MotionSample(
                         tripId = tripId, t = now,
@@ -655,6 +665,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        releaseWakeLock()
         val interruptedTripId = if (recording && !stoppingNormally) tripId else 0L
         recording = false
         tickerJob?.cancel()
