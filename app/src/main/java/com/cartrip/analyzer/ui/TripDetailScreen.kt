@@ -275,7 +275,7 @@ fun TripDetailScreen(
             trip?.let { t -> RoadRideCard(t) }
 
             // --- Advanced (collapsed): charts, raw metrics, per-event detail ---
-            AdvancedSection(metrics = m, events = a.events, points = a.points)
+            AdvancedSection(trip = trip, metrics = m, events = a.events, points = a.points)
 
             // --- Sync footer ---
             trip?.let { t ->
@@ -467,7 +467,7 @@ private fun ReplayTimeline(
 }
 
 @Composable
-private fun AdvancedSection(metrics: DriveMetrics, events: List<DriveEvent>, points: List<TrackPoint>) {
+private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, events: List<DriveEvent>, points: List<TrackPoint>) {
     var expanded by remember { mutableStateOf(false) }
     val m = metrics
     Card(
@@ -508,6 +508,24 @@ private fun AdvancedSection(metrics: DriveMetrics, events: List<DriveEvent>, poi
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    trip?.takeIf { it.fusedConfidence > 0.0 }?.let { t ->
+                        Text("Detector comparison (beta)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            "GPS:  ${t.hardBrakeCount} brake · ${t.hardAccelCount} accel · ${t.hardCornerCount} turn",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            "Sensors:  ${t.motionBrakeCount} brake · ${t.motionAccelCount} accel · ${t.motionTurnCount} turn",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF8B5CF6)
+                        )
+                        Text(
+                            "Forward-axis confidence ${"%.0f".format(t.fusedConfidence * 100)}% · accelerometer + gyro, not scored yet",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (events.isNotEmpty()) {
                         val firstT = points.firstOrNull()?.tMs ?: 0L
                         Text("Events", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)

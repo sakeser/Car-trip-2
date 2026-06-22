@@ -67,7 +67,11 @@ object TripFinalizer {
             jerkyPct = metrics.jerkyPct,
             roughRoadPct = metrics.roughRoadPct,
             potholeCount = metrics.potholeCount,
-            harshStopCount = metrics.harshStopCount
+            harshStopCount = metrics.harshStopCount,
+            motionBrakeCount = metrics.motionBrakeCount,
+            motionAccelCount = metrics.motionAccelCount,
+            motionTurnCount = metrics.motionTurnCount,
+            fusedConfidence = metrics.fusedConfidence
         )
         val pointEntities = samplePoints(analysis.points).map { it.toEntity(tripId) }
         val eventEntities = analysis.events.map { it.toEntity(tripId) }

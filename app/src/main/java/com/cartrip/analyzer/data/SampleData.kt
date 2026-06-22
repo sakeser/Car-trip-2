@@ -189,6 +189,11 @@ object SampleData {
         val roughRoadPct = (rng.nextDouble() * 0.18).coerceIn(0.0, 0.30)
         val potholeCount = if (rng.nextDouble() < 0.4) rng.nextInt(1, 4) else 0
         val harshStopCount = (aggression * rng.nextInt(0, 4)).toInt()
+        // Demo: the sensor detector tends to catch a few more than GPS.
+        val motionBrakeCount = hardBrake + (if (rng.nextDouble() < 0.5) rng.nextInt(0, 2) else 0)
+        val motionAccelCount = hardAccel + (if (rng.nextDouble() < 0.4) 1 else 0)
+        val motionTurnCount = hardCorner + (if (rng.nextDouble() < 0.45) rng.nextInt(0, 2) else 0)
+        val fusedConfidence = 0.62 + rng.nextDouble() * 0.34
 
         val tripId = dao.insertTrip(
             TripEntity(
@@ -224,7 +229,11 @@ object SampleData {
                 isSample = true,
                 roughRoadPct = roughRoadPct,
                 potholeCount = potholeCount,
-                harshStopCount = harshStopCount
+                harshStopCount = harshStopCount,
+                motionBrakeCount = motionBrakeCount,
+                motionAccelCount = motionAccelCount,
+                motionTurnCount = motionTurnCount,
+                fusedConfidence = fusedConfidence
             )
         )
         dao.insertAnalysisPoints(track.map { it.copy(tripId = tripId) })

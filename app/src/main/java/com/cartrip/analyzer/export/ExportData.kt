@@ -23,7 +23,9 @@ object ExportData {
         // Accelerometer-fusion road/ride metrics
         "RoughRoadPct", "PotholeCount", "HarshStopCount",
         // Speeding vs OSM limits
-        "SpeedingPct", "MaxOverLimit_kmh", "LimitCoverage"
+        "SpeedingPct", "MaxOverLimit_kmh", "LimitCoverage",
+        // Parallel sensor-fused detector (beta; not scored)
+        "MotionBrake", "MotionAccel", "MotionTurn", "FusedConfidence"
     )
 
     val SAMPLE_HEADER = listOf(
@@ -76,7 +78,11 @@ object ExportData {
             trip.harshStopCount.toString(),
             f(trip.speedingPct, 4),
             f(trip.maxOverLimitKmh, 1),
-            f(trip.limitCoverage, 3)
+            f(trip.limitCoverage, 3),
+            trip.motionBrakeCount.toString(),
+            trip.motionAccelCount.toString(),
+            trip.motionTurnCount.toString(),
+            f(trip.fusedConfidence, 3)
         )
     }
 

@@ -79,7 +79,14 @@ data class DriveMetrics(
     // Accelerometer-fusion outputs (need recorded gravity): rough-road exposure, potholes, harsh stops.
     val roughRoadPct: Double = 0.0,
     val potholeCount: Int = 0,
-    val harshStopCount: Int = 0
+    val harshStopCount: Int = 0,
+    // Parallel sensor-fused event detector (accelerometer forward axis + gyro yaw), for comparison
+    // against the GPS detector. Not used in scoring yet. Confidence 0..1 = how well the car's
+    // forward axis could be inferred from the phone's pose.
+    val motionBrakeCount: Int = 0,
+    val motionAccelCount: Int = 0,
+    val motionTurnCount: Int = 0,
+    val fusedConfidence: Double = 0.0
 )
 
 data class TripAnalysis(
@@ -255,9 +262,14 @@ object TripAnalyzer {
             }
         }
 
-        // Accelerometer/gravity fusion: potholes, rough road, harsh stops.
-        val fusion = MotionFusion.analyze(motions, points)
+        // Accelerometer/gravity fusion: potholes, rough road, harsh stops. Failing soft here keeps a
+        // bad sensor batch from aborting finalize (which would leave the end-trip screen frozen).
+        val fusion = runCatching { MotionFusion.analyze(motions, points) }
+            .getOrDefault(MotionFusion.Result.EMPTY)
         val allEvents = (events + fusion.events).sortedBy { it.tMs }
+        // Parallel sensor-fused event detector (for comparison vs GPS; not scored yet).
+        val fused = runCatching { FusedEventDetector.detect(motions, points) }
+            .getOrDefault(FusedEventDetector.Result.EMPTY)
 
         val duration = (clean.last().t - clean.first().t) / 1000.0
         val avgMoving = if (moving > 0) sumMovingSpeedDt / moving else 0.0
@@ -289,7 +301,11 @@ object TripAnalyzer {
             jerkyPct = if (moving > 0) jerkyTime / moving else 0.0,
             roughRoadPct = fusion.roughRoadPct,
             potholeCount = fusion.potholeCount,
-            harshStopCount = fusion.harshStopCount
+            harshStopCount = fusion.harshStopCount,
+            motionBrakeCount = fused.brakeCount,
+            motionAccelCount = fused.accelCount,
+            motionTurnCount = fused.turnCount,
+            fusedConfidence = fused.confidence
         )
         return TripAnalysis(metrics, points, allEvents)
     }
