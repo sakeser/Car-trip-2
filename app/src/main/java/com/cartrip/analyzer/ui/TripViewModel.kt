@@ -130,6 +130,15 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         analysis
     }
 
+    /**
+     * Re-run analysis on a past trip's stored raw samples with the current detector, then reload.
+     * Used to validate detector changes (e.g. Rev D) against past labeled drives without re-driving.
+     * Returns true if raw samples were still present and re-analysis ran.
+     */
+    suspend fun reanalyzeTrip(id: Long): Boolean = withContext(Dispatchers.IO) {
+        TripFinalizer.reanalyzeTrip(dao, id) != null
+    }
+
     fun deleteTrip(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             dao.deleteLocations(id)
@@ -167,9 +176,10 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             dao.deleteAnalysisPoints(tripId)
             dao.insertAnalysisPoints(sampled.map { it.toEntity(tripId) })
         }
-        if (analysis.events.isNotEmpty()) {
+        val allEvents = analysis.events + analysis.fusedEvents
+        if (allEvents.isNotEmpty()) {
             dao.deleteDriveEvents(tripId)
-            dao.insertDriveEvents(analysis.events.map { it.toEntity(tripId) })
+            dao.insertDriveEvents(allEvents.map { it.toEntity(tripId) })
         }
     }
 
@@ -190,13 +200,22 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             maxBrakeMps2 = trip.maxBrakeMps2,
             maxLateralMps2 = trip.maxLateralMps2,
             peakGForce = trip.peakGForce,
+            maxHorizGForce = trip.maxHorizGForce,
             hardAccelCount = trip.hardAccelCount,
             hardBrakeCount = trip.hardBrakeCount,
             hardCornerCount = trip.hardCornerCount,
             smoothness = trip.smoothness,
             rawFixes = metricPoints,
-            usedFixes = metricPoints
+            usedFixes = metricPoints,
+            motionBrakeCount = trip.motionBrakeCount,
+            motionAccelCount = trip.motionAccelCount,
+            motionTurnCount = trip.motionTurnCount,
+            fusedConfidence = trip.fusedConfidence
         )
+        val allEvents = events.mapNotNull { e ->
+            val type = runCatching { EventType.valueOf(e.type) }.getOrNull() ?: return@mapNotNull null
+            DriveEvent(tMs = e.t, type = type, magnitude = e.magnitude, source = e.source, confidence = e.confidence)
+        }
         return TripAnalysis(
             metrics = metrics,
             points = points.map {
@@ -210,10 +229,8 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
                     speedLimitKmh = it.speedLimitKmh
                 )
             },
-            events = events.mapNotNull { e ->
-                val type = runCatching { EventType.valueOf(e.type) }.getOrNull() ?: return@mapNotNull null
-                DriveEvent(tMs = e.t, type = type, magnitude = e.magnitude)
-            }
+            events = allEvents.filter { it.source != "fused" },
+            fusedEvents = allEvents.filter { it.source == "fused" }
         )
     }
 
@@ -247,6 +264,8 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             tripId = tripId,
             t = tMs,
             type = type.name,
-            magnitude = magnitude
+            magnitude = magnitude,
+            source = source,
+            confidence = confidence
         )
 }

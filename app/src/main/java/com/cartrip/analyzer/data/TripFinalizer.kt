@@ -50,6 +50,7 @@ object TripFinalizer {
             maxBrakeMps2 = metrics.maxBrakeMps2,
             maxLateralMps2 = metrics.maxLateralMps2,
             peakGForce = metrics.peakGForce,
+            maxHorizGForce = metrics.maxHorizGForce,
             hardAccelCount = metrics.hardAccelCount,
             hardBrakeCount = metrics.hardBrakeCount,
             hardCornerCount = metrics.hardCornerCount,
@@ -74,9 +75,21 @@ object TripFinalizer {
             fusedConfidence = metrics.fusedConfidence
         )
         val pointEntities = samplePoints(analysis.points).map { it.toEntity(tripId) }
-        val eventEntities = analysis.events.map { it.toEntity(tripId) }
+        // Persist GPS/pothole events and the Rev D fused events together (each tagged by source).
+        val eventEntities = (analysis.events + analysis.fusedEvents).map { it.toEntity(tripId) }
         dao.finalizeTripTx(updated, pointEntities, eventEntities)
         return Result(updated, analysis.copy(metrics = metrics))
+    }
+
+    /**
+     * Re-run analysis on a trip's already-stored raw samples (offline re-analysis). Lets a detector
+     * change be validated against past labeled drives without re-driving — provided the raw motion/
+     * GPS hasn't been purged yet. Preserves the trip's status/reason classification.
+     */
+    suspend fun reanalyzeTrip(dao: TripDao, tripId: Long): Result? {
+        val trip = dao.getTrip(tripId) ?: return null
+        val endWall = trip.endTime.takeIf { it > 0L } ?: System.currentTimeMillis()
+        return finalizeTrip(dao, tripId, endWall, trip.status, trip.endReason)
     }
 
     suspend fun recoverInterruptedTrips(dao: TripDao, now: Long = System.currentTimeMillis()): Int {
@@ -117,20 +130,29 @@ object TripFinalizer {
             maxBrakeMps2 = trip.maxBrakeMps2,
             maxLateralMps2 = trip.maxLateralMps2,
             peakGForce = trip.peakGForce,
+            maxHorizGForce = trip.maxHorizGForce,
             hardAccelCount = trip.hardAccelCount,
             hardBrakeCount = trip.hardBrakeCount,
             hardCornerCount = trip.hardCornerCount,
             smoothness = trip.smoothness,
             rawFixes = trip.locationSampleCount,
-            usedFixes = pts.size
+            usedFixes = pts.size,
+            motionBrakeCount = trip.motionBrakeCount,
+            motionAccelCount = trip.motionAccelCount,
+            motionTurnCount = trip.motionTurnCount,
+            fusedConfidence = trip.fusedConfidence
         )
         val points = pts.map {
             TrackPoint(it.t, it.lat, it.lon, it.speedKmh, it.longAccel, it.latAccel, it.speedLimitKmh)
         }
-        val events = evs.mapNotNull { e ->
-            runCatching { EventType.valueOf(e.type) }.getOrNull()?.let { DriveEvent(e.t, it, e.magnitude) }
+        val allEvents = evs.mapNotNull { e ->
+            runCatching { EventType.valueOf(e.type) }.getOrNull()
+                ?.let { DriveEvent(e.t, it, e.magnitude, e.source, e.confidence) }
         }
-        return TripAnalysis(metrics, points, events)
+        // Split back into the GPS/pothole list (drives map/timeline/score) and the fused list.
+        val events = allEvents.filter { it.source != "fused" }
+        val fusedEvents = allEvents.filter { it.source == "fused" }
+        return TripAnalysis(metrics, points, events, fusedEvents)
     }
 
     private data class Quality(val status: String, val reason: String)
@@ -204,6 +226,8 @@ object TripFinalizer {
             tripId = tripId,
             t = tMs,
             type = type.name,
-            magnitude = magnitude
+            magnitude = magnitude,
+            source = source,
+            confidence = confidence
         )
 }

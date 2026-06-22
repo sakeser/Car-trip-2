@@ -154,7 +154,7 @@ fun TripMap(
                     icon = when (event.type) {
                         EventType.BRAKE -> brakeIcon
                         EventType.ACCEL -> accelIcon
-                        EventType.CORNER -> cornerIcon
+                        EventType.CORNER, EventType.SWERVE -> cornerIcon
                         EventType.POTHOLE -> potholeIcon
                     }
                 )
@@ -176,6 +176,7 @@ private fun DriveEvent.title(): String =
         EventType.BRAKE -> "Hard brake ${"%.2fg".format(magnitude / 9.80665)}"
         EventType.ACCEL -> "Hard accel ${"%.2fg".format(magnitude / 9.80665)}"
         EventType.CORNER -> "Hard corner ${"%.2fg".format(magnitude / 9.80665)}"
+        EventType.SWERVE -> "Swerve"
         EventType.POTHOLE -> "Pothole ${"%.2fg".format(magnitude / 9.80665)}"
     }
 

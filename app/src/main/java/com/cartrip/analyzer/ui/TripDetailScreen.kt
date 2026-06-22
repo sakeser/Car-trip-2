@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Route
@@ -77,6 +78,7 @@ import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.EventType
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
+import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.data.TripEntity
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -124,6 +126,23 @@ fun TripDetailScreen(
                                 showMenu = false
                                 val t = trip; val an = analysis
                                 if (t != null && an != null) actionScope.launch { TripActions.shareExcel(ctx, t, an) }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Re-analyze") },
+                            leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                actionScope.launch {
+                                    val ok = viewModel.reanalyzeTrip(tripId)
+                                    etaRefresh++
+                                    CloudState.set {
+                                        it.copy(
+                                            lastMessage = if (ok) "Re-analyzed with the latest detector."
+                                            else "Raw sensor data was already purged — can't re-analyze."
+                                        )
+                                    }
+                                }
                             }
                         )
                         DropdownMenuItem(
@@ -275,7 +294,7 @@ fun TripDetailScreen(
             trip?.let { t -> RoadRideCard(t) }
 
             // --- Advanced (collapsed): charts, raw metrics, per-event detail ---
-            AdvancedSection(trip = trip, metrics = m, events = a.events, points = a.points)
+            AdvancedSection(trip = trip, metrics = m, events = a.events, fusedEvents = a.fusedEvents, points = a.points)
 
             // --- Sync footer ---
             trip?.let { t ->
@@ -467,7 +486,7 @@ private fun ReplayTimeline(
 }
 
 @Composable
-private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, events: List<DriveEvent>, points: List<TrackPoint>) {
+private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, events: List<DriveEvent>, fusedEvents: List<DriveEvent>, points: List<TrackPoint>) {
     var expanded by remember { mutableStateOf(false) }
     val m = metrics
     Card(
@@ -509,19 +528,39 @@ private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, events: Li
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    trip?.takeIf { it.fusedConfidence > 0.0 }?.let { t ->
+                    if (trip != null && (fusedEvents.isNotEmpty() || trip.motionTurnCount > 0 ||
+                            trip.motionBrakeCount > 0 || trip.motionAccelCount > 0)) {
                         Text("Detector comparison (beta)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Text(
-                            "GPS:  ${t.hardBrakeCount} brake · ${t.hardAccelCount} accel · ${t.hardCornerCount} turn",
+                            "GPS:  ${trip.hardBrakeCount} brake · ${trip.hardAccelCount} accel · ${trip.hardCornerCount} turn",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
-                            "Sensors:  ${t.motionBrakeCount} brake · ${t.motionAccelCount} accel · ${t.motionTurnCount} turn",
+                            "Sensors:  ${trip.motionBrakeCount} brake · ${trip.motionAccelCount} accel · ${trip.motionTurnCount} turn",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF8B5CF6)
                         )
+                        if (metrics.maxHorizGForce > 0.0) {
+                            Text(
+                                "Peak horizontal ${"%.2fg".format(metrics.maxHorizGForce)} · sustained ${"%.2fg".format(metrics.peakGForce)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        // Timestamped fused events (magnitude-first detector). conf shows GPS-sign certainty.
+                        val firstT = points.firstOrNull()?.tMs ?: 0L
+                        fusedEvents.sortedBy { it.tMs }.take(12).forEach { e ->
+                            val rel = ((e.tMs - firstT) / 1000).coerceAtLeast(0)
+                            Text(
+                                "  %d:%02d  %-7s %.2fg  ·  %.0f%% conf".format(
+                                    rel / 60, rel % 60, e.type.name.lowercase(), e.magnitude, e.confidence * 100
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF8B5CF6)
+                            )
+                        }
                         Text(
-                            "Forward-axis confidence ${"%.0f".format(t.fusedConfidence * 100)}% · accelerometer + gyro, not scored yet",
+                            "Magnitude-first sensor detector · brake/accel classified from GPS speed · not scored yet",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -959,6 +998,8 @@ private fun eventStyle(event: DriveEvent): EventStyle = when (event.type) {
     EventType.CORNER ->
         if (event.magnitude >= 5.0) EventStyle("Very sharp turn", Color(0xFFDC2626), Icons.Filled.CrisisAlert)
         else EventStyle("Sharp turn", Color(0xFFF59E0B), Icons.Filled.Route)
+    EventType.SWERVE ->
+        EventStyle("Swerve", Color(0xFFF59E0B), Icons.Filled.Route)
     EventType.POTHOLE ->
         EventStyle("Pothole / big bump", Color(0xFF78716C), Icons.Filled.ReportProblem)
 }
@@ -973,6 +1014,7 @@ private fun eventExplanation(event: DriveEvent): String {
         else "Brisk acceleration, firmer than normal."
         EventType.CORNER -> if (event.magnitude >= 5.0) "Tight, fast cornering - strong sideways force."
         else "Quick cornering with noticeable lean."
+        EventType.SWERVE -> "A quick side-to-side direction change."
         EventType.POTHOLE -> "A sharp vertical jolt - pothole, speed bump, or rough patch."
     }
     return "$intensity  (${"%.2f".format(g)} g)"

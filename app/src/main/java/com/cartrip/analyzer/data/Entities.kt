@@ -19,6 +19,8 @@ data class TripEntity(
     val maxBrakeMps2: Double = 0.0,
     val maxLateralMps2: Double = 0.0,
     val peakGForce: Double = 0.0,
+    // True horizontal spike (max g) — the hardest brief brake/turn that the p99 peakGForce washes out.
+    val maxHorizGForce: Double = 0.0,
     val hardAccelCount: Int = 0,
     val hardBrakeCount: Int = 0,
     val hardCornerCount: Int = 0,
@@ -119,5 +121,8 @@ data class DriveEventEntity(
     val tripId: Long,
     val t: Long,
     val type: String,
-    val magnitude: Double
+    val magnitude: Double,
+    // Which detector found it: "gps", "motion" (pothole), or "fused" (Rev D sensor detector).
+    val source: String = "gps",
+    val confidence: Double = 1.0
 )

@@ -19,7 +19,9 @@ import kotlin.math.sqrt
 object MotionFusion {
 
     private const val MIN_GRAVITY = 5.0          // ignore samples before the gravity sensor warms up
-    private const val POTHOLE_VERT = 4.5         // m/s^2 vertical jolt → pothole/bump (~0.46 g)
+    // Field-calibrated against trips 778/779: a manhole read 0.33 g vertical, a speed bump 0.49 g.
+    // The old 0.46 g cutoff missed the manhole, so lower it to catch real bumps/manholes/potholes.
+    private const val POTHOLE_VERT = 3.2         // m/s^2 vertical jolt → pothole/bump (~0.33 g)
     private const val POTHOLE_GAP_MS = 800L      // debounce repeated samples of one impact
     private const val ROUGH_RMS = 0.9            // windowed vertical RMS → "rough road"
     private const val ROUGH_WINDOW_MS = 3000L
@@ -64,12 +66,15 @@ object MotionFusion {
             return if (t - ptTimes[lo - 1] <= ptTimes[lo] - t) points[lo - 1].speedKmh else points[lo].speedKmh
         }
 
-        // Potholes: sharp vertical jolts while moving, debounced.
+        // Potholes: sharp vertical jolts while moving, debounced. The debounce sentinel must be
+        // overflow-safe — `a.t - Long.MIN_VALUE` overflows to a huge negative that's never >= the gap,
+        // which previously blocked every pothole (potholeCount stuck at 0).
         val events = ArrayList<DriveEvent>()
         var lastPothole = Long.MIN_VALUE
         for (a in acc) {
-            if (abs(a.vertical) >= POTHOLE_VERT && a.t - lastPothole >= POTHOLE_GAP_MS && speedAt(a.t) >= MOVING_KMH) {
-                events.add(DriveEvent(a.t, EventType.POTHOLE, abs(a.vertical)))
+            val gapOk = lastPothole == Long.MIN_VALUE || a.t - lastPothole >= POTHOLE_GAP_MS
+            if (abs(a.vertical) >= POTHOLE_VERT && gapOk && speedAt(a.t) >= MOVING_KMH) {
+                events.add(DriveEvent(a.t, EventType.POTHOLE, abs(a.vertical), "motion", 1.0))
                 lastPothole = a.t
             }
         }

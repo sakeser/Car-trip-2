@@ -15,7 +15,7 @@ object ExportData {
     val SUMMARY_HEADER = listOf(
         "TripId", "Start", "End", "Distance_km", "Duration_min", "Idle_min",
         "MaxSpeed_kmh", "AvgMoving_kmh", "MaxAccel_mps2", "MaxBrake_mps2", "MaxLateral_mps2",
-        "PeakG", "HardAccel", "HardBrake", "HardCorner", "Smoothness",
+        "PeakG", "MaxHorizG", "HardAccel", "HardBrake", "HardCorner", "Smoothness",
         "UsedFixes", "RawFixes", "StartLat", "StartLon", "EndLat", "EndLon",
         "Status", "EndReason", "LocationSamples", "MotionSamples", "GpsGapCount",
         // Exposure factors (fraction of moving time) + jerk
@@ -53,6 +53,7 @@ object ExportData {
             f(m.maxBrakeMps2, 2),
             f(m.maxLateralMps2, 2),
             f(m.peakGForce, 2),
+            f(m.maxHorizGForce, 2),
             m.hardAccelCount.toString(),
             m.hardBrakeCount.toString(),
             m.hardCornerCount.toString(),

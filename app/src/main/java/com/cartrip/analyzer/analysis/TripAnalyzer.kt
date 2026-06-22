@@ -37,9 +37,21 @@ object GeoUtils {
     fun angleDiffDeg(a: Double, b: Double): Double = (a - b + 540) % 360 - 180
 }
 
-enum class EventType { ACCEL, BRAKE, CORNER, POTHOLE }
+enum class EventType { ACCEL, BRAKE, CORNER, POTHOLE, SWERVE }
 
-data class DriveEvent(val tMs: Long, val type: EventType, val magnitude: Double)
+/**
+ * A detected driving event. [source] records which detector found it — "gps" (speed/heading
+ * derived), "motion" (accelerometer vertical, e.g. potholes), or "fused" (the Rev D magnitude-first
+ * sensor detector). [confidence] 0..1 is how sure that detector is (e.g. a fused brake classified
+ * from a clear GPS deceleration is high; one guessed in the ambiguous band is low).
+ */
+data class DriveEvent(
+    val tMs: Long,
+    val type: EventType,
+    val magnitude: Double,
+    val source: String = "gps",
+    val confidence: Double = 1.0
+)
 
 data class TrackPoint(
     val tMs: Long,
@@ -61,7 +73,10 @@ data class DriveMetrics(
     val maxAccelMps2: Double = 0.0,
     val maxBrakeMps2: Double = 0.0,
     val maxLateralMps2: Double = 0.0,
+    // peakGForce = sustained-harshness peak (99th percentile of total accel magnitude). maxHorizGForce
+    // = true horizontal spike (max), which reflects the hardest brief brake/turn the p99 washes out.
     val peakGForce: Double = 0.0,
+    val maxHorizGForce: Double = 0.0,
     val hardAccelCount: Int = 0,
     val hardBrakeCount: Int = 0,
     val hardCornerCount: Int = 0,
@@ -92,7 +107,10 @@ data class DriveMetrics(
 data class TripAnalysis(
     val metrics: DriveMetrics,
     val points: List<TrackPoint>,
-    val events: List<DriveEvent>
+    // GPS-derived + pothole events (drive the map/timeline/score, unchanged).
+    val events: List<DriveEvent>,
+    // Rev D sensor-fused events (timestamped, source="fused"), for GPS-vs-sensor comparison.
+    val fusedEvents: List<DriveEvent> = emptyList()
 )
 
 /**
@@ -288,6 +306,7 @@ object TripAnalyzer {
             maxBrakeMps2 = maxBrake,
             maxLateralMps2 = maxLat,
             peakGForce = peakGForce(motions),
+            maxHorizGForce = fused.maxHorizG,
             hardAccelCount = hardAccel,
             hardBrakeCount = hardBrake,
             hardCornerCount = hardCorner,
@@ -307,7 +326,7 @@ object TripAnalyzer {
             motionTurnCount = fused.turnCount,
             fusedConfidence = fused.confidence
         )
-        return TripAnalysis(metrics, points, allEvents)
+        return TripAnalysis(metrics, points, allEvents, fused.events)
     }
 
     /**
