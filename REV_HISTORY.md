@@ -2,6 +2,8 @@
 
 This file is the working handoff for the main branch. The UX redesign worktree was intentionally not used for the June 23, 2026 field-test fixes.
 
+For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `CLAUDE_CODE_HANDOFF.md`.
+
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
@@ -92,4 +94,3 @@ Git may not be on the default shell PATH. Use:
   - axis confidence,
   - event agreement.
 - Past trips cannot gain extra GPS fixes from the new 2 Hz request. Reanalysis can only recompute from samples that already exist.
-
