@@ -28,6 +28,11 @@ object FusedEventDetector {
     private const val HARD_LONG_G = 0.25          // horizontal-accel spike → brake/accel candidate
     private const val HARD_CORNER_G = 0.27        // sustained lateral-g (speed × yaw) → corner
     private const val SWERVE_YAW = 0.45           // rad/s, a sharp yaw flick (not a sustained corner)
+    private const val SWERVE_REVERSAL_YAW = 0.18  // lower yaw allowed when right/left reversal is clear
+    private const val SWERVE_REVERSAL_SWING = 0.45
+    private const val SWERVE_REVERSAL_WINDOW_MS = 5_000L
+    private const val SWERVE_REVERSAL_MIN_SEP_MS = 250L
+    private const val SWERVE_REVERSAL_MAX_SEP_MS = 4_500L
     private const val SLOPE_MIN = 0.5             // m/s^2 GPS slope needed to call brake vs accel
     private const val MOVING_MPS = 8.0 / 3.6
     private const val LONG_GAP_MS = 2500L         // debounce: one brake/accel maneuver
@@ -44,6 +49,8 @@ object FusedEventDetector {
     ) {
         companion object { val EMPTY = Result(emptyList(), 0, 0, 0, 0.0, 0.0) }
     }
+
+    private data class YawSample(val t: Long, val yaw: Double, val speedMps: Double)
 
     fun detect(motions: List<MotionSample>, points: List<TrackPoint>): Result {
         if (motions.size < 30 || points.size < 3) return Result.EMPTY
@@ -107,6 +114,7 @@ object FusedEventDetector {
         var brake = 0; var accel = 0; var turn = 0
         var maxHorizG = 0.0
         var lastLong = Long.MIN_VALUE; var lastTurn = Long.MIN_VALUE; var lastSwerve = Long.MIN_VALUE
+        val yawSamples = ArrayList<YawSample>()
         for (m in motions) {
             if (sqrt(m.grx * m.grx + m.gry * m.gry + m.grz * m.grz) < MIN_GRAVITY) continue
             val sp = speedAt(m.t)
@@ -117,6 +125,7 @@ object FusedEventDetector {
             if (hMagG > maxHorizG) maxHorizG = hMagG
             val yaw = m.gx * dx + m.gy * dy + m.gz * dz
             val yawLatG = sp * abs(yaw) / G
+            yawSamples.add(YawSample(m.t, yaw, sp))
 
             // Corner: sustained lateral-g (takes precedence over a swerve), one event per turn.
             if (yawLatG >= HARD_CORNER_G && debounced(m.t, lastTurn, TURN_GAP_MS)) {
@@ -145,8 +154,66 @@ object FusedEventDetector {
                 lastLong = m.t
             }
         }
+        detectSwerveReversals(yawSamples, events).forEach {
+            events.add(it)
+            turn++
+        }
+        events.sortBy { it.tMs }
         return Result(events, brake, accel, turn, confidence, maxHorizG)
     }
+
+    /**
+     * S-swerves can feel obvious even when each individual yaw flick is below the single-spike
+     * threshold. Detect a right-left or left-right reversal inside one short maneuver window.
+     */
+    private fun detectSwerveReversals(
+        samples: List<YawSample>,
+        existingEvents: List<DriveEvent>
+    ): List<DriveEvent> {
+        if (samples.size < 20) return emptyList()
+        val out = ArrayList<DriveEvent>()
+        var i = 0
+        while (i < samples.size) {
+            val startT = samples[i].t
+            val endT = startT + SWERVE_REVERSAL_WINDOW_MS
+            val window = ArrayList<YawSample>()
+            var j = i
+            while (j < samples.size && samples[j].t <= endT) {
+                window.add(samples[j])
+                j++
+            }
+            if (window.size >= 20) {
+                val pos = window.maxByOrNull { it.yaw }
+                val neg = window.minByOrNull { it.yaw }
+                if (pos != null && neg != null) {
+                    val sep = abs(pos.t - neg.t)
+                    val swing = pos.yaw - neg.yaw
+                    if (pos.yaw >= SWERVE_REVERSAL_YAW &&
+                        neg.yaw <= -SWERVE_REVERSAL_YAW &&
+                        swing >= SWERVE_REVERSAL_SWING &&
+                        sep in SWERVE_REVERSAL_MIN_SEP_MS..SWERVE_REVERSAL_MAX_SEP_MS
+                    ) {
+                        val t = (pos.t + neg.t) / 2
+                        val duplicate =
+                            existingEvents.any { it.isTurnLike() && abs(it.tMs - t) <= TURN_GAP_MS } ||
+                                out.any { abs(it.tMs - t) <= TURN_GAP_MS }
+                        if (!duplicate) {
+                            val peakYaw = maxOf(abs(pos.yaw), abs(neg.yaw))
+                            val speed = 0.5 * (pos.speedMps + neg.speedMps)
+                            out.add(DriveEvent(t, EventType.SWERVE, speed * peakYaw, "fused", 0.85))
+                            while (i < samples.size && samples[i].t < endT + TURN_GAP_MS) i++
+                            continue
+                        }
+                    }
+                }
+            }
+            i += 10
+        }
+        return out
+    }
+
+    private fun DriveEvent.isTurnLike(): Boolean =
+        type == EventType.CORNER || type == EventType.SWERVE
 
     /** Overflow-safe debounce: the old `t - Long.MIN_VALUE >= gap` overflowed and blocked every event. */
     private fun debounced(t: Long, last: Long, gapMs: Long): Boolean =

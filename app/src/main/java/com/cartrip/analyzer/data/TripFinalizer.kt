@@ -27,6 +27,7 @@ object TripFinalizer {
         requestedReason: String
     ): Result? {
         val trip = dao.getTrip(tripId) ?: return null
+        val previousPoints = dao.getAnalysisPoints(tripId)
         val locs = dao.getLocations(tripId)
         val motions = dao.getMotions(tripId)
         val analysis = TripAnalyzer.analyze(locs, motions)
@@ -74,7 +75,8 @@ object TripFinalizer {
             motionTurnCount = metrics.motionTurnCount,
             fusedConfidence = metrics.fusedConfidence
         )
-        val pointEntities = samplePoints(analysis.points).map { it.toEntity(tripId) }
+        val pointEntities = preserveSpeedLimits(samplePoints(analysis.points), previousPoints)
+            .map { it.toEntity(tripId) }
         // Persist GPS/pothole events and the Rev D fused events together (each tagged by source).
         val eventEntities = (analysis.events + analysis.fusedEvents).map { it.toEntity(tripId) }
         dao.finalizeTripTx(updated, pointEntities, eventEntities)
@@ -214,6 +216,34 @@ object TripFinalizer {
         return out
     }
 
+    private fun preserveSpeedLimits(
+        points: List<TrackPoint>,
+        previous: List<AnalysisPointEntity>,
+        maxGapMs: Long = 1500L
+    ): List<TrackPoint> {
+        val annotated = previous.filter { it.speedLimitKmh > 0.0 }.sortedBy { it.t }
+        if (points.isEmpty() || annotated.isEmpty()) return points
+        fun nearest(t: Long): AnalysisPointEntity? {
+            var lo = 0
+            var hi = annotated.lastIndex
+            while (lo < hi) {
+                val mid = (lo + hi) / 2
+                if (annotated[mid].t < t) lo = mid + 1 else hi = mid
+            }
+            val next = annotated[lo]
+            val prev = annotated.getOrNull(lo - 1)
+            return listOfNotNull(prev, next).minByOrNull { kotlin.math.abs(it.t - t) }
+        }
+        return points.map { point ->
+            val match = nearest(point.tMs)
+            if (match != null && kotlin.math.abs(match.t - point.tMs) <= maxGapMs) {
+                point.copy(speedLimitKmh = match.speedLimitKmh)
+            } else {
+                point
+            }
+        }
+    }
+
     private fun TrackPoint.toEntity(tripId: Long): AnalysisPointEntity =
         AnalysisPointEntity(
             tripId = tripId,
@@ -222,7 +252,8 @@ object TripFinalizer {
             lon = lon,
             speedKmh = speedKmh,
             longAccel = longAccel,
-            latAccel = latAccel
+            latAccel = latAccel,
+            speedLimitKmh = speedLimitKmh
         )
 
     private fun DriveEvent.toEntity(tripId: Long): DriveEventEntity =

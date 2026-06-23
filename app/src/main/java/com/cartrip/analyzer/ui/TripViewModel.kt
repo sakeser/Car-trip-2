@@ -260,7 +260,8 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             lon = lon,
             speedKmh = speedKmh,
             longAccel = longAccel,
-            latAccel = latAccel
+            latAccel = latAccel,
+            speedLimitKmh = speedLimitKmh
         )
 
     private fun DriveEvent.toEntity(tripId: Long): DriveEventEntity =

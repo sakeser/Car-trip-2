@@ -44,6 +44,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -76,11 +78,13 @@ import androidx.compose.ui.unit.dp
 import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.EventType
+import com.cartrip.analyzer.analysis.GeoUtils
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.data.TripEntity
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,6 +100,7 @@ fun TripDetailScreen(
     var fetchingLimits by remember { mutableStateOf(false) }
     var fetchingSync by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var autoSpeedLimitsAttempted by remember(tripId) { mutableStateOf(false) }
     val ctx = LocalContext.current
     val actionScope = rememberCoroutineScope()
     val trip by produceState<TripEntity?>(initialValue = null, tripId, etaRefresh) {
@@ -165,7 +170,6 @@ fun TripDetailScreen(
         }
 
         val m = trip?.displayMetrics(a.metrics) ?: a.metrics
-        val displayAnalysis = a.copy(metrics = m)
         val scores = trip?.let { TripScores.from(it) }
         var selectedIndex by remember(a.points) { mutableStateOf(0) }
         var focusKey by remember(a.points) { mutableStateOf(0) }
@@ -174,12 +178,41 @@ fun TripDetailScreen(
         val maxPointIndex = (a.points.size - 1).coerceAtLeast(0)
         val safeSelectedIndex = selectedIndex.coerceIn(0, maxPointIndex)
         val selectedPoint = a.points.getOrNull(safeSelectedIndex)
-        // GPS/pothole + Rev D fused events, shown together on the map, replay and Events tab.
-        val shownEvents = remember(a) { (a.events + a.fusedEvents).sortedBy { it.tMs } }
+        val rawEvents = remember(a) { (a.events + a.fusedEvents).sortedBy { it.tMs } }
+        // Cleaned presentation events: raw GPS/motion/fused signals remain available in Advanced,
+        // export and storage, but the main map/list should show one marker per real-world moment.
+        val shownEvents = remember(a) { DisplayEvents.clean(rawEvents, a.points) }
+        val hasPointSpeedLimits = remember(a.points) { a.points.any { it.speedLimitKmh > 0.0 } }
+        val shouldAutoFetchSpeedLimits =
+            trip?.let { t ->
+                !t.isSample &&
+                    a.points.size >= 5 &&
+                    !hasPointSpeedLimits &&
+                    !autoSpeedLimitsAttempted
+            } == true
+        LaunchedEffect(shouldAutoFetchSpeedLimits, tripId) {
+            if (shouldAutoFetchSpeedLimits) {
+                autoSpeedLimitsAttempted = true
+                fetchingLimits = true
+                val error = viewModel.fetchSpeedLimits(tripId)
+                fetchingLimits = false
+                if (error == null) etaRefresh++
+            }
+        }
+        var eventFilters by remember(a) { mutableStateOf(EventFilter.values().toSet()) }
+        var selectedEvent by remember(a) { mutableStateOf<DriveEvent?>(null) }
+        var eventDetailAnchorY by remember(a) { mutableStateOf(0) }
+        val visibleEvents = remember(shownEvents, eventFilters) {
+            shownEvents.filter { eventFilterFor(it.type) in eventFilters }
+        }
         val jumpToEvent: (DriveEvent) -> Unit = { event ->
+            val sameEvent = selectedEvent == event
+            selectedEvent = event
             selectedIndex = nearestPointIndex(a.points, event.tMs).coerceIn(0, maxPointIndex)
             focusKey++
-            actionScope.launch { scrollState.animateScrollTo(mapAnchorY) }
+            actionScope.launch {
+                scrollState.animateScrollTo(if (sameEvent && eventDetailAnchorY > 0) eventDetailAnchorY else mapAnchorY)
+            }
         }
         Column(
             modifier = Modifier
@@ -238,6 +271,15 @@ fun TripDetailScreen(
 
             // --- Map + replay timeline ---
             if (a.points.size >= 2) {
+                if (shownEvents.isNotEmpty()) {
+                    EventFilterBar(
+                        events = shownEvents,
+                        selected = eventFilters,
+                        onToggle = { filter ->
+                            eventFilters = if (filter in eventFilters) eventFilters - filter else eventFilters + filter
+                        }
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -247,9 +289,10 @@ fun TripDetailScreen(
                 ) {
                     TripMap(
                         points = a.points,
-                        events = shownEvents,
+                        events = visibleEvents,
                         selectedPoint = selectedPoint,
                         focusKey = focusKey,
+                        onEventClick = jumpToEvent,
                         modifier = Modifier.fillMaxSize()
                     )
                     MapActions(
@@ -266,11 +309,21 @@ fun TripDetailScreen(
 
                 ReplayTimeline(
                     points = a.points,
-                    events = shownEvents,
+                    events = visibleEvents,
                     selectedIndex = safeSelectedIndex,
                     onSelectedIndex = { selectedIndex = it.coerceIn(0, maxPointIndex) },
                     onEventJump = jumpToEvent
                 )
+                selectedEvent?.let { event ->
+                    EventDetailCard(
+                        event = event,
+                        rawEvents = rawEvents,
+                        points = a.points,
+                        modifier = Modifier.onGloballyPositioned {
+                            eventDetailAnchorY = it.positionInParent().y.roundToInt()
+                        }
+                    )
+                }
             } else {
                 Text(
                     "No GPS track recorded for this trip.",
@@ -282,6 +335,7 @@ fun TripDetailScreen(
             trip?.let { t ->
                 SafetyFactorsCard(
                     trip = t,
+                    hasPointSpeedLimits = hasPointSpeedLimits,
                     checking = fetchingLimits,
                     onCheckLimits = {
                         fetchingLimits = true
@@ -298,7 +352,12 @@ fun TripDetailScreen(
 
             // --- Events (collapsed): tap any event to jump to its spot on the map ---
             if (shownEvents.isNotEmpty()) {
-                EventsSection(events = shownEvents, points = a.points, onEventJump = jumpToEvent)
+                EventsSection(
+                    events = visibleEvents,
+                    rawEventCount = rawEvents.size,
+                    points = a.points,
+                    onEventJump = jumpToEvent
+                )
             }
 
             // --- Advanced (collapsed): charts, raw metrics, detector comparison ---
@@ -510,6 +569,87 @@ private fun ReplayTimeline(
 }
 
 @Composable
+private fun EventFilterBar(
+    events: List<DriveEvent>,
+    selected: Set<EventFilter>,
+    onToggle: (EventFilter) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        EventFilter.values().forEach { filter ->
+            val count = events.count { eventFilterFor(it.type) == filter }
+            if (count > 0) {
+                FilterChip(
+                    selected = filter in selected,
+                    onClick = { onToggle(filter) },
+                    label = { Text("${filter.label} $count") }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventDetailCard(
+    event: DriveEvent,
+    rawEvents: List<DriveEvent>,
+    points: List<TrackPoint>,
+    modifier: Modifier = Modifier
+) {
+    val style = eventStyle(event)
+    val point = points.getOrNull(nearestPointIndex(points, event.tMs))
+    val firstT = points.firstOrNull()?.tMs ?: event.tMs
+    val rawSignals = remember(event, rawEvents, points) { rawSignalsForEvent(event, rawEvents, points) }
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier.size(38.dp).clip(RoundedCornerShape(19.dp))
+                        .background(style.color.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(style.icon, contentDescription = null, tint = style.color)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(style.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = style.color)
+                    Text(
+                        "${Format.duration((event.tMs - firstT).coerceAtLeast(0) / 1000.0)} into trip" +
+                            (point?.let { " | ${Format.speedKmh(it.speedKmh)}" } ?: ""),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Text(eventExplanation(event), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            StatGrid(
+                stats = listOf(
+                    Stat("G-force", "%.2fg".format(event.magnitude / 9.80665), style.color),
+                    Stat("Source", sourceLabel(event)),
+                    Stat("Raw signals", rawSignals.size.toString()),
+                    Stat("Speed", point?.let { Format.speedKmh(it.speedKmh) } ?: "-")
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (rawSignals.isNotEmpty()) {
+                Text("Technical signals", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                rawSignals.take(8).forEach { raw ->
+                    Text(
+                        rawSignalLine(raw, firstT),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (raw.source == "fused") Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, fusedEvents: List<DriveEvent>, points: List<TrackPoint>) {
     var expanded by remember { mutableStateOf(false) }
     val m = metrics
@@ -597,7 +737,12 @@ private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, fusedEvent
 
 /** Collapsible per-event list. Tapping a row jumps the map/replay to that event's spot. */
 @Composable
-private fun EventsSection(events: List<DriveEvent>, points: List<TrackPoint>, onEventJump: (DriveEvent) -> Unit) {
+private fun EventsSection(
+    events: List<DriveEvent>,
+    rawEventCount: Int,
+    points: List<TrackPoint>,
+    onEventJump: (DriveEvent) -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
     val firstT = points.firstOrNull()?.tMs ?: 0L
     Card(
@@ -632,11 +777,12 @@ private fun EventsSection(events: List<DriveEvent>, points: List<TrackPoint>, on
                             CountPill(label = label, count = count, color = color)
                         }
                     }
-                    Text(
-                        "Tap an event to see where it happened on the map.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    val summary = if (rawEventCount > events.size) {
+                        "Cleaned from $rawEventCount raw detector signals. Tap an event to see where it happened on the map."
+                    } else {
+                        "Tap an event to see where it happened on the map."
+                    }
+                    Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     events.sortedBy { it.tMs }.forEach { event ->
                         EventRow(event, points, firstT, onClick = { onEventJump(event) })
                     }
@@ -647,8 +793,14 @@ private fun EventsSection(events: List<DriveEvent>, points: List<TrackPoint>, on
 }
 
 @Composable
-private fun SafetyFactorsCard(trip: TripEntity, checking: Boolean, onCheckLimits: () -> Unit) {
-    val hasLimits = trip.limitCoverage >= 0.4
+private fun SafetyFactorsCard(
+    trip: TripEntity,
+    hasPointSpeedLimits: Boolean,
+    checking: Boolean,
+    onCheckLimits: () -> Unit
+) {
+    val hasLimits = trip.limitCoverage >= 0.4 && hasPointSpeedLimits
+    val needsMapRefresh = trip.limitCoverage >= 0.4 && !hasPointSpeedLimits
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -670,11 +822,18 @@ private fun SafetyFactorsCard(trip: TripEntity, checking: Boolean, onCheckLimits
                     color = if (notable) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
+                if (needsMapRefresh) {
+                    Text(
+                        "Speed limits need refreshing to color the route.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 OutlinedButton(onClick = onCheckLimits, enabled = !checking) {
                     if (checking) {
                         CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Check speed limits")
+                        Text(if (needsMapRefresh) "Restore route colors" else "Check speed limits")
                     }
                 }
             }
@@ -1042,6 +1201,20 @@ private fun ReplayControls(
     }
 }
 
+private enum class EventFilter(val label: String) {
+    BRAKING("Brakes"),
+    ACCEL("Accel"),
+    TURNS("Turns"),
+    BUMPS("Bumps")
+}
+
+private fun eventFilterFor(type: EventType): EventFilter = when (type) {
+    EventType.BRAKE -> EventFilter.BRAKING
+    EventType.ACCEL -> EventFilter.ACCEL
+    EventType.CORNER, EventType.SWERVE -> EventFilter.TURNS
+    EventType.POTHOLE -> EventFilter.BUMPS
+}
+
 private class EventStyle(val label: String, val color: Color, val icon: ImageVector)
 
 /** Human-readable name, severity colour and icon for a drive event, by type + magnitude. */
@@ -1075,6 +1248,36 @@ private fun eventExplanation(event: DriveEvent): String {
         EventType.POTHOLE -> "A sharp vertical jolt - pothole, speed bump, or rough patch."
     }
     return "$intensity  (${"%.2f".format(g)} g)"
+}
+
+private fun sourceLabel(event: DriveEvent): String = when (event.source) {
+    "summary" -> "Grouped"
+    "fused" -> "Sensor"
+    "motion" -> "Motion"
+    "gps" -> "GPS"
+    else -> event.source.ifBlank { "-" }
+}
+
+private fun rawSignalLine(event: DriveEvent, firstT: Long): String {
+    val relS = (event.tMs - firstT).coerceAtLeast(0) / 1000.0
+    val conf = if (event.source == "fused") " | ${"%.0f".format(event.confidence * 100)}% conf" else ""
+    return "${Format.duration(relS)} | ${event.source} ${event.type.name.lowercase()} | " +
+        "${"%.2fg".format(event.magnitude / 9.80665)}$conf"
+}
+
+private fun rawSignalsForEvent(
+    event: DriveEvent,
+    rawEvents: List<DriveEvent>,
+    points: List<TrackPoint>
+): List<DriveEvent> =
+    rawEvents.filter {
+        abs(it.tMs - event.tMs) <= 7_000L || closeOnRoute(points, it.tMs, event.tMs)
+    }.sortedBy { it.tMs }
+
+private fun closeOnRoute(points: List<TrackPoint>, aMs: Long, bMs: Long): Boolean {
+    val a = points.getOrNull(nearestPointIndex(points, aMs)) ?: return false
+    val b = points.getOrNull(nearestPointIndex(points, bMs)) ?: return false
+    return GeoUtils.haversine(a.lat, a.lon, b.lat, b.lon) <= 80.0
 }
 
 
@@ -1130,6 +1333,12 @@ private fun EventRow(event: DriveEvent, points: List<TrackPoint>, firstT: Long, 
                 if (event.source == "fused") {
                     Text(
                         "sensor-detected | ${"%.0f".format(event.confidence * 100)}% confidence",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF8B5CF6)
+                    )
+                } else if (event.source == "summary") {
+                    Text(
+                        "nearby detector signals grouped",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF8B5CF6)
                     )
