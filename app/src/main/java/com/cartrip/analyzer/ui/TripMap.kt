@@ -23,6 +23,7 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
@@ -38,6 +39,7 @@ fun TripMap(
     events: List<DriveEvent>,
     selectedPoint: TrackPoint? = null,
     focusKey: Int = 0,
+    onEventClick: (DriveEvent) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -48,7 +50,7 @@ fun TripMap(
 
     val mapId = GoogleMapConfig.mapId(context)
     val route = remember(points) { points.map { LatLng(it.lat, it.lon) } }
-    val bounds = remember(route) { boundsFor(route) }
+    val bounds = remember(route) { boundsFor(route)?.let { relaxedBounds(it) } }
     // Runs of consecutive points where speed exceeded the matched limit (+ noise tolerance).
     val speedingSegments = remember(points) {
         val segs = ArrayList<List<LatLng>>()
@@ -69,10 +71,11 @@ fun TripMap(
     }
     val startIcon = remember { markerIcon(MarkerGlyph.START, AndroidColor.rgb(34, 197, 94)) }
     val stopIcon = remember { markerIcon(MarkerGlyph.STOP, AndroidColor.rgb(239, 68, 68)) }
-    val brakeIcon = remember { markerIcon(MarkerGlyph.HAZARD, AndroidColor.rgb(220, 38, 38)) }
-    val accelIcon = remember { markerIcon(MarkerGlyph.HAZARD, AndroidColor.rgb(245, 158, 11)) }
-    val cornerIcon = remember { markerIcon(MarkerGlyph.HAZARD, AndroidColor.rgb(234, 179, 8)) }
-    val potholeIcon = remember { markerIcon(MarkerGlyph.HAZARD, AndroidColor.rgb(120, 113, 108)) }
+    val brakeIcon = remember { markerIcon(MarkerGlyph.BRAKE, AndroidColor.rgb(220, 38, 38)) }
+    val accelIcon = remember { markerIcon(MarkerGlyph.ACCEL, AndroidColor.rgb(245, 158, 11)) }
+    val cornerIcon = remember { markerIcon(MarkerGlyph.TURN, AndroidColor.rgb(234, 179, 8)) }
+    val swerveIcon = remember { markerIcon(MarkerGlyph.SWERVE, AndroidColor.rgb(147, 51, 234)) }
+    val potholeIcon = remember { markerIcon(MarkerGlyph.BUMP, AndroidColor.rgb(120, 113, 108)) }
     val replayIcon = remember { markerIcon(MarkerGlyph.REPLAY, AndroidColor.rgb(14, 165, 233)) }
     val camera = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(TORONTO, 11f)
@@ -154,8 +157,13 @@ fun TripMap(
                     icon = when (event.type) {
                         EventType.BRAKE -> brakeIcon
                         EventType.ACCEL -> accelIcon
-                        EventType.CORNER, EventType.SWERVE -> cornerIcon
+                        EventType.CORNER -> cornerIcon
+                        EventType.SWERVE -> swerveIcon
                         EventType.POTHOLE -> potholeIcon
+                    },
+                    onClick = {
+                        onEventClick(event)
+                        true
                     }
                 )
             }
@@ -180,7 +188,19 @@ private fun DriveEvent.title(): String =
         EventType.POTHOLE -> "Pothole ${"%.2fg".format(magnitude / 9.80665)}"
     }
 
-private enum class MarkerGlyph { START, STOP, HAZARD, REPLAY }
+private fun relaxedBounds(bounds: LatLngBounds, visibleRouteFraction: Double = 0.66): LatLngBounds {
+    val latSpan = (bounds.northeast.latitude - bounds.southwest.latitude).coerceAtLeast(0.002)
+    val lonSpan = (bounds.northeast.longitude - bounds.southwest.longitude).coerceAtLeast(0.002)
+    val expand = ((1.0 / visibleRouteFraction.coerceIn(0.1, 1.0)) - 1.0) / 2.0
+    val latPad = latSpan * expand
+    val lonPad = lonSpan * expand
+    return LatLngBounds(
+        LatLng((bounds.southwest.latitude - latPad).coerceAtLeast(-85.0), bounds.southwest.longitude - lonPad),
+        LatLng((bounds.northeast.latitude + latPad).coerceAtMost(85.0), bounds.northeast.longitude + lonPad)
+    )
+}
+
+private enum class MarkerGlyph { START, STOP, BRAKE, ACCEL, TURN, SWERVE, BUMP, REPLAY }
 
 private fun markerIcon(glyph: MarkerGlyph, fill: Int): BitmapDescriptor {
     val size = 96
@@ -191,13 +211,15 @@ private fun markerIcon(glyph: MarkerGlyph, fill: Int): BitmapDescriptor {
 
     paint.color = AndroidColor.argb(70, 0, 0, 0)
     when (glyph) {
-        MarkerGlyph.HAZARD -> canvas.drawPath(diamondPath(center, center + 4f, 31f), paint)
+        MarkerGlyph.BRAKE -> canvas.drawPath(octagonPath(center, center + 4f, 32f), paint)
+        MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> canvas.drawPath(diamondPath(center, center + 4f, 31f), paint)
         else -> canvas.drawCircle(center, center + 4f, 31f, paint)
     }
 
     paint.color = fill
     when (glyph) {
-        MarkerGlyph.HAZARD -> canvas.drawPath(diamondPath(center, center, 31f), paint)
+        MarkerGlyph.BRAKE -> canvas.drawPath(octagonPath(center, center, 32f), paint)
+        MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> canvas.drawPath(diamondPath(center, center, 31f), paint)
         else -> canvas.drawCircle(center, center, 31f, paint)
     }
 
@@ -220,12 +242,24 @@ private fun markerIcon(glyph: MarkerGlyph, fill: Int): BitmapDescriptor {
                 paint
             )
         }
-        MarkerGlyph.HAZARD -> {
+        MarkerGlyph.BRAKE, MarkerGlyph.ACCEL, MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> {
             paint.textAlign = Paint.Align.CENTER
             paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = 44f
+            paint.textSize = if (glyph == MarkerGlyph.SWERVE) 30f else 36f
             val baseline = center - (paint.descent() + paint.ascent()) / 2f - 1f
-            canvas.drawText("!", center, baseline, paint)
+            canvas.drawText(
+                when (glyph) {
+                    MarkerGlyph.BRAKE -> "B"
+                    MarkerGlyph.ACCEL -> "A"
+                    MarkerGlyph.TURN -> "T"
+                    MarkerGlyph.SWERVE -> "SW"
+                    MarkerGlyph.BUMP -> "!"
+                    else -> ""
+                },
+                center,
+                baseline,
+                paint
+            )
         }
         MarkerGlyph.REPLAY -> {
             canvas.drawCircle(center, center, 13f, paint)
@@ -243,3 +277,18 @@ private fun diamondPath(cx: Float, cy: Float, radius: Float): Path =
         lineTo(cx - radius, cy)
         close()
     }
+
+private fun octagonPath(cx: Float, cy: Float, radius: Float): Path {
+    val k = radius * 0.42f
+    return Path().apply {
+        moveTo(cx - k, cy - radius)
+        lineTo(cx + k, cy - radius)
+        lineTo(cx + radius, cy - k)
+        lineTo(cx + radius, cy + k)
+        lineTo(cx + k, cy + radius)
+        lineTo(cx - k, cy + radius)
+        lineTo(cx - radius, cy + k)
+        lineTo(cx - radius, cy - k)
+        close()
+    }
+}

@@ -4,10 +4,8 @@ import androidx.compose.ui.graphics.Color
 import com.cartrip.analyzer.data.TripEntity
 
 /**
- * How much to trust a trip's analysis, derived from the capture stats we already store — motion
- * sample rate, GPS fix rate, GPS signal-loss gaps, and how cleanly the sensor-fusion detector
- * locked onto the car's forward axis. This makes the sensor layer visible so we know which trips
- * are good ground truth for calibration before leaning on them.
+ * How much to trust a trip's analysis, derived from capture stats we already store: motion
+ * sample rate, GPS fix rate, and GPS signal-loss gaps.
  */
 enum class QualityLevel(val label: String) { HIGH("High"), MEDIUM("Medium"), LOW("Low") }
 
@@ -15,8 +13,7 @@ data class TripDataQuality(
     val level: QualityLevel,
     val motionHz: Double,
     val gpsHz: Double,
-    val gapCount: Int,
-    val fusedConfidence: Double
+    val gapCount: Int
 ) {
     fun color(): Color = when (level) {
         QualityLevel.HIGH -> Color(0xFF22C55E)
@@ -25,33 +22,23 @@ data class TripDataQuality(
     }
 
     fun detail(): String = buildString {
-        append("${motionHz.toInt()} Hz motion · ${"%.1f".format(gpsHz)}/s GPS")
-        if (gapCount > 0) append(" · $gapCount GPS gap${if (gapCount == 1) "" else "s"}")
-        // Only meaningful once the detector ran (2.17+); 0 = not computed, so don't show a fake 0%.
-        if (fusedConfidence > 0.0) append(" · fusion ${(fusedConfidence * 100).toInt()}%")
+        if (motionHz < 1.0) append("Motion missing") else append("${motionHz.toInt()} Hz motion")
+        append(" - ${"%.1f".format(gpsHz)}/s GPS")
+        if (gapCount > 0) append(" - $gapCount GPS gap${if (gapCount == 1) "" else "s"}")
     }
 
     companion object {
-        // Below this, the fused detector found the forward axis only weakly, so sensor-derived
-        // metrics (brake/accel/turn, peak-G direction) are shaky even with a clean sample stream.
-        private const val FUSION_WEAK = 0.30
-
         fun from(trip: TripEntity): TripDataQuality {
             val dur = trip.durationS.coerceAtLeast(1.0)
             val motionHz = trip.motionSampleCount / dur
             val gpsHz = trip.locationSampleCount / dur
             val gaps = trip.gpsGapCount
-            val conf = trip.fusedConfidence
-            val capture = when {
+            val level = when {
                 motionHz >= 15.0 && gpsHz >= 0.7 && gaps <= 1 -> QualityLevel.HIGH
                 motionHz >= 6.0 && gpsHz >= 0.4 && gaps <= 4 -> QualityLevel.MEDIUM
                 else -> QualityLevel.LOW
             }
-            // Cap an otherwise-HIGH trip at MEDIUM when fusion locked weakly. conf == 0 means the
-            // detector didn't run (e.g. a pre-2.17 trip), so leave the capture grade untouched.
-            val level = if (capture == QualityLevel.HIGH && conf > 0.0 && conf < FUSION_WEAK)
-                QualityLevel.MEDIUM else capture
-            return TripDataQuality(level, motionHz, gpsHz, gaps, conf)
+            return TripDataQuality(level, motionHz, gpsHz, gaps)
         }
     }
 }

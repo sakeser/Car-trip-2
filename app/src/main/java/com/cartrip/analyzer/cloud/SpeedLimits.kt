@@ -5,98 +5,125 @@ import com.cartrip.analyzer.data.TripDao
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.hypot
 
 /**
  * Posted speed limits from OpenStreetMap via the free Overpass API.
  *
- * For a trip we query OSM drivable `way`s near the route, match each track point to the nearest
- * way, and compute how much of the (covered) driving was over the limit. We use the posted
- * `maxspeed` where OSM has one, and otherwise assume a limit from the road class (residential 40,
- * arterial 50, freeway higher) so local streets that lack a posted value can still be scored.
- * Everything fails soft: on any error the result is null and the speeding factor simply doesn't apply.
+ * For a trip we query OSM drivable ways near the route, match each track point to the nearest
+ * way, and compute how much covered driving was over the limit. We use posted maxspeed when OSM
+ * has one, and otherwise assume a limit from the road class so local streets without a posted tag
+ * can still be scored. Everything fails soft.
  */
 object SpeedLimits {
 
-    // Several public Overpass mirrors — the free endpoints rate-limit aggressively, so we fall
-    // through to the next one (and retry the first) rather than silently losing the speed limits.
     private val ENDPOINTS = listOf(
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
         "https://overpass.openstreetmap.fr/api/interpreter"
     )
-    private const val MATCH_RADIUS_M = 35.0     // a point this close to a way inherits its limit
-    private const val OVER_TOL_KMH = 3.0        // ignore tiny GPS-noise overages
-    private const val MOVING_KMH = 8.0          // only judge speeding while actually moving
-    private const val BBOX_PAD_DEG = 0.0006     // ~65 m padding around the route bounding box
-    private const val MAX_BBOX_DEG = 0.6        // skip absurdly large bboxes (~65 km) to stay fast
+    private const val MATCH_RADIUS_M = 35.0
+    private const val OVER_TOL_KMH = 3.0
+    private const val MOVING_KMH = 8.0
+    private const val BBOX_PAD_DEG = 0.0006
+    private const val ROUTE_BOX_PAD_DEG = 0.0010
+    private const val ROUTE_BOX_MAX_SPAN_DEG = 0.025
+    private const val MAX_ROUTE_SPAN_DEG = 1.2
+    private const val MAX_ROUTE_BOXES = 32
+    private const val MAX_BOXES_PER_QUERY = 32
+    private const val WAY_FILTER =
+        "^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"
 
     private val FORM = "application/x-www-form-urlencoded".toMediaType()
     private val http = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
-        .callTimeout(22, TimeUnit.SECONDS) // hard ceiling so a slow mirror can never hang the spinner
+        .callTimeout(22, TimeUnit.SECONDS)
         .build()
 
     data class Result(
-        val speedingPct: Double,    // fraction of covered moving time over the limit
-        val maxOverKmh: Double,     // worst overage
-        val coverage: Double        // fraction of moving points we found a limit for
+        val speedingPct: Double,
+        val maxOverKmh: Double,
+        val coverage: Double
     )
 
-    /** The aggregate plus each input point annotated with its matched limit (0 = unknown). */
     data class Annotated(val result: Result, val points: List<AnalysisPointEntity>)
 
-    // Last per-mirror outcome, surfaced to the UI so a failure is diagnosable instead of opaque.
     @Volatile
     private var lastDiag: String = ""
     fun lastDiagnostic(): String = lastDiag
 
-    private class Way(val limitKmh: Double, val geom: List<DoubleArray>) // geom = [lat,lon] nodes
+    private data class BBox(
+        val minLat: Double,
+        val minLon: Double,
+        val maxLat: Double,
+        val maxLon: Double
+    ) {
+        val latSpan: Double get() = maxLat - minLat
+        val lonSpan: Double get() = maxLon - minLon
+
+        fun merged(other: BBox): BBox =
+            BBox(
+                minOf(minLat, other.minLat),
+                minOf(minLon, other.minLon),
+                maxOf(maxLat, other.maxLat),
+                maxOf(maxLon, other.maxLon)
+            )
+
+        fun overpass(): String =
+            "%.6f,%.6f,%.6f,%.6f".format(Locale.US, minLat, minLon, maxLat, maxLon)
+    }
+
+    private class Way(
+        val id: Long,
+        val limitKmh: Double,
+        val geom: List<DoubleArray>,
+        val bounds: BBox
+    )
 
     /**
-     * Look up limits for a trip's stored analysis points, write the per-point limits back, and
-     * update the trip's speeding aggregate. Returns the aggregate, or null if nothing was matched.
+     * Look up limits for a trip's stored analysis points, write per-point limits back, and update
+     * the trip's aggregate speeding summary. Returns null if nothing useful was matched.
      */
     suspend fun refreshForTrip(dao: TripDao, tripId: Long): Result? {
         val points = dao.getAnalysisPoints(tripId)
         val annotated = annotate(points) ?: return null
-        dao.deleteAnalysisPoints(tripId)
-        dao.insertAnalysisPoints(annotated.points.map { it.copy(id = 0) })
         dao.getTrip(tripId)?.let { trip ->
-            dao.updateTrip(
+            dao.updateTripSpeedLimits(
                 trip.copy(
                     speedingPct = annotated.result.speedingPct,
                     maxOverLimitKmh = annotated.result.maxOverKmh,
                     limitCoverage = annotated.result.coverage
-                )
+                ),
+                annotated.points.map { it.copy(id = 0) }
             )
         }
         return annotated.result
     }
 
-    /**
-     * Look up OSM limits along [points], returning the speeding aggregate and the same points with
-     * `speedLimitKmh` filled in (so the route can be coloured where the driver was over). Fails soft.
-     */
     fun annotate(points: List<AnalysisPointEntity>): Annotated? {
         if (points.size < 5) return null
         val ways = runCatching { fetchWays(points) }.getOrNull() ?: return null
         if (ways.isEmpty()) return null
 
+        val limits = smoothIsolatedLimitMismatches(points.map { nearestLimit(it.lat, it.lon, ways) })
         var covered = 0
         var movingPts = 0
         var speedingPts = 0
         var maxOver = 0.0
         val out = ArrayList<AnalysisPointEntity>(points.size)
-        for (p in points) {
-            val limit = nearestLimit(p.lat, p.lon, ways)
-            out.add(if (limit != null) p.copy(speedLimitKmh = limit) else p.copy(speedLimitKmh = 0.0))
+        for ((index, p) in points.withIndex()) {
+            val limit = limits[index]
+            out += if (limit != null) p.copy(speedLimitKmh = limit) else p.copy(speedLimitKmh = 0.0)
             if (p.speedKmh < MOVING_KMH) continue
             movingPts++
             if (limit == null) continue
@@ -113,27 +140,42 @@ object SpeedLimits {
         return Annotated(Result(speedingPct, maxOver, coverage), out)
     }
 
-    private fun fetchWays(points: List<AnalysisPointEntity>): List<Way> {
-        var minLat = 90.0; var maxLat = -90.0; var minLon = 180.0; var maxLon = -180.0
-        for (p in points) {
-            if (p.lat < minLat) minLat = p.lat; if (p.lat > maxLat) maxLat = p.lat
-            if (p.lon < minLon) minLon = p.lon; if (p.lon > maxLon) maxLon = p.lon
+    private fun smoothIsolatedLimitMismatches(raw: List<Double?>): List<Double?> {
+        if (raw.size < 3) return raw
+        val out = raw.toMutableList()
+        for (i in 1 until raw.lastIndex) {
+            val prev = raw[i - 1] ?: continue
+            val current = raw[i] ?: continue
+            val next = raw[i + 1] ?: continue
+            if (sameLimit(prev, next) && !sameLimit(current, prev)) {
+                // A one-point island is usually a nearest-road snap to a parallel ramp or side road.
+                out[i] = prev
+            }
         }
-        // A single bounding-box query is far lighter for Overpass than dozens of "around" clauses,
-        // so it returns in a second or two instead of timing out. We match points to ways locally.
-        if (maxLat - minLat > MAX_BBOX_DEG || maxLon - minLon > MAX_BBOX_DEG) return emptyList()
-        val loc = java.util.Locale.US
-        val bbox = "%.6f,%.6f,%.6f,%.6f".format(
-            loc, minLat - BBOX_PAD_DEG, minLon - BBOX_PAD_DEG, maxLat + BBOX_PAD_DEG, maxLon + BBOX_PAD_DEG
-        )
-        // Fetch all drivable roads (not just those tagged maxspeed) so we can assume a limit by road
-        // class where OSM has no posted value — otherwise most local streets have no coverage at all.
-        val query = "[out:json][timeout:20];" +
-            "way[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$\"]($bbox);" +
-            "out geom;"
-        val body = "data=${URLEncoder.encode(query, "UTF-8")}".toRequestBody(FORM)
+        return out
+    }
 
+    private fun sameLimit(a: Double, b: Double): Boolean = abs(a - b) < 0.5
+
+    private fun fetchWays(points: List<AnalysisPointEntity>): List<Way> {
+        val routeBounds = boundsFor(points, BBOX_PAD_DEG)
+        if (routeBounds.latSpan > MAX_ROUTE_SPAN_DEG || routeBounds.lonSpan > MAX_ROUTE_SPAN_DEG) {
+            lastDiag = "Route is too large for one speed-limit lookup."
+            return emptyList()
+        }
+
+        val boxes = routeBoxes(points)
         val diag = StringBuilder()
+        val out = LinkedHashMap<Long, Way>()
+        for (batch in boxes.chunked(MAX_BOXES_PER_QUERY)) {
+            val body = "data=${URLEncoder.encode(overpassQuery(batch), "UTF-8")}".toRequestBody(FORM)
+            fetchWayBatch(body, diag).forEach { out[it.id] = it }
+        }
+        lastDiag = if (out.isEmpty()) diag.toString().trim() else ""
+        return out.values.toList()
+    }
+
+    private fun fetchWayBatch(body: RequestBody, diag: StringBuilder): List<Way> {
         ENDPOINTS.forEachIndexed { i, endpoint ->
             val host = endpoint.substringAfter("//").substringBefore("/")
             try {
@@ -145,7 +187,7 @@ object SpeedLimits {
                 http.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
                         val ways = parseWays(resp.body?.string().orEmpty())
-                        if (ways.isNotEmpty()) { lastDiag = ""; return ways }
+                        if (ways.isNotEmpty()) return ways
                         diag.append("$host: 200 but no ways. ")
                     } else {
                         diag.append("$host: HTTP ${resp.code}. ")
@@ -156,8 +198,98 @@ object SpeedLimits {
             }
             if (i < ENDPOINTS.lastIndex) runCatching { Thread.sleep(400) }
         }
-        lastDiag = diag.toString().trim()
         return emptyList()
+    }
+
+    private fun overpassQuery(boxes: List<BBox>): String {
+        val clauses = boxes.joinToString(separator = "") { box ->
+            "way[\"highway\"~\"$WAY_FILTER\"](${box.overpass()});"
+        }
+        return "[out:json][timeout:20];($clauses);out geom;"
+    }
+
+    private fun boundsFor(points: List<AnalysisPointEntity>, pad: Double): BBox {
+        var minLat = 90.0
+        var maxLat = -90.0
+        var minLon = 180.0
+        var maxLon = -180.0
+        for (p in points) {
+            if (p.lat < minLat) minLat = p.lat
+            if (p.lat > maxLat) maxLat = p.lat
+            if (p.lon < minLon) minLon = p.lon
+            if (p.lon > maxLon) maxLon = p.lon
+        }
+        return BBox(minLat - pad, minLon - pad, maxLat + pad, maxLon + pad)
+    }
+
+    private fun routeBoxes(points: List<AnalysisPointEntity>): List<BBox> {
+        val full = boundsFor(points, BBOX_PAD_DEG)
+        if (full.latSpan <= ROUTE_BOX_MAX_SPAN_DEG && full.lonSpan <= ROUTE_BOX_MAX_SPAN_DEG) {
+            return listOf(full)
+        }
+
+        val boxes = ArrayList<BBox>()
+        var minLat = 90.0
+        var maxLat = -90.0
+        var minLon = 180.0
+        var maxLon = -180.0
+        var hasChunk = false
+
+        fun closeChunk() {
+            if (!hasChunk) return
+            boxes += BBox(
+                minLat - ROUTE_BOX_PAD_DEG,
+                minLon - ROUTE_BOX_PAD_DEG,
+                maxLat + ROUTE_BOX_PAD_DEG,
+                maxLon + ROUTE_BOX_PAD_DEG
+            )
+            minLat = 90.0
+            maxLat = -90.0
+            minLon = 180.0
+            maxLon = -180.0
+            hasChunk = false
+        }
+
+        for (p in points) {
+            if (!hasChunk) {
+                minLat = p.lat
+                maxLat = p.lat
+                minLon = p.lon
+                maxLon = p.lon
+                hasChunk = true
+                continue
+            }
+
+            val nextMinLat = minOf(minLat, p.lat)
+            val nextMaxLat = maxOf(maxLat, p.lat)
+            val nextMinLon = minOf(minLon, p.lon)
+            val nextMaxLon = maxOf(maxLon, p.lon)
+            if (nextMaxLat - nextMinLat > ROUTE_BOX_MAX_SPAN_DEG ||
+                nextMaxLon - nextMinLon > ROUTE_BOX_MAX_SPAN_DEG
+            ) {
+                closeChunk()
+                minLat = p.lat
+                maxLat = p.lat
+                minLon = p.lon
+                maxLon = p.lon
+                hasChunk = true
+            } else {
+                minLat = nextMinLat
+                maxLat = nextMaxLat
+                minLon = nextMinLon
+                maxLon = nextMaxLon
+            }
+        }
+        closeChunk()
+        return coalesceBoxes(boxes, MAX_ROUTE_BOXES)
+    }
+
+    private fun coalesceBoxes(boxes: List<BBox>, maxBoxes: Int): List<BBox> {
+        if (boxes.size <= maxBoxes) return boxes
+        val groupSize = ceil(boxes.size.toDouble() / maxBoxes).toInt().coerceAtLeast(1)
+        return boxes.chunked(groupSize).map { group ->
+            group.reduce { acc, box -> acc.merged(box) }
+        }
     }
 
     private fun parseWays(jsonBody: String): List<Way> {
@@ -167,53 +299,74 @@ object SpeedLimits {
         for (i in 0 until elements.length()) {
             val el = elements.getJSONObject(i)
             if (el.optString("type") != "way") continue
+            val id = el.optLong("id", -1L)
+            if (id <= 0L) continue
             val tags = el.optJSONObject("tags")
-            // Use the posted maxspeed when present; otherwise assume a limit from the road class.
             val limit = parseMaxspeedKmh(tags?.optString("maxspeed"))
                 ?: assumedLimitFor(tags?.optString("highway").orEmpty())
                 ?: continue
             val geomArr = el.optJSONArray("geometry") ?: continue
             val nodes = ArrayList<DoubleArray>(geomArr.length())
+            var minLat = 90.0
+            var maxLat = -90.0
+            var minLon = 180.0
+            var maxLon = -180.0
             for (j in 0 until geomArr.length()) {
                 val g = geomArr.getJSONObject(j)
-                nodes.add(doubleArrayOf(g.getDouble("lat"), g.getDouble("lon")))
+                val lat = g.getDouble("lat")
+                val lon = g.getDouble("lon")
+                nodes += doubleArrayOf(lat, lon)
+                if (lat < minLat) minLat = lat
+                if (lat > maxLat) maxLat = lat
+                if (lon < minLon) minLon = lon
+                if (lon > maxLon) maxLon = lon
             }
-            if (nodes.size >= 2) out.add(Way(limit, nodes))
+            if (nodes.size >= 2) out += Way(id, limit, nodes, BBox(minLat, minLon, maxLat, maxLon))
         }
         return out
     }
 
-    /** Nearest way's limit (km/h) if a way passes within [MATCH_RADIUS_M] of the point. */
     private fun nearestLimit(lat: Double, lon: Double, ways: List<Way>): Double? {
         var best = MATCH_RADIUS_M
         var bestLimit: Double? = null
-        val lonScale = 111_320.0 * cos(Math.toRadians(lat))
+        val cosLat = abs(cos(Math.toRadians(lat))).coerceAtLeast(0.01)
+        val lonScale = 111_320.0 * cosLat
         val latScale = 111_320.0
+        val latPad = MATCH_RADIUS_M / latScale
+        val lonPad = MATCH_RADIUS_M / lonScale
         val px = lon * lonScale
         val py = lat * latScale
         for (w in ways) {
+            if (lat < w.bounds.minLat - latPad || lat > w.bounds.maxLat + latPad ||
+                lon < w.bounds.minLon - lonPad || lon > w.bounds.maxLon + lonPad
+            ) {
+                continue
+            }
             for (k in 0 until w.geom.size - 1) {
-                val a = w.geom[k]; val b = w.geom[k + 1]
-                val ax = a[1] * lonScale; val ay = a[0] * latScale
-                val bx = b[1] * lonScale; val by = b[0] * latScale
+                val a = w.geom[k]
+                val b = w.geom[k + 1]
+                val ax = a[1] * lonScale
+                val ay = a[0] * latScale
+                val bx = b[1] * lonScale
+                val by = b[0] * latScale
                 val d = pointSegmentDist(px, py, ax, ay, bx, by)
-                if (d < best) { best = d; bestLimit = w.limitKmh }
+                if (d < best) {
+                    best = d
+                    bestLimit = w.limitKmh
+                }
             }
         }
         return bestLimit
     }
 
     private fun pointSegmentDist(px: Double, py: Double, ax: Double, ay: Double, bx: Double, by: Double): Double {
-        val dx = bx - ax; val dy = by - ay
+        val dx = bx - ax
+        val dy = by - ay
         if (dx == 0.0 && dy == 0.0) return hypot(px - ax, py - ay)
         val t = (((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)).coerceIn(0.0, 1.0)
         return hypot(px - (ax + t * dx), py - (ay + t * dy))
     }
 
-    /**
-     * Assumed limit (km/h) for a road class when OSM has no posted maxspeed. Residential streets →
-     * 40, ordinary arterials → 50, freeways → higher so a highway run isn't flagged as speeding.
-     */
     private fun assumedLimitFor(highway: String): Double? = when (highway) {
         "residential", "living_street", "unclassified", "service", "road" -> 40.0
         "tertiary", "tertiary_link", "secondary", "secondary_link", "primary", "primary_link" -> 50.0
@@ -222,14 +375,13 @@ object SpeedLimits {
         else -> null
     }
 
-    /** Parse an OSM maxspeed tag to km/h. Handles "50", "30 mph"; ignores "none"/"signals"/etc. */
     private fun parseMaxspeedKmh(raw: String?): Double? {
         val s = raw?.trim()?.lowercase() ?: return null
         if (s.isEmpty()) return null
         return when {
             s.endsWith("mph") -> s.removeSuffix("mph").trim().toDoubleOrNull()?.let { it * 1.60934 }
             s.endsWith("knots") -> null
-            else -> s.toDoubleOrNull() // bare number is km/h by OSM convention
+            else -> s.toDoubleOrNull()
         }?.takeIf { it in 5.0..200.0 }
     }
 }

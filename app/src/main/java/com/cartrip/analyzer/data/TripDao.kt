@@ -30,6 +30,17 @@ interface TripDao {
         if (events.isNotEmpty()) insertDriveEvents(events)
     }
 
+    /** Keep speed-limit aggregates and per-point route colouring data in sync. */
+    @Transaction
+    suspend fun updateTripSpeedLimits(
+        trip: TripEntity,
+        points: List<AnalysisPointEntity>
+    ) {
+        updateTrip(trip)
+        deleteAnalysisPoints(trip.id)
+        if (points.isNotEmpty()) insertAnalysisPoints(points)
+    }
+
     @Insert
     suspend fun insertLocations(items: List<LocationSample>)
 

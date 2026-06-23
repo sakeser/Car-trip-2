@@ -20,7 +20,7 @@ import kotlin.math.roundToInt
  *
  * Rev E folds in the validated sensor-fused detector: where it ran on dense-enough motion data it
  * supplies a truer peak-G (the horizontal spike, not the p99 of total magnitude that washes brief
- * events out) and more accurate hard-event counts than the coarse 1 Hz GPS detector. Trust is
+ * events out) and more accurate hard-event counts than the low-rate GPS detector. Trust is
  * gated on motion sample rate — NOT on fusedConfidence, which only measures forward-axis inference
  * (low even when magnitude-first detection is solid). Trips without fused data fall back to GPS.
  */

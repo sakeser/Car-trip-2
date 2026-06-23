@@ -73,8 +73,8 @@ fun GuideScreen(onBack: () -> Unit) {
                 GuideCard(
                     "How it measures",
                     listOf(
-                        "GPS (~1 Hz) gives position and speed; a Kalman filter + smoother turn it into clean speed and acceleration, with zero-velocity updates so a stop reads as a true 0.",
-                        "The accelerometer (~25 Hz) plus the gravity sensor capture bumps, road roughness, and the exact feel of stops - independent of how the phone is sitting.",
+                        "GPS gives position and speed; a Kalman filter + smoother turn it into clean speed and acceleration, with zero-velocity updates so a stop reads as a true 0.",
+                        "The accelerometer plus the gravity sensor capture bumps, road roughness, and the exact feel of stops - independent of how the phone is sitting.",
                         "Distance is integrated from smoothed speed, so GPS jitter doesn't inflate it.",
                         "Speed limits come from OpenStreetMap; coverage varies by road, so a 'coverage %' tells you how much to trust the speeding number."
                     )

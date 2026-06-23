@@ -101,6 +101,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private var gx = 0.0; private var gy = 0.0; private var gz = 0.0
     private var grx = 0.0; private var gry = 0.0; private var grz = 0.0
     private var lastMotionWrite = 0L
+    private var motionSensorRegistered = false
+    private var sensorRestartAttempts = 0
+    private var lastSensorRestartAtWall = 0L
     private var sawDriving = false
     private var lastDrivingLocT = 0L
     private var autoStopRequested = false
@@ -280,6 +283,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         lastDrivingLocT = 0L
         autoStopRequested = false
         lastMotionWrite = 0L
+        motionSensorRegistered = false
+        sensorRestartAttempts = 0
+        lastSensorRestartAtWall = 0L
         locationSampleCount = 0
         motionSampleCount = 0
         lastLocationAtWall = 0L
@@ -345,15 +351,30 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val gyro = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         val gravity = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
-        if (linear != null) {
-            sensorManager.registerListener(this, linear, SensorManager.SENSOR_DELAY_GAME)
-        }
+        motionSensorRegistered = linear?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        } == true
         if (gyro != null) {
             sensorManager.registerListener(this, gyro, SensorManager.SENSOR_DELAY_GAME)
         }
         if (gravity != null) {
             sensorManager.registerListener(this, gravity, SensorManager.SENSOR_DELAY_GAME)
         }
+    }
+
+    private fun restartSensors() {
+        runCatching { sensorManager.unregisterListener(this) }
+        registerSensors()
+    }
+
+    private fun shouldRestartMotionSensors(now: Long, start: Long): Boolean {
+        if (!recording || !motionSensorRegistered || start <= 0L) return false
+        if (sensorRestartAttempts >= MAX_SENSOR_RESTARTS) return false
+        if (now - start < MOTION_STALL_RESTART_MS) return false
+        if (locationSampleCount < 5 || motionSampleCount >= 3) return false
+        if (lastMotionAtWall > 0L && now - lastMotionAtWall < MOTION_STALL_RESTART_MS) return false
+        if (lastSensorRestartAtWall > 0L && now - lastSensorRestartAtWall < MOTION_STALL_RESTART_MS) return false
+        return true
     }
 
     private fun requestLocation() {
@@ -365,14 +386,14 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private fun startFused() {
         val client = LocationServices.getFusedLocationProviderClient(this)
         fusedClient = client
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
-            .setMinUpdateIntervalMillis(500L)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
+            .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL_MS)
             .setMinUpdateDistanceMeters(0f)
             .setWaitForAccurateLocation(false)
             .build()
         val cb = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { handleLocation(it) }
+                for (location in result.locations) handleLocation(location)
             }
         }
         locationCallback = cb
@@ -406,6 +427,11 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 if (gpsSignalLost && !gpsGapOpen) {
                     gpsGapOpen = true
                     gpsGapCount++
+                }
+                if (shouldRestartMotionSensors(now, start)) {
+                    sensorRestartAttempts++
+                    lastSensorRestartAtWall = now
+                    withContext(Dispatchers.Main) { restartSensors() }
                 }
                 RecordingState.update {
                     it.copy(
@@ -706,8 +732,12 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         private const val CHANNEL_ID = "trip_recording"
         private const val NOTIF_ID = 42
         private const val MAX_SPEED = 75.0 // m/s (~270 km/h) plausibility cap
+        private const val LOCATION_INTERVAL_MS = 500L
+        private const val LOCATION_FASTEST_INTERVAL_MS = 250L
         private const val RAW_SENSOR_RETENTION_MS = 30L * 24L * 60L * 60L * 1000L
         private const val GPS_SIGNAL_LOST_MS = 2L * 60L * 1000L
+        private const val MOTION_STALL_RESTART_MS = 15L * 1000L
+        private const val MAX_SENSOR_RESTARTS = 3
         private const val AUTO_STOP_DRIVING_SPEED_MPS = 3.0 // ~11 km/h
         private const val AUTO_STOP_IDLE_SPEED_MPS = 1.0 // ~4 km/h
         private const val MIN_AUTO_STOP_TRIP_MS = 3L * 60L * 1000L
