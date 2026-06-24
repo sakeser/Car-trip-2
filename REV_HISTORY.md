@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.43`, `versionCode=54`
+- Installed on S25: `versionName=2.45`, `versionCode=56`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -36,10 +36,17 @@ The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
   Pace as small score rings (fixes word-wrap); avg speed dropped from the headline. Event filter
   toggles are compact icon chips.
 
-Still open (next): rough-road as discrete bumpy *episodes* (bumpiness×duration, schema add);
-You-vs-Traffic redesign (compressed, free-flow→typical range with "you" marker, Maps colours, less
-text); replay header (bigger play, drop wordy line, cleaner timer + speed gauge); Driving/Events
-consolidation. Test suite 44.
+- **J3 (v2.44) — graphical redesign:** trip hero drops the overall ring, centered/compacted (time +
+  clock/route chips + Safety/Comfort/Pace rings). **You vs Traffic** is now one range gauge
+  (free-flow→typical band + a "you" marker, Maps green/amber/red, one-word verdict, tight legend) —
+  much less text. Replay header: big circular play button, clean M:SS/M:SS timer, live SpeedGauge.
+  Removed dead Eta composables.
+- **J4 (v2.45) — rough road:** replaced the opaque "rough road %" with discrete **rough stretches**
+  (runs of ≥1 s sustained vibration) + a `bumpyScore` (RMS×duration). Schema v17 (migration 16→17);
+  Road & ride card shows the stretch count.
+
+Test suite 46. Still open: Driving/Events section consolidation (overlap) — deferred, benefits from
+on-device visual iteration.
 
 ## Rev I (v2.40–v2.41): field-test prep + review UX — branch `rev-g-functional`
 
