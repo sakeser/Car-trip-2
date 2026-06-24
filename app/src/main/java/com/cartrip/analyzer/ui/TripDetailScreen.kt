@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.dp
 import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.EventType
+import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.analysis.SpeedTier
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
@@ -365,6 +366,7 @@ fun TripDetailScreen(
                 )
             }
             trip?.let { t -> RoadRideCard(t) }
+            trip?.let { t -> FuelCostCard(t) }
 
             // --- Advanced (collapsed): charts, raw metrics, detector comparison ---
             AdvancedSection(trip = trip, metrics = m, fusedEvents = a.fusedEvents, points = a.points)
@@ -1143,6 +1145,35 @@ private fun RoadCell(label: String, value: String, color: Color, modifier: Modif
     Column(modifier = modifier) {
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun FuelCostCard(trip: TripEntity) {
+    val distanceKm = trip.distanceM / 1000.0
+    if (distanceKm < 0.05) return
+    val v = VehiclePrefs.load(LocalContext.current)
+    val litres = FuelEstimator.litres(distanceKm, trip.avgMovingSpeedMps * 3.6, trip.idleS, v)
+    val cost = FuelEstimator.cost(litres, v)
+    val l100 = FuelEstimator.tripL100(distanceKm, litres)
+    val loc = java.util.Locale.US
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Fuel & cost", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                String.format(loc, "Estimated for your %s at $%.2f/L. Tap the fuel icon on Home to tune.", v.label, v.pricePerL),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RoadCell("Fuel used", String.format(loc, "%.2f L", litres), Color(0xFF0EA5E9), Modifier.weight(1f))
+                RoadCell("Cost", String.format(loc, "$%.2f", cost), Color(0xFF22C55E), Modifier.weight(1f))
+                RoadCell("Economy", String.format(loc, "%.1f L/100km", l100), Color(0xFF8B5CF6), Modifier.weight(1f))
+            }
+        }
     }
 }
 

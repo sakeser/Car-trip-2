@@ -43,9 +43,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.data.TripEntity
 import java.util.Locale
 import kotlin.math.max
@@ -59,6 +61,7 @@ fun InsightsScreen(
     onOpenTrip: (Long) -> Unit
 ) {
     val trips by viewModel.trips.collectAsStateWithLifecycle()
+    val vehicle = VehiclePrefs.load(LocalContext.current)
     val completed = trips
         .filter { it.analyzed && it.endTime > 0 }
         .sortedBy { it.startTime }
@@ -135,7 +138,7 @@ fun InsightsScreen(
             }
 
             item { SectionTitle("Health metrics") }
-            items(miniStatSpecs(windowTrips, wScores).chunked(2)) { rowSpecs ->
+            items(miniStatSpecs(windowTrips, wScores, vehicle).chunked(2)) { rowSpecs ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -208,7 +211,7 @@ private class StatSpec(
     val color: Color
 )
 
-private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>): List<StatSpec> {
+private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>, vehicle: FuelEstimator.Vehicle): List<StatSpec> {
     fun avg(l: List<Float>) = if (l.isEmpty()) 0.0 else l.map { it.toDouble() }.average()
     val overall = scores.map { it.overall.toFloat() }
     val safety = scores.map { it.safety.toFloat() }
@@ -226,6 +229,11 @@ private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>): Li
     val potholesPer100 = trips.map { (it.potholeCount / max(0.3, it.distanceM / 1000.0) * 100.0).toFloat() }
     val harshStops = trips.map { it.harshStopCount.toFloat() }
     val peakG = trips.map { it.peakGForce.toFloat() }
+    val fuelPerTrip = trips.map {
+        FuelEstimator.litres(it.distanceM / 1000.0, it.avgMovingSpeedMps * 3.6, it.idleS, vehicle).toFloat()
+    }
+    val costPerTrip = fuelPerTrip.map { (it * vehicle.pricePerL).toFloat() }
+    val totalCost = costPerTrip.sumOf { it.toDouble() }
 
     val out = mutableListOf(
         StatSpec("Drive score", avg(overall).roundToInt().toString(), "Blended trip health", overall, Color(0xFF0EA5E9)),
@@ -236,7 +244,9 @@ private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>): Li
         StatSpec("Rough road", String.format(Locale.US, "%.0f%%", avg(roughRoad)), "Bumpy / vibrating road", roughRoad, Color(0xFFF59E0B)),
         StatSpec("Potholes / 100 km", String.format(Locale.US, "%.1f", avg(potholesPer100)), "Big bumps detected", potholesPer100, Color(0xFF78716C)),
         StatSpec("Harsh stops / trip", String.format(Locale.US, "%.1f", avg(harshStops)), "Jerky stops", harshStops, Color(0xFFEF4444)),
-        StatSpec("Peak g-force", String.format(Locale.US, "%.2fg", avg(peakG)), "Strongest jolt", peakG, Color(0xFF8B5CF6))
+        StatSpec("Peak g-force", String.format(Locale.US, "%.2fg", avg(peakG)), "Strongest jolt", peakG, Color(0xFF8B5CF6)),
+        StatSpec("Fuel / trip", String.format(Locale.US, "%.1f L", avg(fuelPerTrip)), "Est. for ${vehicle.label}", fuelPerTrip, Color(0xFF0EA5E9)),
+        StatSpec("Cost / trip", String.format(Locale.US, "$%.2f", avg(costPerTrip)), String.format(Locale.US, "$%.0f total this window", totalCost), costPerTrip, Color(0xFF22C55E))
     )
     if (paceVsGoogle.isNotEmpty()) {
         val margin = avg(paceVsGoogle)

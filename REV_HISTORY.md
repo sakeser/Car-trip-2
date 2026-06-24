@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.50`, `versionCode=61`
+- Installed on S25: `versionName=2.51`, `versionCode=62`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,24 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev N (v2.51): fuel & trip-cost feature
+
+Estimates fuel use and $ cost per trip from stored aggregates (distance, avg moving speed, idle) — no
+schema change. New pure `FuelEstimator` (analysis): a speed-dependent L/100km curve anchored on the
+vehicle's city/highway ratings (U-shaped: worst crawling, best ~35–95 km/h, mild aero penalty past 110)
++ idle burn, all scaled by a `calibration` factor. Seeded for a **2023 Hyundai Tucson 2.5L AWD**
+(~10.2 city / 8.4 hwy L/100km) at a **GTA regular price ~$1.84/L** (June 2026: McTeague ~178¢, StatCan
+~189¢); everything user-editable.
+
+- `VehiclePrefs` (SharedPreferences) stores the single active vehicle profile.
+- `VehicleScreen` (Home → fuel icon): edit year/make/model, city/hwy economy, fuel price, and a
+  calibration factor — incl. a "calibrate from your car's reported combined L/100km" helper.
+- Trip detail gains a **Fuel & cost** card (litres, $, effective L/100km); Insights gains **Fuel / trip**
+  and **Cost / trip** mini-stats with a window total.
+- **Calibration loop:** the car reports actual distance / fuel / L-100km per trip; feeding those back
+  (edit the ratings or the factor, or via the helper) converges the estimate. 5 `FuelEstimatorTest`
+  added (57 total). On-device UI not yet screenshot-verified (phone was locked).
 
 ## Rev M (v2.50): fused event magnitude = maneuver peak
 

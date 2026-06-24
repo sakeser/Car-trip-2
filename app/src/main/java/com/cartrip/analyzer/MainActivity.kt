@@ -43,6 +43,7 @@ import com.cartrip.analyzer.ui.InsightsScreen
 import com.cartrip.analyzer.ui.TripDetailScreen
 import com.cartrip.analyzer.ui.TripListScreen
 import com.cartrip.analyzer.ui.TripViewModel
+import com.cartrip.analyzer.ui.VehicleScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -165,11 +166,15 @@ private fun AppRoot() {
                 onConnectCloud = { connectCloud() },
                 onDisconnectCloud = { disconnectCloud() },
                 onOpenGuide = { nav.navigate("guide") },
-                onOpenDebug = { nav.navigate("debug") }
+                onOpenDebug = { nav.navigate("debug") },
+                onOpenVehicle = { nav.navigate("vehicle") }
             )
         }
         composable("guide") {
             GuideScreen(onBack = { nav.popBackStack() })
+        }
+        composable("vehicle") {
+            VehicleScreen(onBack = { nav.popBackStack() })
         }
         composable("debug") {
             DebugScreen(onBack = { nav.popBackStack() })
