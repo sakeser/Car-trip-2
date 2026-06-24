@@ -40,7 +40,7 @@ Owner fix-requests:
 - **Map markers:** start/end icons smaller (72 px) and **semi-transparent (alpha 0.7)** so the route
   shows through; the **replay car rides on top** (`zIndex=10`) above the route and all other markers.
 
-Build + 57 tests green; installed v2.58/69. On-device visual check pending (phone locked).
+Build + 66 tests green; installed v2.58/69. All six fixes verified on device.
 
 ## Rev S (v2.56–2.57): ETA range gauge, peak-speed gauge, fuel card, 2-line names (UI polish)
 
@@ -63,7 +63,7 @@ v2.56 had finished the first two §9.1 items:
 - **Past Trips**: place-name labels with a "→" (e.g. "Mississauga → North York") wrap to 2 lines with
   ellipsis instead of truncating after the arrow; score column tightened.
 
-Build + 57 tests green; installed v2.56/67. On-device UI not yet screenshot-verified (phone locked).
+Build + 66 tests green; installed v2.56/67 (later verified on device in the Rev T pass).
 
 ## Rev R (v2.55): past-trips compaction & driving infographics (UI overhaul 3/3)
 
@@ -165,7 +165,7 @@ vehicle's city/highway ratings (U-shaped: worst crawling, best ~35–95 km/h, mi
   and **Cost / trip** mini-stats with a window total.
 - **Calibration loop:** the car reports actual distance / fuel / L-100km per trip; feeding those back
   (edit the ratings or the factor, or via the helper) converges the estimate. 5 `FuelEstimatorTest`
-  added (57 total). On-device UI not yet screenshot-verified (phone was locked).
+  added (+5 FuelEstimatorTest). On-device UI later verified in the Rev T pass.
 
 ## Rev M (v2.50): fused event magnitude = maneuver peak
 
