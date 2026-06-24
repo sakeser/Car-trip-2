@@ -345,6 +345,8 @@ fun TripDetailScreen(
                     trip = t,
                     points = a.points,
                     events = shownEvents,
+                    listEvents = visibleEvents,
+                    rawEventCount = rawEvents.size,
                     routeLimitCoverage = routeLimitCoverage,
                     checking = fetchingLimits,
                     onCheckLimits = {
@@ -358,20 +360,11 @@ fun TripDetailScreen(
                                 etaRefresh++
                             }
                         }
-                    }
-                )
-            }
-            trip?.let { t -> RoadRideCard(t) }
-
-            // --- Events (collapsed): tap any event to jump to its spot on the map ---
-            if (shownEvents.isNotEmpty()) {
-                EventsSection(
-                    events = visibleEvents,
-                    rawEventCount = rawEvents.size,
-                    points = a.points,
+                    },
                     onEventJump = jumpToEvent
                 )
             }
+            trip?.let { t -> RoadRideCard(t) }
 
             // --- Advanced (collapsed): charts, raw metrics, detector comparison ---
             AdvancedSection(trip = trip, metrics = m, fusedEvents = a.fusedEvents, points = a.points)
@@ -873,71 +866,18 @@ private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, fusedEvent
     }
 }
 
-/** Collapsible per-event list. Tapping a row jumps the map/replay to that event's spot. */
-@Composable
-private fun EventsSection(
-    events: List<DriveEvent>,
-    rawEventCount: Int,
-    points: List<TrackPoint>,
-    onEventJump: (DriveEvent) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val firstT = points.firstOrNull()?.tMs ?: 0L
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Events · ${events.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Icon(
-                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (expanded) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val counts = events.groupingBy { eventStyle(it).label }.eachCount()
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        counts.forEach { (label, count) ->
-                            val color = events.first { eventStyle(it).label == label }.let { eventStyle(it).color }
-                            CountPill(label = label, count = count, color = color)
-                        }
-                    }
-                    val summary = if (rawEventCount > events.size) {
-                        "Cleaned from $rawEventCount raw detector signals. Tap an event to see where it happened on the map."
-                    } else {
-                        "Tap an event to see where it happened on the map."
-                    }
-                    Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    events.sortedBy { it.tMs }.forEach { event ->
-                        EventRow(event, points, firstT, onClick = { onEventJump(event) })
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun SafetyFactorsCard(
     trip: TripEntity,
     points: List<TrackPoint>,
     events: List<DriveEvent>,
+    listEvents: List<DriveEvent>,
+    rawEventCount: Int,
     routeLimitCoverage: Double,
     checking: Boolean,
-    onCheckLimits: () -> Unit
+    onCheckLimits: () -> Unit,
+    onEventJump: (DriveEvent) -> Unit
 ) {
     val hasScoredLimits = trip.limitCoverage >= 0.4
     val hasRouteLimits = routeLimitCoverage >= 0.4
@@ -945,6 +885,8 @@ private fun SafetyFactorsCard(
     val needsMapRefresh = hasScoredLimits && !hasRouteLimits
     val speedingSummary = remember(points) { speedingSummary(points) }
     val eventSummaries = remember(events) { drivingEventSummaries(events) }
+    var listExpanded by remember { mutableStateOf(false) }
+    val firstT = points.firstOrNull()?.tMs ?: 0L
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -985,6 +927,38 @@ private fun SafetyFactorsCard(
                         CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
                     } else {
                         Text(if (needsMapRefresh) "Restore route colors" else "Check speed limits")
+                    }
+                }
+            }
+
+            // Consolidated event detail: the full tap-to-jump list lives here (no separate card).
+            if (listEvents.isNotEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp).height(1.dp)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f))
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { listExpanded = !listExpanded }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("All events · ${listEvents.size}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Icon(
+                        if (listExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (listExpanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (listExpanded) {
+                    if (rawEventCount > listEvents.size) {
+                        Text(
+                            "Cleaned from $rawEventCount raw detector signals · tap one to find it on the map.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    listEvents.sortedBy { it.tMs }.forEach { event ->
+                        EventRow(event, points, firstT, onClick = { onEventJump(event) })
                     }
                 }
             }
@@ -1515,21 +1489,6 @@ private fun rawSignalsForEvent(
     // which merged distinct slow-drive events seconds-to-tens-of-seconds apart).
     rawEvents.filter { abs(it.tMs - event.tMs) <= 6_000L }.sortedBy { it.tMs }
 
-
-@Composable
-private fun CountPill(label: String, count: Int, color: Color) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(color.copy(alpha = 0.14f))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text("$count", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
-    }
-}
 
 @Composable
 private fun EventRow(event: DriveEvent, points: List<TrackPoint>, firstT: Long, onClick: () -> Unit) {
