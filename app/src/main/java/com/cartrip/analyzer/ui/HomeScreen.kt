@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
@@ -64,6 +65,7 @@ fun HomeScreen(
     onConnectCloud: () -> Unit,
     onDisconnectCloud: () -> Unit,
     onOpenGuide: () -> Unit,
+    onOpenDebug: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val live by RecordingState.state.collectAsStateWithLifecycle()
@@ -89,6 +91,9 @@ fun HomeScreen(
             )
             IconButton(onClick = onOpenGuide) {
                 Icon(Icons.Filled.Info, contentDescription = "How it works")
+            }
+            IconButton(onClick = onOpenDebug) {
+                Icon(Icons.Filled.BugReport, contentDescription = "Diagnostics")
             }
         }
 

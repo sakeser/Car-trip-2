@@ -109,6 +109,23 @@ data class MotionSample(
     val grz: Double = 0.0
 )
 
+/**
+ * Per-window GNSS quality sample (one every few seconds during recording) so a trip's satellite
+ * health can be analysed along the route — e.g. correlating low-confidence events with urban-canyon
+ * stretches. Compact by design; the per-trip aggregate on [TripEntity] is the cheap summary.
+ */
+@Entity(tableName = "gnss_samples", indices = [Index("tripId")])
+data class GnssSample(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val tripId: Long,
+    val t: Long,
+    val satsUsed: Int,
+    val satsVisible: Int,
+    val meanCn0: Double,
+    val topCn0: Double,
+    val l5: Boolean
+)
+
 @Entity(tableName = "analysis_points", indices = [Index("tripId")])
 data class AnalysisPointEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

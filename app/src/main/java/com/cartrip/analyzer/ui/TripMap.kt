@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.EventType
+import com.cartrip.analyzer.analysis.SpeedTier
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMapOptions
@@ -51,22 +52,26 @@ fun TripMap(
     val mapId = GoogleMapConfig.mapId(context)
     val route = remember(points) { points.map { LatLng(it.lat, it.lon) } }
     val bounds = remember(route) { boundsFor(route)?.let { relaxedBounds(it) } }
-    // Runs of consecutive points where speed exceeded the matched limit (+ noise tolerance).
+    // Runs of consecutive over-limit points, tiered: yellow for 0-10 km/h over, red for 10+ over.
     val speedingSegments = remember(points) {
-        val segs = ArrayList<List<LatLng>>()
+        val segs = ArrayList<Pair<SpeedTier.Tier, List<LatLng>>>()
+        var curTier = SpeedTier.Tier.NONE
         var cur = ArrayList<LatLng>()
+        fun flush() {
+            if (cur.size >= 2 && curTier != SpeedTier.Tier.NONE) segs.add(curTier to cur)
+            cur = ArrayList()
+        }
         for (i in points.indices) {
             val p = points[i]
-            val over = p.speedLimitKmh > 0.0 && p.speedKmh > p.speedLimitKmh + 3.0
-            if (over) {
-                if (cur.isEmpty() && i > 0) cur.add(LatLng(points[i - 1].lat, points[i - 1].lon))
-                cur.add(LatLng(p.lat, p.lon))
-            } else {
-                if (cur.size >= 2) segs.add(cur)
-                cur = ArrayList()
+            val tier = SpeedTier.of(p.speedKmh, p.speedLimitKmh)
+            if (tier != curTier) {
+                flush()
+                curTier = tier
+                if (tier != SpeedTier.Tier.NONE && i > 0) cur.add(LatLng(points[i - 1].lat, points[i - 1].lon))
             }
+            if (tier != SpeedTier.Tier.NONE) cur.add(LatLng(p.lat, p.lon))
         }
-        if (cur.size >= 2) segs.add(cur)
+        flush()
         segs
     }
     val startIcon = remember { markerIcon(MarkerGlyph.START, AndroidColor.rgb(34, 197, 94)) }
@@ -124,11 +129,11 @@ fun TripMap(
                 jointType = JointType.ROUND
             )
 
-            // Red overlay where the driver was over the posted limit.
-            speedingSegments.forEach { seg ->
+            // Over-limit overlay: yellow for 0-10 km/h over, red for 10+ over.
+            speedingSegments.forEach { (tier, seg) ->
                 Polyline(
                     points = seg,
-                    color = Color(0xFFEF4444),
+                    color = if (tier == SpeedTier.Tier.RED) Color(0xFFEF4444) else Color(0xFFF59E0B),
                     width = 12f,
                     jointType = JointType.ROUND
                 )

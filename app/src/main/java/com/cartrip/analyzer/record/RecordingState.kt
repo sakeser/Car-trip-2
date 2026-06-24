@@ -21,7 +21,14 @@ object RecordingState {
         val gpsFixes: Int = 0,
         val gpsSignalLost: Boolean = false,
         val lastGpsAgeS: Long = 0,
-        val completedTripId: Long? = null
+        val completedTripId: Long? = null,
+        // Live capture diagnostics (for the debug screen).
+        val motionSamples: Int = 0,
+        val gnssSatsUsed: Int = 0,
+        val gnssSatsVisible: Int = 0,
+        val gnssCn0: Double = 0.0,
+        val gnssL5: Boolean = false,
+        val sensorRestarts: Int = 0
     )
 
     private val _state = MutableStateFlow(Live())

@@ -37,6 +37,7 @@ import com.cartrip.analyzer.cloud.SpeedLimits
 import com.cartrip.analyzer.cloud.TripSync
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.data.AppDatabase
+import com.cartrip.analyzer.data.GnssSample
 import com.cartrip.analyzer.data.LocationSample
 import com.cartrip.analyzer.data.MotionSample
 import com.cartrip.analyzer.data.TripEndReason
@@ -84,6 +85,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private val bufferLock = Any()
     private val locBuffer = ArrayList<LocationSample>()
     private val motionBuffer = ArrayList<MotionSample>()
+    private val gnssBuffer = ArrayList<GnssSample>()
 
     // live metric state (touched on main thread only)
     private var lastLoc: LocationSample? = null
@@ -128,6 +130,13 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private var gnssCn0Count = 0L
     private var gnssTopCn0 = 0.0
     private var gnssL5Seen = false
+    // Latest per-callback snapshot, sampled into gnss_samples on a fixed cadence.
+    private var gnssLastSatsUsed = 0
+    private var gnssLastSatsVisible = 0
+    private var gnssLastMeanCn0 = 0.0
+    private var gnssLastTopCn0 = 0.0
+    private var gnssLastL5 = false
+    private var gnssHasSnapshot = false
 
     private data class TrimCutoff(val locationT: Long, val motionT: Long)
 
@@ -224,6 +233,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             if (trimCutoff != null) {
                 dao.deleteLocationsAfter(finishedId, trimCutoff.locationT)
                 dao.deleteMotionsAfter(finishedId, trimCutoff.motionT)
+                dao.deleteGnssSamplesAfter(finishedId, trimCutoff.motionT)
             }
             val finalized = TripFinalizer.finalizeTrip(
                 dao = dao,
@@ -315,6 +325,13 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         gnssCn0Count = 0L
         gnssTopCn0 = 0.0
         gnssL5Seen = false
+        gnssLastSatsUsed = 0
+        gnssLastSatsVisible = 0
+        gnssLastMeanCn0 = 0.0
+        gnssLastTopCn0 = 0.0
+        gnssLastL5 = false
+        gnssHasSnapshot = false
+        synchronized(bufferLock) { gnssBuffer.clear() }
     }
 
     /**
@@ -344,6 +361,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         val dao = db.tripDao()
         dao.deleteRawLocationsForCompletedTripsBefore(cutoff)
         dao.deleteRawMotionsForCompletedTripsBefore(cutoff)
+        dao.deleteRawGnssForCompletedTripsBefore(cutoff)
     }
 
     private fun Throwable.userMessage(): String =
@@ -439,22 +457,58 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     private fun accumulateGnss(status: GnssStatus) {
         if (!recording) return
+        val visible = status.satelliteCount
         var used = 0
-        for (i in 0 until status.satelliteCount) {
+        var cn0Sum = 0.0
+        var top = 0.0
+        var l5 = false
+        for (i in 0 until visible) {
             if (!status.usedInFix(i)) continue
             used++
             val cn0 = status.getCn0DbHz(i).toDouble()
-            gnssCn0Sum += cn0
-            gnssCn0Count++
-            if (cn0 > gnssTopCn0) gnssTopCn0 = cn0
+            cn0Sum += cn0
+            if (cn0 > top) top = cn0
             // L5/E5a/B2a band (~1176 MHz) — dual-frequency improves multipath rejection in cities.
             if (status.hasCarrierFrequencyHz(i)) {
                 val f = status.getCarrierFrequencyHz(i)
-                if (f in 1.164e9f..1.189e9f) gnssL5Seen = true
+                if (f in 1.164e9f..1.189e9f) l5 = true
             }
         }
+        val meanCn0 = if (used > 0) cn0Sum / used else 0.0
+
+        // Per-trip aggregate.
+        gnssCn0Sum += cn0Sum
+        gnssCn0Count += used
+        if (top > gnssTopCn0) gnssTopCn0 = top
+        if (l5) gnssL5Seen = true
         gnssSatsUsedSum += used
         gnssUpdates++
+
+        // Latest snapshot (for per-window sampling) + live state (for the debug screen).
+        gnssLastSatsUsed = used
+        gnssLastSatsVisible = visible
+        gnssLastMeanCn0 = meanCn0
+        gnssLastTopCn0 = top
+        gnssLastL5 = l5
+        gnssHasSnapshot = true
+        RecordingState.update {
+            it.copy(gnssSatsUsed = used, gnssSatsVisible = visible, gnssCn0 = meanCn0, gnssL5 = l5)
+        }
+    }
+
+    /** Buffer a per-window GNSS quality sample from the latest callback snapshot. */
+    private fun sampleGnssWindow() {
+        if (!gnssHasSnapshot) return
+        val sample = GnssSample(
+            tripId = tripId,
+            t = SystemClock.elapsedRealtime(),
+            satsUsed = gnssLastSatsUsed,
+            satsVisible = gnssLastSatsVisible,
+            meanCn0 = gnssLastMeanCn0,
+            topCn0 = gnssLastTopCn0,
+            l5 = gnssLastL5
+        )
+        synchronized(bufferLock) { gnssBuffer.add(sample) }
     }
 
     private fun startFused() {
@@ -507,11 +561,14 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                     lastSensorRestartAtWall = now
                     withContext(Dispatchers.Main) { restartSensors() }
                 }
+                if (counter % 3 == 0) sampleGnssWindow()
                 RecordingState.update {
                     it.copy(
                         elapsedS = elapsed,
                         gpsSignalLost = gpsSignalLost,
-                        lastGpsAgeS = if (lastLocationAtWall > 0L) (now - lastLocationAtWall) / 1000 else 0L
+                        lastGpsAgeS = if (lastLocationAtWall > 0L) (now - lastLocationAtWall) / 1000 else 0L,
+                        motionSamples = motionSampleCount,
+                        sensorRestarts = sensorRestartAttempts
                     )
                 }
                 if (counter % 2 == 0) flushBuffers()
@@ -522,12 +579,16 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private suspend fun flushBuffers(writeCheckpoint: Boolean = true) {
         val locs: List<LocationSample>
         val motions: List<MotionSample>
+        val gnss: List<GnssSample>
         synchronized(bufferLock) {
             locs = ArrayList(locBuffer); locBuffer.clear()
             motions = ArrayList(motionBuffer); motionBuffer.clear()
+            gnss = ArrayList(gnssBuffer); gnssBuffer.clear()
         }
         if (locs.isNotEmpty()) db.tripDao().insertLocations(locs)
         if (motions.isNotEmpty()) db.tripDao().insertMotions(motions)
+        // GNSS is diagnostic — never let a bad batch abort the core location/motion flush.
+        if (gnss.isNotEmpty()) runCatching { db.tripDao().insertGnssSamples(gnss) }
         if (writeCheckpoint && tripId > 0L) {
             writeCheckpoint()
         }

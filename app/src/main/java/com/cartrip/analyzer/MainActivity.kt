@@ -36,6 +36,7 @@ import androidx.navigation.navArgument
 import com.cartrip.analyzer.record.RecordingService
 import com.cartrip.analyzer.record.RecordingState
 import com.cartrip.analyzer.ui.CarTripTheme
+import com.cartrip.analyzer.ui.DebugScreen
 import com.cartrip.analyzer.ui.GuideScreen
 import com.cartrip.analyzer.ui.HomeScreen
 import com.cartrip.analyzer.ui.InsightsScreen
@@ -163,11 +164,15 @@ private fun AppRoot() {
                 },
                 onConnectCloud = { connectCloud() },
                 onDisconnectCloud = { disconnectCloud() },
-                onOpenGuide = { nav.navigate("guide") }
+                onOpenGuide = { nav.navigate("guide") },
+                onOpenDebug = { nav.navigate("debug") }
             )
         }
         composable("guide") {
             GuideScreen(onBack = { nav.popBackStack() })
+        }
+        composable("debug") {
+            DebugScreen(onBack = { nav.popBackStack() })
         }
         composable("insights") {
             InsightsScreen(
