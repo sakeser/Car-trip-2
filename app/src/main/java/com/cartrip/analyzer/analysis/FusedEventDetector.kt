@@ -28,6 +28,13 @@ object FusedEventDetector {
     private const val HARD_LONG_G = 0.25          // horizontal-accel spike → brake/accel candidate
     private const val HARD_CORNER_G = 0.27        // sustained lateral-g (speed × yaw) → corner
     private const val SWERVE_YAW = 0.45           // rad/s, a sharp yaw flick (not a sustained corner)
+    // Below this speed a sharp yaw is just a normal tight/parking-lot turn, not a "swerve" — gating
+    // on it stops the detector over-labeling routine low-speed turns (the 36-vs-14 swerve/corner skew).
+    private const val SWERVE_MIN_SPEED_MPS = 25.0 / 3.6
+    // A candidate brake/accel whose acceleration is more vertical than horizontal is a road bump, not
+    // a driving force — veto it so potholes/expansion joints don't fabricate longitudinal events.
+    private const val BUMP_VERT_DOMINANCE = 1.0
+    private const val SWERVE_REVERSAL_MIN_SPEED_MPS = 20.0 / 3.6
     private const val SWERVE_REVERSAL_YAW = 0.18  // lower yaw allowed when right/left reversal is clear
     private const val SWERVE_REVERSAL_SWING = 0.45
     private const val SWERVE_REVERSAL_WINDOW_MS = 5_000L
@@ -126,6 +133,8 @@ object FusedEventDetector {
             val v = m.ax * e2x + m.ay * e2y + m.az * e2z
             val hMagG = sqrt(u * u + v * v) / G
             horizMagsG.add(hMagG)
+            // Vertical (along-gravity) component, to tell a road bump from a real braking/accel force.
+            val vertG = abs(m.ax * dx + m.ay * dy + m.az * dz) / G
             val yaw = m.gx * dx + m.gy * dy + m.gz * dz
             val yawLatG = sp * abs(yaw) / G
             yawSamples.add(YawSample(m.t, yaw, sp))
@@ -135,13 +144,16 @@ object FusedEventDetector {
                 events.add(DriveEvent(m.t, EventType.CORNER, yawLatG * G, "fused", 0.8))
                 turn++; lastTurn = m.t
             }
-            // Swerve: a sharp yaw flick that isn't a sustained corner (low lateral-g, usually low speed).
-            else if (abs(yaw) >= SWERVE_YAW && yawLatG < HARD_CORNER_G && debounced(m.t, lastSwerve, TURN_GAP_MS)) {
+            // Swerve: a sharp yaw flick that isn't a sustained corner — only at real speed, otherwise
+            // it's a normal tight turn (parking lot, side street), not an evasive maneuver.
+            else if (abs(yaw) >= SWERVE_YAW && yawLatG < HARD_CORNER_G && sp >= SWERVE_MIN_SPEED_MPS &&
+                debounced(m.t, lastSwerve, TURN_GAP_MS)) {
                 events.add(DriveEvent(m.t, EventType.SWERVE, yawLatG * G, "fused", 0.7))
                 turn++; lastSwerve = m.t; lastTurn = m.t
             }
-            // Longitudinal: horizontal spike not dominated by turning → brake/accel via GPS slope.
-            if (hMagG >= HARD_LONG_G && yawLatG < 0.6 * hMagG && debounced(m.t, lastLong, LONG_GAP_MS)) {
+            // Longitudinal: horizontal spike not dominated by turning or by a vertical bump → brake/accel.
+            if (hMagG >= HARD_LONG_G && yawLatG < 0.6 * hMagG && vertG < BUMP_VERT_DOMINANCE * hMagG &&
+                debounced(m.t, lastLong, LONG_GAP_MS)) {
                 val gl = gpsSlope(m.t)
                 val magMps2 = hMagG * G
                 when {
@@ -208,9 +220,9 @@ object FusedEventDetector {
                         val duplicate =
                             existingEvents.any { it.isTurnLike() && abs(it.tMs - t) <= TURN_GAP_MS } ||
                                 out.any { abs(it.tMs - t) <= TURN_GAP_MS }
-                        if (!duplicate) {
+                        val speed = 0.5 * (pos.speedMps + neg.speedMps)
+                        if (!duplicate && speed >= SWERVE_REVERSAL_MIN_SPEED_MPS) {
                             val peakYaw = maxOf(abs(pos.yaw), abs(neg.yaw))
-                            val speed = 0.5 * (pos.speedMps + neg.speedMps)
                             out.add(DriveEvent(t, EventType.SWERVE, speed * peakYaw, "fused", 0.85))
                             while (i < samples.size && samples[i].t < endT + TURN_GAP_MS) i++
                             continue

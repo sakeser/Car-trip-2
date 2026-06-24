@@ -23,17 +23,27 @@ object RoutesClient {
 
     private const val ENDPOINT = "https://routes.googleapis.com/directions/v2:computeRoutes"
     private const val FIELD_MASK = "routes.duration,routes.staticDuration,routes.polyline.encodedPolyline"
+    private const val MAX_ATTEMPTS = 3
     private val JSON = "application/json; charset=utf-8".toMediaType()
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)   // long routes return a large HIGH_QUALITY polyline
+        .callTimeout(45, TimeUnit.SECONDS)
         .build()
+
+    /** Last failure reason, for surfacing to the UI / debug instead of a silent null. */
+    @Volatile
+    private var lastDiag: String = ""
+    fun lastDiagnostic(): String = lastDiag
 
     data class RouteResult(
         val trafficS: Double,
         val freeFlowS: Double,
         val polyline: List<DoubleArray> // each entry = [lat, lon]
     )
+
+    /** Deterministic failures (bad key, no path, malformed response) — not worth retrying. */
+    private class FatalRouteException(message: String) : IOException(message)
 
     /**
      * @param departureRfc3339 RFC-3339 timestamp; must not be in the past. Use "now" for a live
@@ -47,14 +57,39 @@ object RoutesClient {
         destLat: Double, destLon: Double,
         departureRfc3339: String?
     ): RouteResult {
-        val body = JSONObject()
+        val payload = JSONObject()
             .put("origin", waypoint(originLat, originLon))
             .put("destination", waypoint(destLat, destLon))
             .put("travelMode", "DRIVE")
             .put("routingPreference", "TRAFFIC_AWARE")
             .put("polylineQuality", "HIGH_QUALITY")
             .apply { if (departureRfc3339 != null) put("departureTime", departureRfc3339) }
+            .toString()
 
+        // Transient failures (network blips, 429/5xx, slow long-route responses) are common on the
+        // road; retry with backoff so a long drive doesn't silently end up with no traffic comparison.
+        var lastError: IOException? = null
+        for (attempt in 1..MAX_ATTEMPTS) {
+            try {
+                return attemptRoute(payload, apiKey, androidPackage, androidCertSha1).also { lastDiag = "" }
+            } catch (e: FatalRouteException) {
+                lastDiag = e.message ?: "Routes API error"
+                throw e
+            } catch (e: IOException) {
+                lastError = e
+            }
+            if (attempt < MAX_ATTEMPTS) runCatching { Thread.sleep(attempt * 700L) }
+        }
+        lastDiag = lastError?.message ?: "Routes API unreachable"
+        throw lastError ?: IOException(lastDiag)
+    }
+
+    private fun attemptRoute(
+        payload: String,
+        apiKey: String,
+        androidPackage: String?,
+        androidCertSha1: String?
+    ): RouteResult {
         val builder = Request.Builder()
             .url(ENDPOINT)
             .addHeader("X-Goog-Api-Key", apiKey)
@@ -63,14 +98,16 @@ object RoutesClient {
             builder.addHeader("X-Android-Package", androidPackage)
             builder.addHeader("X-Android-Cert", androidCertSha1)
         }
-        val req = builder.post(body.toString().toRequestBody(JSON)).build()
+        val req = builder.post(payload.toRequestBody(JSON)).build()
 
         http.newCall(req).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) throw IOException("Routes API ${resp.code}: ${text.take(300)}")
+            // 429/5xx are transient — let the caller retry; other non-2xx are fatal (bad key, etc.).
+            if (resp.code == 429 || resp.code in 500..599) throw IOException("Routes API ${resp.code}")
+            if (!resp.isSuccessful) throw FatalRouteException("Routes API ${resp.code}: ${text.take(300)}")
             val routes = JSONObject(text).optJSONArray("routes")
-                ?: throw IOException("Routes API: no routes in response")
-            if (routes.length() == 0) throw IOException("Routes API: empty route (no path found)")
+                ?: throw FatalRouteException("Routes API: no routes in response")
+            if (routes.length() == 0) throw FatalRouteException("Routes API: empty route (no path found)")
             val route = routes.getJSONObject(0)
             val traffic = parseSeconds(route.optString("duration"))
             val free = parseSeconds(route.optString("staticDuration")).takeIf { it > 0 } ?: traffic

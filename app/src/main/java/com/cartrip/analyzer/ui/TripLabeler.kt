@@ -11,6 +11,8 @@ object TripLabeler {
     private data class Place(val name: String, val lat: Double, val lon: Double)
     private data class Corridor(val name: String, val points: List<Place>)
 
+    private const val NAME_RADIUS_M = 4_000.0
+
     private val home = Place("Harrison Garden", 43.7597, -79.4106)
     private val work = Place("Speakman Drive", 43.5148, -79.6677)
 
@@ -85,15 +87,32 @@ object TripLabeler {
         if (startsAtHome && endsAtWork && hour in 5..10) return "AM commute"
         if (startsAtWork && endsAtHome && hour in 11..19) return "PM commute"
 
-        val from = nearestPlace(start.lat, start.lon)
-        val to = nearestPlace(end.lat, end.lon)
-        if (from.name != to.name) return "${from.name} to ${to.name}"
+        // Only name a place we're actually near — otherwise a trip in another city would be labelled
+        // with the closest GTA landmark (hundreds of km away), which reads as nonsense.
+        val from = nearestPlaceWithin(start.lat, start.lon, NAME_RADIUS_M)
+        val to = nearestPlaceWithin(end.lat, end.lon, NAME_RADIUS_M)
+        if (from != null && to != null && from.name != to.name) return "${from.name} to ${to.name}"
 
-        return mainCorridor(points)?.let { "$it drive" } ?: "${from.name} drive"
+        mainCorridor(points)?.let { return "$it drive" }
+        if (from != null) return "${from.name} drive"
+        return genericLabel(trip)
     }
 
-    private fun nearestPlace(lat: Double, lon: Double): Place =
-        places.minBy { GeoUtils.haversine(lat, lon, it.lat, it.lon) }
+    /** Nearest known place within [maxMeters], or null when the trip is outside our named area. */
+    private fun nearestPlaceWithin(lat: Double, lon: Double, maxMeters: Double): Place? =
+        places.minByOrNull { GeoUtils.haversine(lat, lon, it.lat, it.lon) }
+            ?.takeIf { GeoUtils.haversine(lat, lon, it.lat, it.lon) <= maxMeters }
+
+    /** Time-of-day fallback so unknown-area trips still get a human label instead of a stray landmark. */
+    private fun genericLabel(trip: TripEntity): String {
+        val hour = Calendar.getInstance().apply { timeInMillis = trip.startTime }.get(Calendar.HOUR_OF_DAY)
+        return when (hour) {
+            in 5..10 -> "Morning drive"
+            in 11..15 -> "Afternoon drive"
+            in 16..20 -> "Evening drive"
+            else -> "Night drive"
+        }
+    }
 
     private fun near(lat: Double, lon: Double, place: Place, radiusM: Double): Boolean =
         GeoUtils.haversine(lat, lon, place.lat, place.lon) <= radiusM
