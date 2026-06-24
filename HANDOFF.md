@@ -13,13 +13,20 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - Android app (Kotlin, Jetpack Compose, Room, Google Maps) that records trips from phone GPS +
   motion sensors, analyzes them offline, and enriches with Google traffic ETAs, OSM speed limits,
   and Google Sheets sync. Package `com.cartrip.analyzer`.
-- **Branch `main` = `rev-g-functional` = `origin/main`**, all at `16d6c64` (fully pushed/aligned).
-  `rev-g-functional` is a vestigial ref kept fast-forwarded to `main`; work happens on `main`.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.47/58**. Device reachable via adb.
-- **46 unit tests**, all green. Room schema **v17** (migrations 1→17 all verified on the device DB).
+- **Branch `main` = `rev-g-functional` = `origin/main`**, all at `6eaa088` (Rev R, v2.55) — fully
+  pushed/aligned. `rev-g-functional` is a vestigial ref kept fast-forwarded to `main`; work happens
+  on `main`. **Convention: after each rev, `git branch -f rev-g-functional main` then push both.**
+- Installed on the Samsung **S25 (SM_S931W)** as **2.55/66** (Rev R). Device reachable via adb.
+- **66 unit tests**, all green. Room schema **v17** (no schema change since; the recent work is
+  detector/scoring + a large presentation-layer UI overhaul, no new entities).
+- **Recent arc:** Rev K–N = detector/scoring + fuel feature; **Rev O** = reverse-geocoded names
+  (`GeoNamer`); **Rev P/Q/R** = a 3-part trip-detail + past-trips **UI overhaul** (see REV_HISTORY
+  for the per-rev detail). A follow-up polish pass (Rev S) is in flight — see §9.
 - The separate UX-redesign worktree (`C:\Users\sinan\OneDrive\Desktop\cartrip`, branch
   `ux-redesign-v1`) is **untouched and unrelated** — do not merge it in.
-- A field test (narrated drives) was planned; analyzing that data is the top open task (§9).
+- ⚠️ **Source-encoding trap:** this Windows build mojibakes non-ASCII **string literals** in BOM-less
+  `.kt` files. Build any glyph/emoji from code points (`String(Character.toChars(0x1F422))`,
+  `0x2192.toChar()`) and keep new source ASCII. See `GeoNamer.ARROW` and the memory note.
 
 ---
 
@@ -273,24 +280,41 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
-1. **Analyze field-test data (O7).** Pull the DB (§2.4), align events against the narration time
-   anchors, and check: did speed-aware gating behave (5 vs 4 in the plan)? bumps not flagged as
-   brakes? auto-stop end time correct? speed-limit cache hit on repeat roads (`lastCacheStat`)? GNSS
-   quality tracking urban-canyon stretches? Tune the §6 constants from findings.
-2. **Fuel / trip-cost feature.** Vehicle profile (city/hwy L/100km) + gas price + distance/speed →
-   estimated fuel + $ per trip; monthly/commute cost trends. New entity/prefs; surface on trip
-   detail + Insights. (From the owner's earlier backlog.)
-3. **Reverse-geocoded trip naming (O6). [DONE, Rev O]** `GeoNamer` uses Android `Geocoder`
-   (fail-soft, SharedPreferences-cached by ~110 m cells, per-refresh budget) for real
-   origin/destination names, with `TripLabeler` as fallback. Still to do: learn home/work from
-   frequency instead of hardcoding the fallback.
+1. **UI polish (Rev S) — IN FLIGHT.** The owner's adjustments to the Rev P–R overhaul, all in
+   `TripDetailScreen.kt` / `TripListScreen.kt`:
+   - Past-trips list **truncates trip names containing `->`** (the 2nd city is hidden, e.g.
+     "Mississauga ->"). Give the name room / allow 2 lines / reclaim width from the score columns.
+   - **You vs traffic** rework: order ascending (shortest first); rename "Actual" → **"You"**;
+     **combine** "No traffic" + "Google" into a single **range band**, with **You contrasted against
+     it** (highlighted); colour by deficit vs Google; **thinner bars**; **remove** the redundant
+     "X faster than Google" line at the bottom.
+   - **Speeding peak-vs-limit** → a **vertical speed-gauge** bar on the side that reads like a gauge
+     and shows the **+X km/h over** the limit, highlighted.
+   - **Fuel & cost** card: fix the **L/100km line-wrap** (split value/unit), add **icons** for fuel
+     volume / cost / efficiency, and add a highlighted **fuel-economy rating** for the drive vs the
+     vehicle's combined rating (`FuelEstimator.combinedL100`).
+2. **Auto-recording trigger (next major feature; owner wants this after the UI work).** Auto-START
+   recording from a combination of: phone **mounted/stable orientation**, **wireless-charging**
+   state, **movement > ~5 km/h** for a few seconds, and/or **Bluetooth / Android Auto** connection to
+   the owner's 2023 Tucson. Auto-STOP on: **charging stopped > 5–10 s**, **vehicle/Bluetooth
+   disconnect**, plus stationary logic. Touches `RecordingService` + a charging `BroadcastReceiver`
+   (`ACTION_POWER_CONNECTED`/`BatteryManager`), Bluetooth state, and new permissions
+   (`BLUETOOTH_CONNECT`). Keep it user-toggleable; don't regress the manual Start/Stop.
+3. **Dead-code cleanup (O5).** `TripDetailScreen.kt` still has unused composables — `FactorBar`,
+   `FactorCell`, `TripLinksCard`, `ScorePanel`, `ScoreMeter`, `ReplayControls`, the `ActionButton`
+   cluster — plus (after Rev R) `SpeedingSummary.percentText()` and possibly `scaledIndex`/
+   `downsample`. Rev P/Q/R already removed the composables they orphaned. Do a focused removal pass
+   guided by the compiler's "unused" warnings; verify the screen still builds + renders.
 4. **GNSS phase 2 (optional/research).** Use `gnss_samples` to drive route/event confidence
    downweighting in urban canyons; optional raw-GNSS export behind debug. Not positioning.
 5. **Validated hybrid detector.** Promote the fused detector from "review-grade" to scored: label
    each event GPS-confirmed / sensor-only / bump-echo / ambiguous; score only reviewed events.
 6. **Insights depth.** Repeated-commute comparison, Last-X-km/days/trips filters, speeding/pothole
    heatmaps, per-km metrics. (`InsightsScreen.kt` exists as a base.)
-7. **Cleanup (O5)** + consider `allowBackup` privacy (O3) + revisit O1/O2.
+7. **Rough-stretch mapping (O9)** + `allowBackup` privacy (O3) + revisit O1/O2.
+
+_Done recently: field-test analysis (Rev K–L), fuel/trip-cost (Rev N), reverse-geocoded naming
+(Rev O), trip-detail/past-trips UI overhaul (Rev P/Q/R)._
 
 ---
 
