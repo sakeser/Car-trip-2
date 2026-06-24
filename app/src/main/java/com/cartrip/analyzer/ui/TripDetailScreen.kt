@@ -423,43 +423,56 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ScoreRing(scores.overall, ringSize = 78.dp)
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    "${Format.timeOfDay(trip.startTime)} – ${Format.timeOfDay(endMs)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "${Format.tripMinutes(m.durationS)}  ·  ${Format.tripDistance(m.distanceM)}  ·  ${Format.speedKmh(m.avgMovingSpeedMps * 3.6)} avg",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HeroScore("Safety", scores.safety)
-                    HeroScore("Comfort", scores.comfort)
-                    HeroScore("Pace", scores.speed)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                ScoreRing(scores.overall, ringSize = 72.dp)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "${Format.timeOfDay(trip.startTime)} – ${Format.timeOfDay(endMs)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${Format.tripMinutes(m.durationS)}  ·  ${Format.tripDistance(m.distanceM)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                MiniScoreRing("Safety", scores.safety)
+                MiniScoreRing("Comfort", scores.comfort)
+                MiniScoreRing("Pace", scores.speed)
             }
         }
     }
 }
 
+/** Small labelled score ring for the Safety / Comfort / Pace trio. */
 @Composable
-private fun HeroScore(label: String, value: Int?) {
-    val color = value?.let { TripScores.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Box(modifier = Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(color))
-        Text(
-            "$label ${value ?: "—"}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+private fun MiniScoreRing(label: String, value: Int?) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        if (value != null) {
+            ScoreRing(value, ringSize = 52.dp)
+        } else {
+            Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+                Text("—", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -634,19 +647,35 @@ private fun EventFilterBar(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(
+            "Show",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         EventFilter.values().forEach { filter ->
             val count = events.count { eventFilterFor(it.type) == filter }
             if (count > 0) {
                 FilterChip(
                     selected = filter in selected,
                     onClick = { onToggle(filter) },
-                    label = { Text("${filter.label} $count") }
+                    leadingIcon = {
+                        Icon(filterIcon(filter), contentDescription = filter.label, modifier = Modifier.size(18.dp))
+                    },
+                    label = { Text("$count") }
                 )
             }
         }
     }
+}
+
+private fun filterIcon(filter: EventFilter): ImageVector = when (filter) {
+    EventFilter.BRAKING -> Icons.Filled.StopCircle
+    EventFilter.ACCEL -> Icons.Filled.Speed
+    EventFilter.TURNS -> Icons.Filled.Route
+    EventFilter.BUMPS -> Icons.Filled.ReportProblem
 }
 
 @Composable

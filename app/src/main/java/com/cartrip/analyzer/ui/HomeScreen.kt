@@ -2,6 +2,7 @@ package com.cartrip.analyzer.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,6 +72,12 @@ fun HomeScreen(
 ) {
     val live by RecordingState.state.collectAsStateWithLifecycle()
     AutoTripDetection(recording = live.recording, onStart = onStart)
+
+    // In the car mount (landscape) show one giant Start/Stop button you can hit without looking.
+    if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        LandscapeDriving(live = live, onStart = onStart, onStop = onStop, modifier = modifier)
+        return
+    }
 
     Column(
         modifier = modifier
@@ -143,7 +151,7 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             Button(
                 onClick = onStop,
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier.fillMaxWidth().height(76.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
             ) {
                 Icon(Icons.Filled.Stop, contentDescription = null)
@@ -159,7 +167,7 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             Button(
                 onClick = onStart,
-                modifier = Modifier.fillMaxWidth().height(72.dp)
+                modifier = Modifier.fillMaxWidth().height(88.dp)
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)
                 Text("  Start trip", style = MaterialTheme.typography.titleMedium)
@@ -191,6 +199,41 @@ fun HomeScreen(
                 onDisconnect = onDisconnectCloud,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+/** Full-screen Start/Stop for in-car landscape use — a huge, eyes-free tap target. */
+@Composable
+private fun LandscapeDriving(
+    live: RecordingState.Live,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxSize().statusBarsPadding().padding(10.dp)) {
+        if (live.recording) {
+            Button(
+                onClick = onStop,
+                modifier = Modifier.fillMaxSize(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(Format.clock(live.elapsedS), fontSize = 72.sp, fontWeight = FontWeight.Bold)
+                    Text("TAP TO END TRIP", fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${Format.speedKmh(live.speedKmh)}  ·  ${Format.distance(live.distanceM)}",
+                        fontSize = 22.sp
+                    )
+                }
+            }
+        } else {
+            Button(onClick = onStart, modifier = Modifier.fillMaxSize()) {
+                Text("START TRIP", fontSize = 48.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
