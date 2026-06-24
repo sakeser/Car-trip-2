@@ -2,6 +2,7 @@ package com.cartrip.analyzer.analysis
 
 import com.cartrip.analyzer.data.MotionSample
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -142,5 +143,29 @@ class FusedEventDetectorTest {
         val r = FusedEventDetector.detect(ms, slowPoints(n * 20L, 30.0))
         assertEquals("no corner/swerve should fire", 0, r.turnCount)
         assertEquals("ambiguous spike during steering leaked as a longitudinal", 0, r.brakeCount + r.accelCount)
+    }
+
+    /**
+     * An event's stored magnitude should be the maneuver PEAK, not the value at the first sample that
+     * crossed the threshold. A hard brake/accel keeps building after it first crosses the line (a
+     * narrated 0.5 g brake was being stored as 0.28 g).
+     */
+    @Test fun eventMagnitudeReflectsManeuverPeakNotFirstCrossing() {
+        val n = 300
+        val ms = (0 until n).map { i ->
+            val axG = when {
+                i in 100..104 -> 0.26    // first threshold crossing
+                i in 105..135 -> 0.50    // true peak, later in the same maneuver
+                else -> 0.02
+            }
+            MotionSample(
+                tripId = 1, t = i * 20L, ax = axG * 9.80665, ay = 0.0, az = 0.0,
+                gx = 0.0, gy = 0.0, gz = 0.0, grx = 0.0, gry = 0.0, grz = 9.8
+            )
+        }
+        val r = FusedEventDetector.detect(ms, accelPoints(n * 20L))
+        val accel = r.events.firstOrNull { it.type == EventType.ACCEL }
+        assertNotNull("expected an accel event", accel)
+        assertEquals("magnitude should be the maneuver peak", 0.50, accel!!.magnitude / 9.80665, 0.04)
     }
 }

@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.49`, `versionCode=60`
+- Installed on S25: `versionName=2.50`, `versionCode=61`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,16 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev M (v2.50): fused event magnitude = maneuver peak
+
+Fused events fired (and stored their magnitude) at the *first* sample that crossed the threshold, but
+a hard maneuver keeps building afterward — a narrated 0.5 g brake was stored as 0.28 g (~2× under). The
+stored magnitude is now the peak over a 1500 ms forward window (`PEAK_WINDOW_MS`); the longitudinal peak
+scan ignores samples that are vertical-bump- or turn-dominated so a following pothole/corner can't
+inflate it. Event counts and the percentile `maxHorizGForce` are unchanged — this only fixes the
+per-event severity shown on map markers, the replay, the export sheet, and (next) the Safety term.
+One regression test added (`eventMagnitudeReflectsManeuverPeakNotFirstCrossing`); 52 tests total.
 
 ## Rev L (v2.49): promoted the fused detector into the Safety score
 

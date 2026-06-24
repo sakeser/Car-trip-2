@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.49 (build 60)** · Branch `main` @ `16d6c64` (Rev K–L uncommitted)_
+_Last updated: 2026-06-24 · App version **2.50 (build 61)** · Branch `main` @ `dec6205`_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -133,6 +133,10 @@ Full detail in `REV_HISTORY.md`. Condensed:
   trust; old/low-rate trips still use GPS exposure. Field-calibrated so calm drives stay 97–98 while
   deliberately-hard ones drop to ~89–95. +3 `TripScoresTest` (51 total). Existing trips need
   **Re-analyze** to refresh counts/scores.
+- **Rev M (2.50):** fused event **magnitude = maneuver peak**, not the first threshold-crossing sample
+  (`PEAK_WINDOW_MS=1500`; longitudinal peak excludes bump/turn samples). A narrated 0.5 g brake was
+  stored as 0.28 g; markers/export/severity now read true. Counts and `maxHorizGForce` unchanged.
+  +1 regression test (52 total). Prerequisite for the severity-weighted Safety term (Rev N).
 
 ---
 

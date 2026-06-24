@@ -55,6 +55,10 @@ object FusedEventDetector {
     private const val CORNER_VETO_MS = 450L       // ± window for the windowed turn-veto
     private const val AMB_TURN_YAW = 0.20         // rad/s windowed yaw → ambiguous spike is steering
     private const val AMB_TURN_LAT_G = 0.15       // g windowed centripetal → ambiguous spike is steering
+    // An event's stored magnitude is the PEAK of the maneuver, not the value at the first
+    // threshold-crossing sample — a hard brake/turn keeps building after it first crosses the line
+    // (a narrated 0.5 g brake was being stored as 0.28 g). Scan forward this far for the peak.
+    private const val PEAK_WINDOW_MS = 1500L
 
     data class Result(
         val events: List<DriveEvent>,
@@ -165,6 +169,23 @@ object FusedEventDetector {
             wYawLatG[i] = ml; wYaw[i] = my
         }
 
+        // Severity = the peak of the maneuver window (see PEAK_WINDOW_MS), restricted to samples that
+        // still look like the same force (longitudinal: horizontal-dominant, not a bump or a turn).
+        fun peakLongMag(i: Int): Double {
+            var pk = sHmagG[i]; var k = i; val end = sT[i] + PEAK_WINDOW_MS
+            while (k < sn && sT[k] <= end) {
+                val h = sHmagG[k]
+                if (h > pk && sVertG[k] < BUMP_VERT_DOMINANCE * h && wYawLatG[k] < 0.6 * h) pk = h
+                k++
+            }
+            return pk
+        }
+        fun peakLatG(i: Int): Double {
+            var pk = sYawLatG[i]; var k = i; val end = sT[i] + PEAK_WINDOW_MS
+            while (k < sn && sT[k] <= end) { if (sYawLatG[k] > pk) pk = sYawLatG[k]; k++ }
+            return pk
+        }
+
         // Collect horizontal-accel magnitudes so the peak is a high percentile, not the raw max — one
         // phone bump or handling spike was setting a 1.1 g "peak" on otherwise calm drives (and that
         // peak feeds the safety score directly). p99.5 keeps a true hard maneuver while rejecting lone outliers.
@@ -181,14 +202,14 @@ object FusedEventDetector {
 
             // Corner: sustained lateral-g (takes precedence over a swerve), one event per turn.
             if (yawLatG >= HARD_CORNER_G && debounced(t, lastTurn, TURN_GAP_MS)) {
-                events.add(DriveEvent(t, EventType.CORNER, yawLatG * G, "fused", 0.8))
+                events.add(DriveEvent(t, EventType.CORNER, peakLatG(i) * G, "fused", 0.8))
                 turn++; lastTurn = t
             }
             // Swerve: a sharp yaw flick that isn't a sustained corner — only at real speed, otherwise
             // it's a normal tight turn (parking lot, side street), not an evasive maneuver.
             else if (abs(yaw) >= SWERVE_YAW && yawLatG < HARD_CORNER_G && sp >= SWERVE_MIN_SPEED_MPS &&
                 debounced(t, lastSwerve, TURN_GAP_MS)) {
-                events.add(DriveEvent(t, EventType.SWERVE, yawLatG * G, "fused", 0.7))
+                events.add(DriveEvent(t, EventType.SWERVE, peakLatG(i) * G, "fused", 0.7))
                 turn++; lastSwerve = t; lastTurn = t
             }
             // Longitudinal: horizontal spike not dominated by turning (windowed, see above) or by a
@@ -196,7 +217,7 @@ object FusedEventDetector {
             if (hMagG >= HARD_LONG_G && wYawLatG[i] < 0.6 * hMagG && vertG < BUMP_VERT_DOMINANCE * hMagG &&
                 debounced(t, lastLong, LONG_GAP_MS)) {
                 val gl = gpsSlope(t)
-                val magMps2 = hMagG * G
+                val magMps2 = peakLongMag(i) * G
                 when {
                     gl <= -SLOPE_MIN -> { events.add(DriveEvent(t, EventType.BRAKE, magMps2, "fused", 0.9)); brake++; lastLong = t }
                     gl >= SLOPE_MIN -> { events.add(DriveEvent(t, EventType.ACCEL, magMps2, "fused", 0.9)); accel++; lastLong = t }
