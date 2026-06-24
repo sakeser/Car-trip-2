@@ -112,7 +112,10 @@ object FusedEventDetector {
         // can share the map / timeline / export / formatters without a unit mismatch.
         val events = ArrayList<DriveEvent>()
         var brake = 0; var accel = 0; var turn = 0
-        var maxHorizG = 0.0
+        // Collect horizontal-accel magnitudes so the peak is a high percentile, not the raw max — one
+        // phone bump or handling spike was setting a 1.1 g "peak" on otherwise calm drives (and that
+        // peak feeds the safety score directly). p99.5 keeps a true hard maneuver while rejecting lone outliers.
+        val horizMagsG = ArrayList<Double>()
         var lastLong = Long.MIN_VALUE; var lastTurn = Long.MIN_VALUE; var lastSwerve = Long.MIN_VALUE
         val yawSamples = ArrayList<YawSample>()
         for (m in motions) {
@@ -122,7 +125,7 @@ object FusedEventDetector {
             val u = m.ax * e1x + m.ay * e1y + m.az * e1z
             val v = m.ax * e2x + m.ay * e2y + m.az * e2z
             val hMagG = sqrt(u * u + v * v) / G
-            if (hMagG > maxHorizG) maxHorizG = hMagG
+            horizMagsG.add(hMagG)
             val yaw = m.gx * dx + m.gy * dy + m.gz * dz
             val yawLatG = sp * abs(yaw) / G
             yawSamples.add(YawSample(m.t, yaw, sp))
@@ -159,7 +162,15 @@ object FusedEventDetector {
             turn++
         }
         events.sortBy { it.tMs }
-        return Result(events, brake, accel, turn, confidence, maxHorizG)
+        return Result(events, brake, accel, turn, confidence, percentile(horizMagsG, 0.995))
+    }
+
+    /** High-percentile value of an unsorted list (robust "peak" that rejects lone outlier spikes). */
+    private fun percentile(values: List<Double>, p: Double): Double {
+        if (values.isEmpty()) return 0.0
+        val sorted = values.sorted()
+        val idx = (sorted.size * p).toInt().coerceIn(0, sorted.size - 1)
+        return sorted[idx]
     }
 
     /**

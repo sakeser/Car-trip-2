@@ -106,6 +106,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private var lastSensorRestartAtWall = 0L
     private var sawDriving = false
     private var lastDrivingLocT = 0L
+    // Rolling window of recent (monotonic tLoc, speedMps) so an auto-stop can retrospectively find
+    // the moment the car actually came to rest, instead of trimming to a fixed grace.
+    private val recentSpeedTrack = ArrayDeque<Pair<Long, Double>>()
     private var autoStopRequested = false
     private var locationSampleCount = 0
     private var motionSampleCount = 0
@@ -281,6 +284,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         gpsFixes = 0
         sawDriving = false
         lastDrivingLocT = 0L
+        recentSpeedTrack.clear()
         autoStopRequested = false
         lastMotionWrite = 0L
         motionSensorRegistered = false
@@ -367,14 +371,24 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         registerSensors()
     }
 
+    /**
+     * Detect motion-sensor starvation while GPS is alive and ask for a re-register. Covers both the
+     * trip-786 case (callbacks never start) and a mid-trip stall (callbacks die after some samples):
+     * a healthy ~50 Hz stream keeps [lastMotionAtWall] fresh, so this only fires when motion has
+     * actually gone silent. Bounded by [MAX_SENSOR_RESTARTS] with a cooldown to avoid thrashing.
+     */
     private fun shouldRestartMotionSensors(now: Long, start: Long): Boolean {
         if (!recording || !motionSensorRegistered || start <= 0L) return false
         if (sensorRestartAttempts >= MAX_SENSOR_RESTARTS) return false
-        if (now - start < MOTION_STALL_RESTART_MS) return false
-        if (locationSampleCount < 5 || motionSampleCount >= 3) return false
-        if (lastMotionAtWall > 0L && now - lastMotionAtWall < MOTION_STALL_RESTART_MS) return false
-        if (lastSensorRestartAtWall > 0L && now - lastSensorRestartAtWall < MOTION_STALL_RESTART_MS) return false
-        return true
+        if (now - start < MOTION_STALL_RESTART_MS) return false       // warm-up grace
+        if (locationSampleCount < 5) return false                     // require GPS to be alive
+        if (lastSensorRestartAtWall > 0L && now - lastSensorRestartAtWall < SENSOR_RESTART_COOLDOWN_MS) return false
+        // Stalled if motion never arrived, or the stream has been silent past the stall threshold.
+        return if (lastMotionAtWall <= 0L) {
+            now - start >= MOTION_STALL_RESTART_MS
+        } else {
+            now - lastMotionAtWall >= MOTION_STALL_RESTART_MS
+        }
     }
 
     private fun requestLocation() {
@@ -570,6 +584,13 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     }
 
     private fun updateAutoStop(tLoc: Long, speedMps: Double) {
+        // Keep a short rolling (time, speed) window so the stop can be placed at the real rest moment.
+        recentSpeedTrack.addLast(tLoc to speedMps)
+        val windowStart = tLoc - STOP_TRACK_WINDOW_MS
+        while (recentSpeedTrack.isNotEmpty() && recentSpeedTrack.first().first < windowStart) {
+            recentSpeedTrack.removeFirst()
+        }
+
         if (speedMps >= AUTO_STOP_DRIVING_SPEED_MPS) {
             sawDriving = true
             lastDrivingLocT = tLoc
@@ -582,11 +603,12 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             tLoc - lastDrivingLocT >= AUTO_STOP_IDLE_MS
         ) {
             autoStopRequested = true
-            // Location fixes (loc.elapsedRealtimeNanos) and motion samples (SystemClock.elapsedRealtime)
-            // share the monotonic clock, so the same cutoff trims both. Earlier this derived the motion
-            // cutoff from wall time, which never matched a monotonic sample t — so post-drive idle motion
-            // leaked into rough-road / pothole / peak-G / fused counts.
-            val trimT = lastDrivingLocT + AUTO_STOP_TRIM_GRACE_MS
+            // Retrospectively place the trip end at the moment the car came to rest (last sample
+            // above 4 km/h, then the first stationary sample after it) rather than ~6 min later when
+            // the idle timer fired. Location fixes (loc.elapsedRealtimeNanos) and motion samples
+            // (SystemClock.elapsedRealtime) share the monotonic clock, so one cutoff trims both.
+            val restT = AutoStop.retrospectiveEndTime(recentSpeedTrack.toList()) ?: lastDrivingLocT
+            val trimT = restT + AUTO_STOP_END_GRACE_MS
             stopRecording(TrimCutoff(trimT, trimT))
         }
     }
@@ -737,11 +759,15 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         private const val RAW_SENSOR_RETENTION_MS = 30L * 24L * 60L * 60L * 1000L
         private const val GPS_SIGNAL_LOST_MS = 2L * 60L * 1000L
         private const val MOTION_STALL_RESTART_MS = 15L * 1000L
-        private const val MAX_SENSOR_RESTARTS = 3
+        private const val SENSOR_RESTART_COOLDOWN_MS = 30L * 1000L
+        private const val MAX_SENSOR_RESTARTS = 6
         private const val AUTO_STOP_DRIVING_SPEED_MPS = 3.0 // ~11 km/h
         private const val AUTO_STOP_IDLE_SPEED_MPS = 1.0 // ~4 km/h
         private const val MIN_AUTO_STOP_TRIP_MS = 3L * 60L * 1000L
         private const val AUTO_STOP_IDLE_MS = 6L * 60L * 1000L
-        private const val AUTO_STOP_TRIM_GRACE_MS = 60L * 1000L
+        // Cover the full idle window (6 min) plus margin so the last moving sample is still buffered
+        // when the idle timer fires and we look back for the rest moment.
+        private const val STOP_TRACK_WINDOW_MS = 8L * 60L * 1000L
+        private const val AUTO_STOP_END_GRACE_MS = 3L * 1000L
     }
 }

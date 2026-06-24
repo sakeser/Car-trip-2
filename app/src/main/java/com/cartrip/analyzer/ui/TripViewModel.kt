@@ -209,7 +209,8 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             hardBrakeCount = trip.hardBrakeCount,
             hardCornerCount = trip.hardCornerCount,
             smoothness = trip.smoothness,
-            rawFixes = metricPoints,
+            // Raw fix count is the recorded GPS total; usedFixes is what survived to stored points.
+            rawFixes = trip.locationSampleCount,
             usedFixes = metricPoints,
             motionBrakeCount = trip.motionBrakeCount,
             motionAccelCount = trip.motionAccelCount,

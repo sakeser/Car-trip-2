@@ -103,8 +103,8 @@ object DisplayEvents {
     private fun nearestPoint(points: List<TrackPoint>, tMs: Long): TrackPoint? {
         if (points.isEmpty()) return null
         val next = points.indexOfFirst { it.tMs >= tMs }
-        if (next <= 0) return points.first()
-        if (next == -1) return points.last()
+        if (next == -1) return points.last()  // target is after the last point
+        if (next == 0) return points.first()  // target is at/before the first point
         val prev = next - 1
         return if (tMs - points[prev].tMs <= points[next].tMs - tMs) points[prev] else points[next]
     }
