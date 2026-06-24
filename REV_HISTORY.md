@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.39`, `versionCode=50`
+- Installed on S25: `versionName=2.41`, `versionCode=52`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,30 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev I (v2.40–v2.41): field-test prep + review UX — branch `rev-g-functional`
+
+Field-test enablement (capture visibility + richer data) and review-experience changes.
+
+- **Debug screen** (home title-bar bug icon): live capture health — motion Hz, GPS Hz, GNSS
+  sats/C/N0/L5, sensor restarts — so capture can be confirmed mid-drive; build info; last
+  speed-limit cache + lookup/Routes diagnostics. Validated live: motion 44 Hz, GNSS callback firing,
+  cache served tiles 2/2 from cache.
+- **Per-window GNSS capture**: new `gnss_samples` table (schema v16) written ~every 3 s for
+  route-level GNSS analysis; fail-soft, trimmed/purged/deleted with the trip. Validated: 19 samples
+  on a 58 s trip; per-trip `gnssSampleCount` populated.
+- **Speeding colour tiers** (`SpeedTier`, unit-tested): yellow 0–10 km/h over, red 10+; on the map
+  overlay and the replay speed curve. Replaces the old single-threshold red.
+- **Bumps/potholes off by default** in the event filter; **"Speed" → "Speeding"**; trimmed event
+  detail text.
+- **Replay autoplay**: scrubs the whole trip over ~5 s on load, then a play button to replay; manual
+  scrubbing pauses.
+- **Past Trips**: frozen map on top + scrolling list; first tap previews a trip's route on the map
+  (and shows time/quality/vs-Google), second tap opens it.
+- `FIELD_TEST_PLAN.md` added (pre-drive check, narration, 13 scenarios).
+
+Test suite 39 unit tests (added `SpeedTier`). Migrations 13→16 verified on device. Note: live
+DB reads via `run-as cat` can be WAL-stale — pull `cartrip.db-wal`/`-shm` too for accurate counts.
 
 ## Rev H (v2.37–v2.39): caching, GNSS, list structure — branch `rev-g-functional`
 
