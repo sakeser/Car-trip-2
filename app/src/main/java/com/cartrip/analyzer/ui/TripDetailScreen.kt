@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Share
@@ -424,30 +425,24 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Text(
+                "${Format.timeOfDay(trip.startTime)} – ${Format.timeOfDay(endMs)}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                ScoreRing(scores.overall, ringSize = 72.dp)
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "${Format.timeOfDay(trip.startTime)} – ${Format.timeOfDay(endMs)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "${Format.tripMinutes(m.durationS)}  ·  ${Format.tripDistance(m.distanceM)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                HeroStat(Icons.Filled.Schedule, Format.tripMinutes(m.durationS))
+                HeroStat(Icons.Filled.Route, Format.tripDistance(m.distanceM))
             }
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 MiniScoreRing("Safety", scores.safety)
@@ -455,6 +450,14 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
                 MiniScoreRing("Pace", scores.speed)
             }
         }
+    }
+}
+
+@Composable
+private fun HeroStat(icon: ImageVector, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        Text(value, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -517,7 +520,6 @@ private fun ReplayTimeline(
     val speeds = remember(points) { points.map { it.speedKmh.toFloat() } }
     // Per-point over-limit tier (needs OSM limits): yellow 0-10 over, red 10+ over.
     val tiers = remember(points) { points.map { SpeedTier.of(it.speedKmh, it.speedLimitKmh) } }
-    val anySpeeding = tiers.any { it != SpeedTier.Tier.NONE }
     val maxSpeed = (speeds.maxOrNull() ?: 1f).coerceAtLeast(1f)
     val selFrac = if (points.size > 1) selectedIndex.toFloat() / (points.size - 1) else 0f
     val lineColor = MaterialTheme.colorScheme.primary
@@ -545,44 +547,50 @@ private fun ReplayTimeline(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        val curTier = tiers.getOrNull(selectedIndex) ?: SpeedTier.Tier.NONE
+        val gaugeColor = when (curTier) {
+            SpeedTier.Tier.RED -> redColor
+            SpeedTier.Tier.YELLOW -> yellowColor
+            SpeedTier.Tier.NONE -> MaterialTheme.colorScheme.primary
+        }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconButton(
-                    onClick = {
-                        if (playing) {
-                            playing = false
-                        } else {
-                            if (selectedIndex >= points.size - 1) onSelectedIndex(0)
-                            playing = true
-                        }
-                    },
-                    modifier = Modifier.size(28.dp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable {
+                            if (playing) {
+                                playing = false
+                            } else {
+                                if (selectedIndex >= points.size - 1) onSelectedIndex(0)
+                                playing = true
+                            }
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                         contentDescription = if (playing) "Pause replay" else "Play replay",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(28.dp)
                     )
                 }
-                Text(
-                    buildString {
-                        append(if (events.isEmpty()) "Replay" else "Replay · ${events.size} event${if (events.size == 1) "" else "s"}")
-                        if (anySpeeding) append(" · over limit in yellow/red")
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (anySpeeding) yellowColor else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (point != null) {
+                    Text(
+                        "${Format.clock(((point.tMs - t0).coerceAtLeast(0) / 1000))} / ${Format.clock((tN - t0) / 1000)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
             if (point != null) {
-                Text(
-                    "${Format.duration((point.tMs - t0).coerceAtLeast(0) / 1000.0)} · ${Format.speedKmh(point.speedKmh)}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                SpeedGauge(point.speedKmh, maxSpeed.toDouble(), gaugeColor)
             }
         }
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(60.dp)) {
@@ -636,6 +644,34 @@ private fun ReplayTimeline(
             onValueChange = { playing = false; onSelectedIndex(it.roundToInt()) },
             valueRange = 0f..(points.size - 1).coerceAtLeast(1).toFloat()
         )
+    }
+}
+
+/** Live speed readout + a bar that fills with speed (relative to the trip max), coloured by tier. */
+@Composable
+private fun SpeedGauge(speedKmh: Double, maxSpeedKmh: Double, color: Color) {
+    val frac = (speedKmh / maxSpeedKmh.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f)
+    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                "${speedKmh.roundToInt()}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Text(
+                " km/h",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 3.dp)
+            )
+        }
+        Box(
+            modifier = Modifier.width(96.dp).height(5.dp).clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(frac).height(5.dp).clip(RoundedCornerShape(3.dp)).background(color))
+        }
     }
 }
 
@@ -1218,10 +1254,9 @@ private fun EtaComparisonCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!hasEta) {
+                Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     "No traffic comparison for this trip yet.",
                     style = MaterialTheme.typography.bodySmall,
@@ -1237,97 +1272,98 @@ private fun EtaComparisonCard(
                 return@Column
             }
 
-            val youColor = if (actualS <= trip.googleEtaTrafficS) Color(0xFF22C55E) else Color(0xFFEF4444)
-            val deltaS = actualS - trip.googleEtaTrafficS
-            val absMin = (kotlin.math.abs(deltaS) / 60.0).roundToInt()
-            val (verdict, color) = when {
-                deltaS < -45 -> "$absMin min faster than usual traffic" to Color(0xFF22C55E)
-                deltaS > 45 -> "$absMin min slower than usual traffic" to Color(0xFFEF4444)
-                else -> "About the same as usual traffic" to MaterialTheme.colorScheme.onSurface
+            val typicalS = trip.googleEtaTrafficS
+            val freeFlowS = trip.googleEtaFreeFlowS.takeIf { it > 0.0 } ?: typicalS
+            val youColor = when {
+                actualS <= typicalS -> ETA_GREEN
+                actualS <= typicalS * 1.15 -> ETA_AMBER
+                else -> ETA_RED
             }
-            Text(verdict, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
-
-            // Three bars, shortest on top, widths to scale — a compact at-a-glance comparison.
-            val bars = listOf(
-                Triple("Free-flow", trip.googleEtaFreeFlowS, Color(0xFF38BDF8)),
-                Triple("Typical", trip.googleEtaTrafficS, MaterialTheme.colorScheme.onSurfaceVariant),
-                Triple("You", actualS, youColor)
-            ).sortedBy { it.second }
-            val maxS = bars.maxOf { it.second }.coerceAtLeast(1.0)
-            bars.forEach { (label, s, c) ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(58.dp))
-                    Box(modifier = Modifier.weight(1f).height(13.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))) {
-                        Box(modifier = Modifier.fillMaxWidth((s / maxS).toFloat().coerceIn(0.04f, 1f)).height(13.dp).clip(RoundedCornerShape(4.dp)).background(c))
-                    }
-                    Text(Format.tripMinutes(s), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.width(44.dp))
-                }
+            val deltaMin = ((actualS - typicalS) / 60.0).roundToInt()
+            val verdict = when {
+                deltaMin <= -1 -> "${-deltaMin} min faster"
+                deltaMin >= 1 -> "$deltaMin min slower"
+                else -> "On pace"
             }
-
-            Text(
-                (if (trip.etaSource == "live") "Live traffic at trip end" else "Typical traffic for this time") + " · via Google",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(verdict, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = youColor)
+            }
+            EtaRangeGauge(freeFlowS, typicalS, actualS, youColor)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                EtaLegend(ETA_GREEN, "Free", freeFlowS)
+                EtaLegend(ETA_AMBER, "Traffic", typicalS)
+                EtaLegend(youColor, "You", actualS)
+            }
         }
     }
 }
 
-@Composable
-private fun EtaCell(label: String, seconds: Double, valueColor: Color, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(
-            Format.tripMinutes(seconds),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = valueColor
-        )
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
+private val ETA_GREEN = Color(0xFF22C55E)
+private val ETA_AMBER = Color(0xFFF59E0B)
+private val ETA_RED = Color(0xFFEF4444)
 
 /**
- * A shared time axis with three markers — free-flow, Google's ETA, and your actual time —
- * so the comparison is visual. The "you" marker is green when you matched/beat Google, red when slower.
+ * One horizontal scale: free-flow→typical is the shaded "expected" range, and a bigger dot shows
+ * where your actual time landed (green ahead of traffic, amber close, red behind).
  */
 @Composable
-private fun EtaTimeline(freeFlowS: Double, googleS: Double, youS: Double, youColor: Color) {
-    val freeColor = Color(0xFF38BDF8)
-    val googleColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-    val scaleMax = maxOf(freeFlowS, googleS, youS, 1.0) * 1.12
+private fun EtaRangeGauge(freeFlowS: Double, typicalS: Double, youS: Double, youColor: Color) {
+    val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+    val band = ETA_GREEN.copy(alpha = 0.28f)
+    val lo = minOf(freeFlowS, typicalS, youS)
+    val hi = maxOf(freeFlowS, typicalS, youS)
+    val pad = ((hi - lo) * 0.18).coerceAtLeast(30.0)
+    val sMin = lo - pad
+    val span = (hi + pad - sMin).coerceAtLeast(1.0)
     val density = LocalDensity.current
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(56.dp)) {
-        val widthPx = with(density) { maxWidth.toPx() }
-        fun xFor(v: Double) = with(density) { (v / scaleMax * widthPx).toFloat().toDp() }
-        val lineY = 34.dp
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(28.dp)) {
+        val wPx = with(density) { maxWidth.toPx() }
+        fun xDp(v: Double) = with(density) { (((v - sMin) / span).toFloat().coerceIn(0f, 1f) * wPx).toDp() }
+        val lineY = 12.dp
 
-        // baseline
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-                .offset(y = lineY)
-                .clip(RoundedCornerShape(2.dp))
-                .background(track)
+            modifier = Modifier.fillMaxWidth().height(4.dp).offset(y = lineY)
+                .clip(RoundedCornerShape(2.dp)).background(track)
         )
-        EtaMarker(xFor(freeFlowS), freeColor, lineY)
-        EtaMarker(xFor(googleS), googleColor, lineY)
-        EtaMarker(xFor(youS), youColor, lineY, big = true)
+        val bandA = xDp(minOf(freeFlowS, typicalS))
+        val bandB = xDp(maxOf(freeFlowS, typicalS))
+        Box(
+            modifier = Modifier.offset(x = bandA, y = lineY).width((bandB - bandA).coerceAtLeast(3.dp))
+                .height(4.dp).clip(RoundedCornerShape(2.dp)).background(band)
+        )
+        GaugeDot(xDp(freeFlowS), ETA_GREEN, lineY, 10.dp)
+        GaugeDot(xDp(typicalS), ETA_AMBER, lineY, 10.dp)
+        GaugeDot(xDp(youS), youColor, lineY, 16.dp)
     }
 }
 
 @Composable
-private fun EtaMarker(x: androidx.compose.ui.unit.Dp, color: Color, lineY: androidx.compose.ui.unit.Dp, big: Boolean = false) {
-    val size = if (big) 16.dp else 11.dp
+private fun GaugeDot(x: androidx.compose.ui.unit.Dp, color: Color, lineY: androidx.compose.ui.unit.Dp, size: androidx.compose.ui.unit.Dp) {
     Box(
         modifier = Modifier
-            .offset(x = x - size / 2, y = lineY + 1.5.dp - size / 2)
+            .offset(x = x - size / 2, y = lineY + 2.dp - size / 2)
             .size(size)
             .clip(RoundedCornerShape(size / 2))
             .background(color)
     )
+}
+
+@Composable
+private fun EtaLegend(color: Color, label: String, seconds: Double) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Box(modifier = Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(color))
+        Text(
+            "$label ${Format.tripMinutes(seconds)}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
 }
 
 @Composable
