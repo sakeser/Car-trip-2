@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.56 (build 67)** · Branch `main` (Rev S)_
+_Last updated: 2026-06-24 · App version **2.57 (build 68)** · Branch `main` (Rev S complete)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -280,19 +280,14 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
-1. **UI polish (Rev S) — IN FLIGHT.** The owner's adjustments to the Rev P–R overhaul, all in
-   `TripDetailScreen.kt` / `TripListScreen.kt`:
-   - Past-trips list **truncates trip names containing `->`** (the 2nd city is hidden, e.g.
-     "Mississauga ->"). Give the name room / allow 2 lines / reclaim width from the score columns.
-   - **You vs traffic** rework: order ascending (shortest first); rename "Actual" → **"You"**;
-     **combine** "No traffic" + "Google" into a single **range band**, with **You contrasted against
-     it** (highlighted); colour by deficit vs Google; **thinner bars**; **remove** the redundant
-     "X faster than Google" line at the bottom.
-   - **Speeding peak-vs-limit** → a **vertical speed-gauge** bar on the side that reads like a gauge
-     and shows the **+X km/h over** the limit, highlighted.
-   - **Fuel & cost** card: fix the **L/100km line-wrap** (split value/unit), add **icons** for fuel
-     volume / cost / efficiency, and add a highlighted **fuel-economy rating** for the drive vs the
-     vehicle's combined rating (`FuelEstimator.combinedL100`).
+1. **UI polish (Rev S) — DONE (v2.56–2.57).** All four owner adjustments to the Rev P–R overhaul
+   shipped: (1) past-trips 2-line names (no more truncation after `->`) + tighter score columns;
+   (2) You-vs-traffic as a Google best-case..typical **range band** with the **You** bar contrasted
+   against it, shortest-first, deficit-coloured, thinner, redundant line removed (`EtaCompare`);
+   (3) speeding peak-vs-limit as a vertical **`PeakSpeedGauge`** headlining **+X km/h over** (red);
+   (4) Fuel & cost card with icons + split value/unit (no L/100km wrap) + a highlighted economy
+   rating vs the vehicle's combined (`FuelEstimator.combinedL100`). Trip-detail visuals still want a
+   final on-device eyeball (phone kept re-locking during verification).
 2. **Auto-recording trigger (next major feature; owner wants this after the UI work).** Auto-START
    recording from a combination of: phone **mounted/stable orientation**, **wireless-charging**
    state, **movement > ~5 km/h** for a few seconds, and/or **Bluetooth / Android Auto** connection to

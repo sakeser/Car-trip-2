@@ -28,7 +28,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.LocalGasStation
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
@@ -1112,11 +1115,13 @@ private fun SpeedTierSparkline(points: List<TrackPoint>) {
 
 /**
  * Compact vertical gauge for the side of the speeding row: peak speed filled bottom-up — blue up to
- * the limit, red for the overage — with a limit tick and the peak/limit numbers.
+ * the limit, red for the overage — with a limit tick. The headline is the **+X km/h over** (red,
+ * highlighted) when speeding, else the peak speed in blue.
  */
 @Composable
 private fun PeakSpeedGauge(peakKmh: Double, limitKmh: Double) {
-    val over = peakKmh > limitKmh + 0.5
+    val overKmh = peakKmh - limitKmh
+    val over = overKmh > 0.5
     val maxV = (maxOf(peakKmh, limitKmh) * 1.12).coerceAtLeast(1.0)
     val peakFrac = (peakKmh / maxV).toFloat().coerceIn(0.04f, 1f)
     val limitFrac = (limitKmh / maxV).toFloat().coerceIn(0.02f, 0.99f)
@@ -1127,10 +1132,16 @@ private fun PeakSpeedGauge(peakKmh: Double, limitKmh: Double) {
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Text(
-            Format.speedKmh(peakKmh),
-            style = MaterialTheme.typography.labelMedium,
+            if (over) "+${overKmh.roundToInt()}" else Format.speedKmh(peakKmh),
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = if (over) SPEED_RED else SPEED_BLUE,
+            maxLines = 1
+        )
+        Text(
+            if (over) "km/h over" else "peak",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (over) SPEED_RED else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
         Box(
@@ -1303,12 +1314,13 @@ private fun FuelCostCard(trip: TripEntity) {
     val litres = FuelEstimator.litres(distanceKm, trip.avgMovingSpeedMps * 3.6, trip.idleS, v)
     val cost = FuelEstimator.cost(litres, v)
     val l100 = FuelEstimator.tripL100(distanceKm, litres)
+    val ratedCombined = FuelEstimator.combinedL100(v) * v.calibration   // effective combined rating
     val loc = java.util.Locale.US
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Fuel & cost", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 String.format(loc, "Estimated for your %s at $%.2f/L. Tap the fuel icon on Home to tune.", v.label, v.pricePerL),
@@ -1316,11 +1328,44 @@ private fun FuelCostCard(trip: TripEntity) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RoadCell("Fuel used", String.format(loc, "%.2f L", litres), Color(0xFF0EA5E9), Modifier.weight(1f))
-                RoadCell("Cost", String.format(loc, "$%.2f", cost), Color(0xFF22C55E), Modifier.weight(1f))
-                RoadCell("Economy", String.format(loc, "%.1f L/100km", l100), Color(0xFF8B5CF6), Modifier.weight(1f))
+                FuelCell(Icons.Filled.LocalGasStation, String.format(loc, "%.2f", litres), "litres", Color(0xFF0EA5E9), Modifier.weight(1f))
+                FuelCell(Icons.Filled.AttachMoney, String.format(loc, "%.2f", cost), "cost", Color(0xFF22C55E), Modifier.weight(1f))
+                FuelCell(Icons.Filled.Speed, String.format(loc, "%.1f", l100), "L/100km", Color(0xFF8B5CF6), Modifier.weight(1f))
+            }
+            // Highlighted economy rating for this drive vs the vehicle's (effective) combined rating.
+            if (ratedCombined > 0.0) {
+                val deltaFrac = (l100 - ratedCombined) / ratedCombined
+                val better = deltaFrac <= 0.0
+                val pct = (abs(deltaFrac) * 100).roundToInt()
+                val chip = if (better) Color(0xFF22C55E) else Color(0xFFEF4444)
+                Row(
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(chip.copy(alpha = 0.14f))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        if (better) Icons.Filled.TrendingDown else Icons.Filled.TrendingUp,
+                        contentDescription = null, tint = chip, modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        if (pct < 1) String.format(loc, "On par with your %s's %.1f L/100km rating", v.model, ratedCombined)
+                        else String.format(loc, "%d%% %s fuel than your %s's %.1f rating", pct, if (better) "less" else "more", v.model, ratedCombined),
+                        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = chip
+                    )
+                }
             }
         }
+    }
+}
+
+/** A fuel stat with an icon and a split value/unit so long units (L/100km) don't wrap the number. */
+@Composable
+private fun FuelCell(icon: ImageVector, value: String, unit: String, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color, maxLines = 1)
+        Text(unit, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
 

@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.56`, `versionCode=67`
+- Installed on S25: `versionName=2.57`, `versionCode=68`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -23,9 +23,17 @@ init script:
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
 
-## Rev S (v2.56): ETA range gauge, peak-speed gauge, 2-line trip names (UI polish)
+## Rev S (v2.56–2.57): ETA range gauge, peak-speed gauge, fuel card, 2-line names (UI polish)
 
-Finished the in-progress trip-detail refinements:
+**v2.57 completed the two remaining HANDOFF §9.1 items the v2.56 WIP had not:**
+- **Speeding `PeakSpeedGauge`** now headlines the overage **"+X km/h over"** (red, highlighted) when
+  speeding, falling back to the peak speed when not — matching the "+X over" spec.
+- **Fuel & cost card** rebuilt: per-stat **icons** (fuel/cost/economy), **split value/unit** so the
+  `L/100km` no longer wraps the number (`FuelCell`), and a highlighted **economy-rating chip** comparing
+  the drive's L/100km to the vehicle's effective combined rating ("12% less/more fuel than your Tucson's
+  9.4 rating", green/red with a trend icon).
+
+v2.56 had finished the first two §9.1 items:
 - **You vs Google ETA** redrawn as a shared time axis: Google's best-case..typical estimate is a single
   **range band**, "You" is a bar landing on the same axis (left of the band = faster), rows ordered
   shortest-first, You coloured by its deficit and pulsing. Replaces the old three stacked bars
