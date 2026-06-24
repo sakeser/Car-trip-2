@@ -1054,29 +1054,36 @@ private val SPEED_RED = Color(0xFFEF4444)
 @Composable
 private fun SpeedingSummaryRow(speedingSummary: SpeedingSummary?, points: List<TrackPoint>) {
     val color = if (speedingSummary != null) SPEED_RED else MaterialTheme.colorScheme.onSurfaceVariant
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp))
-                    .background(color.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Speed, contentDescription = null, tint = color)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp))
+                        .background(color.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Speed, contentDescription = null, tint = color)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Speeding", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
+                    Text(
+                        if (speedingSummary == null) "No notable speeding on covered roads."
+                        else "${Format.duration(speedingSummary.speedingDurationS)} over the limit",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Speeding", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
-                Text(
-                    if (speedingSummary == null) "No notable speeding on covered roads."
-                    else "${Format.duration(speedingSummary.speedingDurationS)} over the limit",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            // The trip as a blue line, turning yellow (0-10 over) / red (10+ over) where you sped.
+            SpeedTierSparkline(points)
         }
-        // The trip as a blue line, turning yellow (0-10 over) / red (10+ over) where you sped.
-        SpeedTierSparkline(points)
+        // Peak vs limit as a vertical speed-gauge on the side.
         if (speedingSummary != null) {
-            PeakVsLimitBar(speedingSummary.peakSpeedKmh, speedingSummary.peakLimitKmh)
+            PeakSpeedGauge(speedingSummary.peakSpeedKmh, speedingSummary.peakLimitKmh)
         }
     }
 }
@@ -1103,35 +1110,53 @@ private fun SpeedTierSparkline(points: List<TrackPoint>) {
     }
 }
 
-/** Peak speed against the limit: blue up to the limit, red for the overage, with a numeric caption. */
+/**
+ * Compact vertical gauge for the side of the speeding row: peak speed filled bottom-up — blue up to
+ * the limit, red for the overage — with a limit tick and the peak/limit numbers.
+ */
 @Composable
-private fun PeakVsLimitBar(peakKmh: Double, limitKmh: Double) {
+private fun PeakSpeedGauge(peakKmh: Double, limitKmh: Double) {
+    val over = peakKmh > limitKmh + 0.5
     val maxV = (maxOf(peakKmh, limitKmh) * 1.12).coerceAtLeast(1.0)
-    val limitFrac = (limitKmh / maxV).toFloat().coerceIn(0.02f, 0.98f)
-    val peakFrac = (peakKmh / maxV).toFloat().coerceIn(limitFrac + 0.01f, 1f)
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f))
+    val peakFrac = (peakKmh / maxV).toFloat().coerceIn(0.04f, 1f)
+    val limitFrac = (limitKmh / maxV).toFloat().coerceIn(0.02f, 0.99f)
+    val barH = 54.dp
+    Column(
+        modifier = Modifier.width(58.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            Format.speedKmh(peakKmh),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (over) SPEED_RED else SPEED_BLUE,
+            maxLines = 1
+        )
+        Box(
+            modifier = Modifier.width(14.dp).height(barH).clip(RoundedCornerShape(7.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Box(modifier = Modifier.weight(limitFrac).fillMaxHeight().background(SPEED_BLUE))
-            Box(modifier = Modifier.weight(peakFrac - limitFrac).fillMaxHeight().background(SPEED_RED))
-            val rest = 1f - peakFrac
-            if (rest > 0f) Box(modifier = Modifier.weight(rest).fillMaxHeight())
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                "Peak ${Format.speedKmh(peakKmh)}",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = SPEED_RED
-            )
-            Text(
-                "limit ${Format.speedKmh(limitKmh)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            // Full peak fill (red when over the limit, else blue)...
+            Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(peakFrac).background(if (over) SPEED_RED else SPEED_BLUE))
+            // ...then re-cover the part below the limit in blue so only the overage stays red.
+            if (over) {
+                Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(minOf(peakFrac, limitFrac)).background(SPEED_BLUE))
+            }
+            // Limit tick.
+            Box(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp)
+                    .offset(y = -(barH * limitFrac))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
             )
         }
+        Text(
+            "limit ${Format.speedKmh(limitKmh)}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
     }
 }
 
@@ -1430,14 +1455,9 @@ private fun EtaComparisonCard(
                     Text(verdict, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = youColor)
                 }
             }
-            // Stacked bars in legend order (No traffic / Google / Actual): bar length encodes the time
-            // on a shared offset scale, Actual is perf-coloured and pulses.
-            EtaBars(freeFlowS = freeFlowS, typicalS = typicalS, actualS = actualS, youColor = youColor)
-            Text(
-                etaVsGoogleText(deltaS, deltaFrac),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Google shown as a best-case..typical RANGE band; You is a bar contrasted against it,
+            // coloured by deficit vs Google and ordered shortest-first.
+            EtaCompare(freeFlowS = freeFlowS, typicalS = typicalS, actualS = actualS, youColor = youColor)
         }
     }
 }
@@ -1445,7 +1465,6 @@ private fun EtaComparisonCard(
 private val ETA_GREEN = Color(0xFF22C55E)
 private val ETA_AMBER = Color(0xFFF59E0B)
 private val ETA_RED = Color(0xFFEF4444)
-private val ETA_FREE = Color(0xFF38BDF8)     // "no traffic" best case — calm blue
 private val ETA_TYPICAL = Color(0xFF64748B)  // Google estimate — neutral slate
 private val ETA_MAPS = Color(0xFFEA4335)     // approximated Google Maps pin tint
 
@@ -1467,92 +1486,114 @@ private fun etaAnimalEmoji(deltaFrac: Double): String = when {
     else -> ETA_HORSE                   // 12%+ faster
 }
 
-private fun etaVsGoogleText(deltaS: Double, deltaFrac: Double): String {
-    val pct = (abs(deltaFrac) * 100).roundToInt()
-    val mmss = Format.clock(abs(deltaS).roundToInt().toLong())
-    return when {
-        deltaFrac <= -0.01 -> "$mmss faster than Google ($pct%)"
-        deltaFrac >= 0.01 -> "$mmss slower than Google ($pct%)"
-        else -> "Right on Google's typical pace"
-    }
-}
-
 /**
- * Three stacked, animated bars (No traffic / Google / Actual, in that order) on a shared offset
- * scale: the shortest time still shows ~30% of the track so all three read as bars, and the rest of
- * the width encodes how much longer each one is. Bars grow in on load; the Actual bar pulses.
+ * Two thin rows on a shared time axis. Google's best-case..typical estimate is a single RANGE band;
+ * "You" is a bar whose right end lands on the same axis so it reads directly against the band
+ * (left of it = faster, past it = slower). Rows are ordered shortest-first; You is coloured by its
+ * deficit vs Google and carries a pulsing highlight. The band/bar animate in on load.
  */
 @Composable
-private fun EtaBars(freeFlowS: Double, typicalS: Double, actualS: Double, youColor: Color) {
-    val lo = minOf(freeFlowS, typicalS, actualS)
-    val hi = maxOf(freeFlowS, typicalS, actualS)
-    val span = (hi - lo).coerceAtLeast(1.0)
-    fun frac(v: Double): Float = (0.30 + 0.70 * ((v - lo) / span)).toFloat().coerceIn(0f, 1f)
+private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, youColor: Color) {
+    val lo0 = minOf(freeFlowS, typicalS, actualS)
+    val hi0 = maxOf(freeFlowS, typicalS, actualS)
+    val pad = ((hi0 - lo0) * 0.12).coerceAtLeast(20.0)
+    val lo = lo0 - pad
+    val span = ((hi0 + pad) - lo).coerceAtLeast(1.0)
+    fun frac(v: Double): Float = ((v - lo) / span).toFloat().coerceIn(0f, 1f)
 
     var loaded by remember(freeFlowS, typicalS, actualS) { mutableStateOf(false) }
     LaunchedEffect(freeFlowS, typicalS, actualS) { loaded = true }
 
+    val bMin = (freeFlowS / 60.0).roundToInt()
+    val tMin = (typicalS / 60.0).roundToInt()
+    val googleTime = if (bMin == tMin) "$tMin min" else "$bMin-$tMin min"
+
+    val you: @Composable () -> Unit = { EtaYouRow(frac(actualS), youColor, Format.tripMinutes(actualS), loaded) }
+    val google: @Composable () -> Unit = { EtaGoogleRow(frac(freeFlowS), frac(typicalS), googleTime) }
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        EtaBarRow("No traffic", freeFlowS, ETA_FREE, frac(freeFlowS), loaded, pulse = false, mapsPin = false)
-        EtaBarRow("Google", typicalS, ETA_TYPICAL, frac(typicalS), loaded, pulse = false, mapsPin = true)
-        EtaBarRow("Actual", actualS, youColor, frac(actualS), loaded, pulse = true, mapsPin = false)
+        if (actualS <= typicalS) { you(); google() } else { google(); you() }
     }
 }
 
+/** Google's best-case..typical estimate as a single range band on the shared axis. */
 @Composable
-private fun EtaBarRow(
-    label: String,
-    seconds: Double,
-    color: Color,
-    targetFrac: Float,
-    loaded: Boolean,
-    pulse: Boolean,
-    mapsPin: Boolean
-) {
-    val animFrac by animateFloatAsState(if (loaded) targetFrac else 0f, animationSpec = tween(700), label = "etaBar")
+private fun EtaGoogleRow(fBest: Float, fTyp: Float, timeText: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
-            modifier = Modifier.width(78.dp),
+            modifier = Modifier.width(52.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            if (mapsPin) {
-                Icon(Icons.Filled.Place, contentDescription = null, tint = ETA_MAPS, modifier = Modifier.size(13.dp))
-            } else {
-                Box(modifier = Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(color))
-            }
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.Filled.Place, contentDescription = null, tint = ETA_MAPS, modifier = Modifier.size(12.dp))
+            Text("Google", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
         }
-        Box(
-            modifier = Modifier.weight(1f).height(16.dp).clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f))
-        ) {
+        BoxWithConstraints(modifier = Modifier.weight(1f).height(9.dp)) {
+            val w = maxWidth
             Box(
-                modifier = Modifier.fillMaxWidth(animFrac).height(16.dp).clip(RoundedCornerShape(8.dp)).background(color),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                if (pulse) {
-                    val infinite = rememberInfiniteTransition(label = "etaPulse")
-                    val a by infinite.animateFloat(
-                        initialValue = 0.3f,
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
-                        label = "etaPulseAlpha"
-                    )
-                    Box(
-                        modifier = Modifier.padding(end = 3.dp).size(9.dp).clip(RoundedCornerShape(5.dp))
-                            .background(Color.White.copy(alpha = a))
-                    )
-                }
-            }
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+            )
+            val x1 = w * fBest
+            Box(
+                modifier = Modifier.offset(x = x1).width((w * fTyp - x1).coerceAtLeast(4.dp)).fillMaxHeight()
+                    .clip(RoundedCornerShape(4.dp)).background(ETA_TYPICAL)
+            )
         }
         Text(
-            Format.tripMinutes(seconds),
+            timeText,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
-            modifier = Modifier.width(44.dp)
+            modifier = Modifier.width(62.dp)
+        )
+    }
+}
+
+/** Your time as a bar whose right end lands on the shared axis, coloured by deficit, with a pulse. */
+@Composable
+private fun EtaYouRow(fYou: Float, youColor: Color, timeText: String, loaded: Boolean) {
+    val grow by animateFloatAsState(if (loaded) fYou else 0f, animationSpec = tween(700), label = "etaYouBar")
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.width(52.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(youColor))
+            Text("You", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        }
+        BoxWithConstraints(modifier = Modifier.weight(1f).height(9.dp)) {
+            val w = maxWidth
+            Box(
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+            )
+            Box(
+                modifier = Modifier.width((w * grow).coerceAtLeast(3.dp)).fillMaxHeight()
+                    .clip(RoundedCornerShape(4.dp)).background(youColor),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                val infinite = rememberInfiniteTransition(label = "etaYouPulse")
+                val a by infinite.animateFloat(
+                    initialValue = 0.3f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+                    label = "etaYouPulseA"
+                )
+                Box(
+                    modifier = Modifier.padding(end = 2.dp).size(7.dp).clip(RoundedCornerShape(4.dp))
+                        .background(Color.White.copy(alpha = a))
+                )
+            }
+        }
+        Text(
+            timeText,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = youColor,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(62.dp)
         )
     }
 }

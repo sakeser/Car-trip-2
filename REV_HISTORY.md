@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.55`, `versionCode=66`
+- Installed on S25: `versionName=2.56`, `versionCode=67`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,21 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev S (v2.56): ETA range gauge, peak-speed gauge, 2-line trip names (UI polish)
+
+Finished the in-progress trip-detail refinements:
+- **You vs Google ETA** redrawn as a shared time axis: Google's best-case..typical estimate is a single
+  **range band**, "You" is a bar landing on the same axis (left of the band = faster), rows ordered
+  shortest-first, You coloured by its deficit and pulsing. Replaces the old three stacked bars
+  (`EtaBars`/`EtaBarRow`/`etaVsGoogleText` removed).
+- **Speeding row**: the peak-vs-limit readout is now a compact **vertical `PeakSpeedGauge`** on the side
+  (peak filled bottom-up, blue to the limit then red for the overage, limit tick) next to the full-width
+  speed-tier sparkline (replaces the horizontal `PeakVsLimitBar`).
+- **Past Trips**: place-name labels with a "→" (e.g. "Mississauga → North York") wrap to 2 lines with
+  ellipsis instead of truncating after the arrow; score column tightened.
+
+Build + 57 tests green; installed v2.56/67. On-device UI not yet screenshot-verified (phone locked).
 
 ## Rev R (v2.55): past-trips compaction & driving infographics (UI overhaul 3/3)
 

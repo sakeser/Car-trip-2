@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -253,10 +254,13 @@ private fun TripRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
+                        // Allow 2 lines so place-name labels with a "->" (e.g. "Mississauga -> North
+                        // York") show the destination instead of truncating after the arrow.
                         text = displayName,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     if (trip.isSample) SampleBadge()
@@ -402,8 +406,8 @@ private fun DurationBar(durationS: Double, fraction: Float, modifier: Modifier =
     }
 }
 
-private val SCORE_COL_WIDTH = 40.dp
-private val SCORE_COL_GAP = 8.dp
+private val SCORE_COL_WIDTH = 34.dp
+private val SCORE_COL_GAP = 6.dp
 
 @Composable
 private fun SampleBadge() {
