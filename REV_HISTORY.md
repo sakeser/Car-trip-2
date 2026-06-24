@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.47`, `versionCode=58`
+- Installed on S25: `versionName=2.49`, `versionCode=60`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,52 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev L (v2.49): promoted the fused detector into the Safety score
+
+The 1 Hz GPS detector that drove Safety is blind to hard braking/cornering — trips 845/847 (and most
+of the trip history) reported `hardBrakeCount=0`/`hardCornerCount=0` despite many narrated hard events,
+because the Kalman + lateral low-pass wash brief ~0.3 g events below the 3.0 / 3.5 m/s² thresholds. So
+**Safety was pinned at 98–100 regardless of how hard you drove** (only speeding or a peak-G outlier
+moved it).
+
+- Safety's hard-maneuver term is now `gpsHardPenalty` (GPS exposure %) **blended by motion-Hz trust
+  with** `fusedHardPenalty = min(28, (motionBrake·7 + motionAccel·3.5 + motionTurn·1.2) / max(2 km, dist))`.
+  On dense-motion trips (trust → 1) the corner-corrected sensor detector drives the term; old/low-rate
+  trips still use GPS exposure unchanged. Turns are weighted low (firm city corners aren't unsafe) and
+  the term is capped so one rough stretch can't zero the score.
+- Field-calibrated on the trip set: calm long drives stay 97–98, the deliberately-aggressive test drives
+  drop to ~92–95, and a dense-hard benchmark to ~89–90. Three `TripScoresTest` added (51 tests total).
+- Existing trips show the new score after **Re-analyze** (re-runs the detector + recomputes counts/scores).
+
+Open refinements: fused event magnitudes under-report (fire at first threshold crossing, not the peak),
+so a severity-weighted term would be a better long-term Safety signal than a raw count rate; and a
+dedicated severe-corner count (≥~0.45 g) would let hard cornering register in Safety without penalizing
+normal turns.
+
+## Rev K (v2.48): field-data calibration — corners no longer logged as linear accel
+
+Analyzed two narrated field drives (`Recording 34.txt`→trip 845; `Recording 35.txt`→trip 847) pulled
+off the S25, aligned to the transcripts. Capture was excellent (motion ~46 Hz, clean 1 Hz GPS/0 gaps,
+GNSS now logged). Confirmed the owner's hunch — **fast corners were being scored as large linear
+accelerations**:
+
+- Trip 847 logged its single hardest "ACCEL" (0.47 g, conf 0.90) 1.4 s after a CORNER during the
+  narrated "curve / hard turn"; both narrated swerves on each trip also fabricated phantom ACCEL/BRAKE.
+- Root cause in `FusedEventDetector`: the longitudinal turn-veto compared the **instantaneous**
+  centripetal estimate (`speed × gyro-yaw`) to the horizontal-accel magnitude, but those two peak on
+  different samples within a corner, and corner/longitudinal have independent debounces.
+- **Fix:** the veto now uses a **windowed** centripetal max (`CORNER_VETO_MS = 450`); and an
+  ambiguous-GPS-slope spike during clear rotation (`AMB_TURN_YAW = 0.20` rad/s or
+  `AMB_TURN_LAT_G = 0.15` g, windowed) is treated as steering instead of being guessed as brake/accel.
+- Validated offline against the exact stored raw data: removes precisely the 6 corner/swerve-contaminated
+  longitudinals across both trips while keeping every genuine narrated brake/accel. Two regression tests
+  added (`cornerForceNotMiscountedAsAcceleration`, `swerveWithAmbiguousSlopeIsNotALongitudinal`); 48 tests green.
+
+Still open from this field test (see HANDOFF §8 O7): the **GPS detector that drives the score** reports
+0 hard brakes / 0 hard corners on both trips despite many narrated hard events (1 Hz Kalman + lateral
+low-pass wash transients under the 3.0 / 3.5 m/s² thresholds). Decision pending — lower GPS thresholds
+vs. promote the fused detector to scored.
 
 ## Rev J (v2.42–v2.43): detection fixes + graphical UX — branch `rev-g-functional`
 

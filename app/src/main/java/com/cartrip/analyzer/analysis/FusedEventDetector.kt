@@ -46,6 +46,16 @@ object FusedEventDetector {
     private const val TURN_GAP_MS = 3000L         // debounce: sustained turns fire once
     private const val MIN_GRAVITY = 5.0
 
+    // A corner's centripetal estimate (speed × yaw) and the measured horizontal-accel peak don't fall
+    // on the same sample, so an instantaneous turn-veto leaks a spurious brake/accel mid-corner — the
+    // narrated field drives (845/847) logged a hard curve as a 0.47 g "acceleration". The longitudinal
+    // veto therefore looks at a short *window* of the turning signals. And a quick steering input
+    // (swerve) shows more lateral g than speed × yaw predicts, so an ambiguous-slope spike during clear
+    // rotation is treated as steering, not a fabricated brake/accel.
+    private const val CORNER_VETO_MS = 450L       // ± window for the windowed turn-veto
+    private const val AMB_TURN_YAW = 0.20         // rad/s windowed yaw → ambiguous spike is steering
+    private const val AMB_TURN_LAT_G = 0.15       // g windowed centripetal → ambiguous spike is steering
+
     data class Result(
         val events: List<DriveEvent>,
         val brakeCount: Int,
@@ -119,54 +129,88 @@ object FusedEventDetector {
         // can share the map / timeline / export / formatters without a unit mismatch.
         val events = ArrayList<DriveEvent>()
         var brake = 0; var accel = 0; var turn = 0
+
+        // Per-(gravity-valid) sample channels, computed once so the longitudinal veto can look at a
+        // short *window* of the turning signals instead of a single sample (see CORNER_VETO_MS).
+        val cap = motions.size
+        val sT = ArrayList<Long>(cap); val sU = ArrayList<Double>(cap); val sV = ArrayList<Double>(cap)
+        val sHmagG = ArrayList<Double>(cap); val sVertG = ArrayList<Double>(cap)
+        val sYaw = ArrayList<Double>(cap); val sYawLatG = ArrayList<Double>(cap); val sSpeed = ArrayList<Double>(cap)
+        for (m in motions) {
+            if (sqrt(m.grx * m.grx + m.gry * m.gry + m.grz * m.grz) < MIN_GRAVITY) continue
+            val sp = speedAt(m.t)
+            val u = m.ax * e1x + m.ay * e1y + m.az * e1z
+            val v = m.ax * e2x + m.ay * e2y + m.az * e2z
+            val yaw = m.gx * dx + m.gy * dy + m.gz * dz
+            sT.add(m.t); sU.add(u); sV.add(v)
+            sHmagG.add(sqrt(u * u + v * v) / G)
+            // Vertical (along-gravity) component, to tell a road bump from a real braking/accel force.
+            sVertG.add(abs(m.ax * dx + m.ay * dy + m.az * dz) / G)
+            sYaw.add(yaw); sYawLatG.add(sp * abs(yaw) / G); sSpeed.add(sp)
+        }
+        val sn = sT.size
+
+        // Windowed maxima of the turning channels (two forward-only pointers over the sorted times).
+        val wYawLatG = DoubleArray(sn); val wYaw = DoubleArray(sn)
+        var lo = 0; var hi = 0
+        for (i in 0 until sn) {
+            while (sT[lo] < sT[i] - CORNER_VETO_MS) lo++
+            if (hi < i) hi = i
+            while (hi < sn - 1 && sT[hi + 1] <= sT[i] + CORNER_VETO_MS) hi++
+            var ml = 0.0; var my = 0.0
+            for (k in lo..hi) {
+                if (sYawLatG[k] > ml) ml = sYawLatG[k]
+                val ay = abs(sYaw[k]); if (ay > my) my = ay
+            }
+            wYawLatG[i] = ml; wYaw[i] = my
+        }
+
         // Collect horizontal-accel magnitudes so the peak is a high percentile, not the raw max — one
         // phone bump or handling spike was setting a 1.1 g "peak" on otherwise calm drives (and that
         // peak feeds the safety score directly). p99.5 keeps a true hard maneuver while rejecting lone outliers.
         val horizMagsG = ArrayList<Double>()
         var lastLong = Long.MIN_VALUE; var lastTurn = Long.MIN_VALUE; var lastSwerve = Long.MIN_VALUE
         val yawSamples = ArrayList<YawSample>()
-        for (m in motions) {
-            if (sqrt(m.grx * m.grx + m.gry * m.gry + m.grz * m.grz) < MIN_GRAVITY) continue
-            val sp = speedAt(m.t)
+        for (i in 0 until sn) {
+            val sp = sSpeed[i]
             if (sp < MOVING_MPS) continue
-            val u = m.ax * e1x + m.ay * e1y + m.az * e1z
-            val v = m.ax * e2x + m.ay * e2y + m.az * e2z
-            val hMagG = sqrt(u * u + v * v) / G
+            val t = sT[i]; val hMagG = sHmagG[i]; val vertG = sVertG[i]
+            val yaw = sYaw[i]; val yawLatG = sYawLatG[i]
             horizMagsG.add(hMagG)
-            // Vertical (along-gravity) component, to tell a road bump from a real braking/accel force.
-            val vertG = abs(m.ax * dx + m.ay * dy + m.az * dz) / G
-            val yaw = m.gx * dx + m.gy * dy + m.gz * dz
-            val yawLatG = sp * abs(yaw) / G
-            yawSamples.add(YawSample(m.t, yaw, sp))
+            yawSamples.add(YawSample(t, yaw, sp))
 
             // Corner: sustained lateral-g (takes precedence over a swerve), one event per turn.
-            if (yawLatG >= HARD_CORNER_G && debounced(m.t, lastTurn, TURN_GAP_MS)) {
-                events.add(DriveEvent(m.t, EventType.CORNER, yawLatG * G, "fused", 0.8))
-                turn++; lastTurn = m.t
+            if (yawLatG >= HARD_CORNER_G && debounced(t, lastTurn, TURN_GAP_MS)) {
+                events.add(DriveEvent(t, EventType.CORNER, yawLatG * G, "fused", 0.8))
+                turn++; lastTurn = t
             }
             // Swerve: a sharp yaw flick that isn't a sustained corner — only at real speed, otherwise
             // it's a normal tight turn (parking lot, side street), not an evasive maneuver.
             else if (abs(yaw) >= SWERVE_YAW && yawLatG < HARD_CORNER_G && sp >= SWERVE_MIN_SPEED_MPS &&
-                debounced(m.t, lastSwerve, TURN_GAP_MS)) {
-                events.add(DriveEvent(m.t, EventType.SWERVE, yawLatG * G, "fused", 0.7))
-                turn++; lastSwerve = m.t; lastTurn = m.t
+                debounced(t, lastSwerve, TURN_GAP_MS)) {
+                events.add(DriveEvent(t, EventType.SWERVE, yawLatG * G, "fused", 0.7))
+                turn++; lastSwerve = t; lastTurn = t
             }
-            // Longitudinal: horizontal spike not dominated by turning or by a vertical bump → brake/accel.
-            if (hMagG >= HARD_LONG_G && yawLatG < 0.6 * hMagG && vertG < BUMP_VERT_DOMINANCE * hMagG &&
-                debounced(m.t, lastLong, LONG_GAP_MS)) {
-                val gl = gpsSlope(m.t)
+            // Longitudinal: horizontal spike not dominated by turning (windowed, see above) or by a
+            // vertical bump → brake/accel.
+            if (hMagG >= HARD_LONG_G && wYawLatG[i] < 0.6 * hMagG && vertG < BUMP_VERT_DOMINANCE * hMagG &&
+                debounced(t, lastLong, LONG_GAP_MS)) {
+                val gl = gpsSlope(t)
                 val magMps2 = hMagG * G
                 when {
-                    gl <= -SLOPE_MIN -> { events.add(DriveEvent(m.t, EventType.BRAKE, magMps2, "fused", 0.9)); brake++ }
-                    gl >= SLOPE_MIN -> { events.add(DriveEvent(m.t, EventType.ACCEL, magMps2, "fused", 0.9)); accel++ }
+                    gl <= -SLOPE_MIN -> { events.add(DriveEvent(t, EventType.BRAKE, magMps2, "fused", 0.9)); brake++; lastLong = t }
+                    gl >= SLOPE_MIN -> { events.add(DriveEvent(t, EventType.ACCEL, magMps2, "fused", 0.9)); accel++; lastLong = t }
+                    // Ambiguous GPS slope. If the vehicle is clearly rotating, this horizontal force is
+                    // steering, not braking/accel — suppress rather than guess (guessing fabricated a
+                    // brake/accel on every narrated swerve). Otherwise lean on the forward-axis sign.
+                    wYaw[i] >= AMB_TURN_YAW || wYawLatG[i] >= AMB_TURN_LAT_G -> { /* steering, not longitudinal */ }
                     else -> {
-                        // Ambiguous GPS slope — emit, but low confidence; lean on the forward-axis sign.
-                        val lf = u * (fU / (fMag + 1e-9)) + v * (fV / (fMag + 1e-9))
-                        if (lf < 0) { events.add(DriveEvent(m.t, EventType.BRAKE, magMps2, "fused", 0.4)); brake++ }
-                        else { events.add(DriveEvent(m.t, EventType.ACCEL, magMps2, "fused", 0.4)); accel++ }
+                        val lf = sU[i] * (fU / (fMag + 1e-9)) + sV[i] * (fV / (fMag + 1e-9))
+                        if (lf < 0) { events.add(DriveEvent(t, EventType.BRAKE, magMps2, "fused", 0.4)); brake++ }
+                        else { events.add(DriveEvent(t, EventType.ACCEL, magMps2, "fused", 0.4)); accel++ }
+                        lastLong = t
                     }
                 }
-                lastLong = m.t
             }
         }
         detectSwerveReversals(yawSamples, events).forEach {

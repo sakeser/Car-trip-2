@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.47 (build 58)** · Branch `main` @ `16d6c64`_
+_Last updated: 2026-06-24 · App version **2.49 (build 60)** · Branch `main` @ `16d6c64` (Rev K–L uncommitted)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -119,6 +119,20 @@ Full detail in `REV_HISTORY.md`. Condensed:
   Start/Stop**; hero score rings (no overall ring); **You-vs-Traffic range gauge**; replay speed
   gauge; **rough road → discrete stretches** (`roughStretchCount`/`bumpyScore`); am/pm no-dots;
   speed-readout smoothing; **Driving + Events consolidated** into one card.
+- **Rev K (2.48):** field-data calibration of `FusedEventDetector` from narrated trips 845/847 (O7).
+  Fixed **corners/swerves logged as linear accel/brake**: the longitudinal turn-veto now uses a
+  **windowed** centripetal max (`CORNER_VETO_MS=450`) instead of one sample (the gyro-yaw dip and the
+  lateral-accel peak don't coincide — trip 847 logged a 0.47 g "ACCEL" mid-curve), and an
+  ambiguous-slope spike during clear rotation (`AMB_TURN_YAW`/`AMB_TURN_LAT_G`) is treated as steering
+  rather than guessed. Validated offline to drop exactly the 6 corner/swerve-contaminated longitudinals
+  across both trips while keeping every genuine brake/accel; +2 regression tests (48 total).
+- **Rev L (2.49):** **promoted the fused detector into the Safety score.** 1 Hz GPS exposure is ~0 even
+  on hard drives (845/847 scored 0 hard brakes/corners), so on dense-motion trips the Safety
+  hard-maneuver term is now driven by the corner-corrected sensor hard-event rate
+  (`brake·7 + accel·3.5 + turn·1.2` per km, floor 2 km, capped 28), blended by the existing motion-Hz
+  trust; old/low-rate trips still use GPS exposure. Field-calibrated so calm drives stay 97–98 while
+  deliberately-hard ones drop to ~89–95. +3 `TripScoresTest` (51 total). Existing trips need
+  **Re-analyze** to refresh counts/scores.
 
 ---
 
@@ -162,6 +176,8 @@ These are the knobs most likely to need tuning from field data. Values as of 2.4
 | `BUMP_VERT_DOMINANCE` | 1.0 | veto brake/accel if vertical g ≥ horizontal g (road bump) |
 | `SLOPE_MIN` | 0.5 m/s² | GPS slope needed to call brake-vs-accel sign |
 | `LONG_GAP_MS` / `TURN_GAP_MS` | 2500 / 3000 | event debounce |
+| `CORNER_VETO_MS` | 450 | ± window for the turn-veto (Rev K — stops corners leaking as longitudinals) |
+| `AMB_TURN_YAW` / `AMB_TURN_LAT_G` | 0.20 rad/s / 0.15 g | windowed rotation that makes an ambiguous-slope spike "steering, not brake/accel" (Rev K) |
 
 ### Display flagging / clustering — `ui/DisplayEvents.kt`
 | Const | Value | Meaning |
@@ -190,6 +206,9 @@ Auto-stop end time: last sample >`MOVING_MPS` (4 km/h) → first sample ≤`STAT
 ### Scoring — `ui/TripScores.kt`
 Safety/Comfort/Pace heuristics. Fused-detector trust ramps on **motion sample rate** (6→20 Hz), NOT
 `fusedConfidence`. Peak-G uses `maxHorizGForce` (robust) when fused ran, else p99 `peakGForce`.
+**Safety hard-maneuver term (Rev L):** `gpsHardPenalty` (GPS exposure %, ×5/4.5/2) blended by
+`fusedTrust` with `fusedHardPenalty = min(28, (motionBrake·7 + motionAccel·3.5 + motionTurn·1.2)/max(2,km))`.
+Comfort already blends GPS+fused event rate. Weights field-calibrated on trips 845/847 — re-tune here.
 
 ---
 
@@ -227,8 +246,15 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 - **O6 — `TripLabeler` is GTA-hardcoded.** Names come from a fixed list of Toronto-area landmarks +
   the owner's home/work coords, radius-guarded (Rev G) so far-away trips fall back to a time-of-day
   label. Proper fix = reverse-geocoding (see §9).
-- **O7 — Field data not yet analyzed.** The narrated drives (per `FIELD_TEST_PLAN.md`) need a
-  data-vs-narration pass to validate detector accuracy, the cache hit-rate, and GNSS capture.
+- **O7 — Field data analyzed (Rev K–L).** Narrated trips 845/847 analyzed vs transcripts: capture
+  excellent (~46 Hz motion, clean 1 Hz GPS, GNSS now logged). Fixed the corner→longitudinal
+  contamination (Rev K) and the GPS-detector score-blindness by promoting the fused detector into
+  Safety (Rev L; the GPS detector reports `hardBrakeCount=0`/`hardCornerCount=0` at 1 Hz —
+  `maxBrake` 2.56–2.69 < 3.0, `maxLat` 3.14–3.42 < 3.5). **Refinements still open:** (a) fused event
+  **magnitudes under-report** (stored at first threshold-crossing sample, not the maneuver peak) — a
+  severity-weighted Safety term (vs the current count rate) is the natural next step; (b) a dedicated
+  **severe-corner** count (≥~0.45 g) would let hard cornering hit Safety distinctly without penalizing
+  normal city turns (needs a stored field). See memory `field-test-2026-06-24-trips-845-847`.
 - **O8 — Peak-over speeding** has no minimum-run-length requirement (a brief snap can set the peak).
   Smoothing of isolated limit mismatches exists; a run-length guard would harden it further.
 

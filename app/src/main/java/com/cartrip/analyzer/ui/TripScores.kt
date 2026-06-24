@@ -3,6 +3,7 @@ package com.cartrip.analyzer.ui
 import androidx.compose.ui.graphics.Color
 import com.cartrip.analyzer.data.TripEntity
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -23,6 +24,11 @@ import kotlin.math.roundToInt
  * events out) and more accurate hard-event counts than the low-rate GPS detector. Trust is
  * gated on motion sample rate — NOT on fusedConfidence, which only measures forward-axis inference
  * (low even when magnitude-first detection is solid). Trips without fused data fall back to GPS.
+ *
+ * Rev L promotes the fused detector into the SAFETY hard-maneuver term too (not just comfort/peak-G):
+ * 1 Hz GPS exposure is near-zero even on hard drives, so on dense-motion trips Safety is driven by the
+ * corner-corrected sensor hard-event rate (field-calibrated on narrated trips 845/847), blended by the
+ * same motion-Hz trust. GPS exposure still drives it for old/low-rate trips.
  */
 data class TripScores(
     val overall: Int,
@@ -55,10 +61,24 @@ data class TripScores(
             // Peak-G: the true horizontal spike when the fused detector ran (it captures the brief
             // hard brake/turn the GPS p99 misses), else the GPS p99 peak. Net leniently for mounts/bumps.
             val peakG = if (hasFused) trip.maxHorizGForce else trip.peakGForce
+
+            // Hard-maneuver exposure. The 1 Hz GPS detector under-reports hard brakes/corners (Kalman
+            // + the lateral low-pass wash brief ~0.3 g events below threshold — field trips 845/847
+            // scored 0 hard brakes / 0 hard corners despite many narrated ones), so where motion data
+            // is dense the corner-corrected sensor detector's hard-event rate drives this term instead,
+            // blended by the same motion-Hz trust used for peak-G. Turns are weighted low (a firm city
+            // corner isn't unsafe) and the term is capped so one rough stretch can't zero the score.
+            val gpsHardPenalty = brakePct * 5.0 + turnPct * 4.5 + accelPct * 2.0
+            val safetyKm = max(2.0, trip.distanceM / 1000.0)
+            val fusedHardPenalty = min(
+                28.0,
+                (trip.motionBrakeCount * 7.0 + trip.motionAccelCount * 3.5 + trip.motionTurnCount * 1.2) / safetyKm
+            )
+            val hardPenalty =
+                if (hasFused) gpsHardPenalty * (1.0 - fusedTrust) + fusedHardPenalty * fusedTrust
+                else gpsHardPenalty
             val safetyPenalty =
-                brakePct * 5.0 +
-                    turnPct * 4.5 +
-                    accelPct * 2.0 +
+                hardPenalty +
                     speedingPct * 0.8 +
                     severeOver * 0.5 +
                     max(0.0, peakG - 0.55) * 25.0
