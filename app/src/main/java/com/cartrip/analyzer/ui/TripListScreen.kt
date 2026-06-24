@@ -111,8 +111,8 @@ fun TripListScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .height(240.dp)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .height(196.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     if (selectedTripId != null && selectedRoute.size >= 2) {
@@ -130,24 +130,18 @@ fun TripListScreen(
                         }
                     }
                 }
-                Text(
-                    if (selectedTripId == null) "Tap a trip to preview its route · tap again to open"
-                    else "Tap again to open · tap another to preview",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
 
                 val maxDurationS = trips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
                 val grouped = TripBuckets.group(trips)
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    item { TripListHeader() }
                     var runningOffset = 0
-                    grouped.forEach { (bucket, bucketTrips) ->
+                    grouped.forEachIndexed { bucketIndex, (bucket, bucketTrips) ->
                         val startNumber = runningOffset
                         runningOffset += bucketTrips.size
                         val expanded = bucket !in collapsedBuckets
@@ -156,6 +150,9 @@ fun TripListScreen(
                                 label = bucket.label,
                                 count = bucketTrips.size,
                                 expanded = expanded,
+                                // First section header also carries the Safe/Comf/Speed column labels
+                                // (the old standalone header row was removed to save vertical space).
+                                showScoreLabels = bucketIndex == 0,
                                 onToggle = {
                                     if (bucket in collapsedBuckets) collapsedBuckets.remove(bucket)
                                     else collapsedBuckets.add(bucket)
@@ -423,7 +420,13 @@ private fun SampleBadge() {
 }
 
 @Composable
-private fun SectionHeader(label: String, count: Int, expanded: Boolean, onToggle: () -> Unit) {
+private fun SectionHeader(
+    label: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    showScoreLabels: Boolean = false
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -448,21 +451,17 @@ private fun SectionHeader(label: String, count: Int, expanded: Boolean, onToggle
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-private fun TripListHeader() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Spacer(modifier = Modifier.width(24.dp))
-        Spacer(modifier = Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(SCORE_COL_GAP)) {
-            HeaderCol("Safe")
-            HeaderCol("Comf")
-            HeaderCol("Speed")
+        if (showScoreLabels) {
+            Spacer(modifier = Modifier.weight(1f))
+            // end=6.dp lines these up with the trip rows' score columns (12.dp card pad - 6.dp here).
+            Row(
+                modifier = Modifier.padding(end = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(SCORE_COL_GAP)
+            ) {
+                HeaderCol("Safe")
+                HeaderCol("Comf")
+                HeaderCol("Speed")
+            }
         }
     }
 }

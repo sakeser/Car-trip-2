@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.54`, `versionCode=65`
+- Installed on S25: `versionName=2.55`, `versionCode=66`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,22 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev R (v2.55): past-trips compaction & driving infographics (UI overhaul 3/3)
+
+- **Past trips compacted:** the preview map is pulled up and shorter (240 -> 196 dp, less vertical
+  padding), the "Tap a trip to preview ..." hint line is removed, and the standalone Safe/Comf/Speed
+  header row is gone — those column labels now ride on the **first section header row** (e.g. next to
+  "Last 24 hours"), so more trips are visible.
+- **Speeding shown visually:** a thin **trip sparkline** (blue, turning yellow/red where you sped)
+  spans the whole trip, the "% of covered drive" text is removed, and "Peak X in a Y zone" becomes a
+  **peak-vs-limit bar** (blue up to the limit, red overage) with a short caption.
+- **Hard braking / acceleration / sharp turns** rows became small **infographics**: an intensity bar
+  (strongest g vs a per-type "very hard" reference) plus **count pips** + the number.
+- **Verified on device (unlocked this time):** list names/layout, header "Mississauga -> North York",
+  headline total cost ($3.90, matching the Fuel & cost card), you-vs-traffic bars + rabbit emoji +
+  "03:11 faster than Google (9%)", relocated filter chips, speeding sparkline + peak-vs-limit, and the
+  sharp-turns intensity bar all render correctly. Build + 66 tests green; installed v2.55/66.
 
 ## Rev Q (v2.54): header, you-vs-traffic, fuel headline (UI overhaul 2/3)
 

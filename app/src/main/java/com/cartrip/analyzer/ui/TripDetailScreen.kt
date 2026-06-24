@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -76,6 +77,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -951,7 +953,7 @@ private fun SafetyFactorsCard(
             }
             if (hasLimits) {
                 val notable = speedingSummary != null && speedingSummary.speedingDurationS >= 1.0
-                SpeedingSummaryRow(speedingSummary = if (notable) speedingSummary else null)
+                SpeedingSummaryRow(speedingSummary = if (notable) speedingSummary else null, points = points)
                 OutlinedButton(onClick = onCheckLimits, enabled = !checking) {
                     if (checking) {
                         CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
@@ -1045,41 +1047,90 @@ private fun FactorBar(label: String, fraction: Double, accent: Color, sensorEven
     }
 }
 
+private val SPEED_BLUE = Color(0xFF0EA5E9)   // matches the map route polyline
+private val SPEED_YELLOW = Color(0xFFF59E0B)
+private val SPEED_RED = Color(0xFFEF4444)
+
 @Composable
-private fun SpeedingSummaryRow(speedingSummary: SpeedingSummary?) {
-    val color = if (speedingSummary != null) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp))
-                .background(color.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.Speed, contentDescription = null, tint = color)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Speeding", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
-            if (speedingSummary == null) {
+private fun SpeedingSummaryRow(speedingSummary: SpeedingSummary?, points: List<TrackPoint>) {
+    val color = if (speedingSummary != null) SPEED_RED else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp))
+                    .background(color.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Speed, contentDescription = null, tint = color)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Speeding", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
                 Text(
-                    "No notable speeding detected on covered roads.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    "${Format.duration(speedingSummary.speedingDurationS)} over the limit (${speedingSummary.percentText()} of covered drive)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "Peak: ${Format.speedKmh(speedingSummary.peakSpeedKmh)} in a ${Format.speedKmh(speedingSummary.peakLimitKmh)} zone",
+                    if (speedingSummary == null) "No notable speeding on covered roads."
+                    else "${Format.duration(speedingSummary.speedingDurationS)} over the limit",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+        // The trip as a blue line, turning yellow (0-10 over) / red (10+ over) where you sped.
+        SpeedTierSparkline(points)
+        if (speedingSummary != null) {
+            PeakVsLimitBar(speedingSummary.peakSpeedKmh, speedingSummary.peakLimitKmh)
+        }
+    }
+}
+
+/** Thin strip spanning the whole trip, coloured by per-point over-limit tier. */
+@Composable
+private fun SpeedTierSparkline(points: List<TrackPoint>) {
+    val tiers = remember(points) { points.map { SpeedTier.of(it.speedKmh, it.speedLimitKmh) } }
+    Canvas(modifier = Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp))) {
+        val w = size.width; val h = size.height
+        val n = tiers.size
+        if (n < 2) { drawRect(SPEED_BLUE, size = size); return@Canvas }
+        for (i in 0 until n - 1) {
+            val tier = SpeedTier.worse(tiers[i], tiers[i + 1])
+            val col = when (tier) {
+                SpeedTier.Tier.RED -> SPEED_RED
+                SpeedTier.Tier.YELLOW -> SPEED_YELLOW
+                SpeedTier.Tier.NONE -> SPEED_BLUE
+            }
+            val x0 = w * i / (n - 1)
+            val x1 = w * (i + 1) / (n - 1)
+            drawRect(col, topLeft = Offset(x0, 0f), size = Size(x1 - x0 + 1f, h))
+        }
+    }
+}
+
+/** Peak speed against the limit: blue up to the limit, red for the overage, with a numeric caption. */
+@Composable
+private fun PeakVsLimitBar(peakKmh: Double, limitKmh: Double) {
+    val maxV = (maxOf(peakKmh, limitKmh) * 1.12).coerceAtLeast(1.0)
+    val limitFrac = (limitKmh / maxV).toFloat().coerceIn(0.02f, 0.98f)
+    val peakFrac = (peakKmh / maxV).toFloat().coerceIn(limitFrac + 0.01f, 1f)
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f))
+        ) {
+            Box(modifier = Modifier.weight(limitFrac).fillMaxHeight().background(SPEED_BLUE))
+            Box(modifier = Modifier.weight(peakFrac - limitFrac).fillMaxHeight().background(SPEED_RED))
+            val rest = 1f - peakFrac
+            if (rest > 0f) Box(modifier = Modifier.weight(rest).fillMaxHeight())
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                "Peak ${Format.speedKmh(peakKmh)}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = SPEED_RED
+            )
+            Text(
+                "limit ${Format.speedKmh(limitKmh)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -1097,6 +1148,7 @@ private fun DrivingEventSummaryRow(summary: DrivingEventSummary, points: List<Tr
     val point = points.getOrNull(nearestPointIndex(points, summary.strongest.tMs))
     val speed = point?.let { Format.speedKmh(it.speedKmh) }
     val g = summary.strongest.magnitude / 9.80665
+    val frac = (g / drivingRefG(summary.strongest.type)).toFloat().coerceIn(0.06f, 1f)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1109,21 +1161,48 @@ private fun DrivingEventSummaryRow(summary: DrivingEventSummary, points: List<Tr
         ) {
             Icon(summary.icon, contentDescription = null, tint = summary.color)
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(summary.label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = summary.color)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(summary.label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = summary.color)
+                CountPips(summary.count, summary.color)
+            }
+            // Intensity bar: strongest event's g relative to a "very hard" reference for its type.
+            Box(
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f))
+            ) {
+                Box(modifier = Modifier.fillMaxWidth(frac).height(6.dp).clip(RoundedCornerShape(3.dp)).background(summary.color))
+            }
             Text(
-                buildString {
-                    append(summary.count)
-                    append(if (summary.count == 1) " notable moment" else " notable moments")
-                    append(" | strongest ")
-                    append("%.2fg".format(g))
-                    if (speed != null) append(" at $speed")
-                },
+                "strongest ${"%.2fg".format(g)}" + (speed?.let { " at $it" } ?: ""),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
+}
+
+/** Count shown as up to 5 dots plus the number, in the event's colour. */
+@Composable
+private fun CountPips(count: Int, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(count.coerceAtMost(5)) {
+            Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(color))
+        }
+        Text("$count", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = color)
+    }
+}
+
+/** "Very hard" g reference per event type — the point at which the intensity bar reads full. */
+private fun drivingRefG(type: EventType): Double = when (type) {
+    EventType.BRAKE -> 0.65
+    EventType.ACCEL -> 0.55
+    EventType.CORNER, EventType.SWERVE -> 0.65
+    EventType.POTHOLE -> 0.6
 }
 
 @Composable

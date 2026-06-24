@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.52 (build 63)** · Branch `main` (Rev O)_
+_Last updated: 2026-06-24 · App version **2.55 (build 66)** · Branch `main` (Rev R)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -263,6 +263,11 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
   normal city turns (needs a stored field). See memory `field-test-2026-06-24-trips-845-847`.
 - **O8 — Peak-over speeding** has no minimum-run-length requirement (a brief snap can set the peak).
   Smoothing of isolated limit mismatches exists; a run-length guard would harden it further.
+- **O9 — Rough stretches aren't mappable.** `MotionFusion` stores `roughStretchCount`/`bumpyScore`/
+  `roughRoadPct` as aggregates only (no per-stretch geometry), unlike potholes (timestamped `POTHOLE`
+  events). To label rough stretches on the map like potholes, the analyzer would need to emit stretch
+  segments (time ranges / a per-point rough flag); only newly re-analyzed trips with raw motion still
+  present would populate. Deferred from the Rev P–R UI overhaul by request — revisit with new field data.
 
 ---
 
