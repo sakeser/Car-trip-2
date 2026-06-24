@@ -1,6 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.58 (build 69)** · Branch `main` (Rev T)_
+_Last updated: 2026-06-24 · App version **2.59 (build 70)** · Branch `main` (Rev U — built, not yet
+installed: the auto-recording first cut needs on-device verification)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -18,15 +19,18 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
   on `main`. **Convention: after each rev, `git branch -f rev-g-functional main` then push both.**
   (Pushing to `main` needs explicit per-turn user authorization — the owner has authorized the ongoing
   ship-and-push workflow for this project.)
-- Installed on the Samsung **S25 (SM_S931W)** as **2.58/69** (Rev T). Device reachable via adb, but it
-  **auto-locks fast** and you can't unlock it — ask the owner to keep it unlocked for any UI-verify pass.
-- **66 unit tests**, all green. Room schema **v17** (no schema change Rev G→T; the recent work is
-  detector/scoring, the fuel + geocoding features (both schema-free), and a large UI overhaul).
+- Installed on the Samsung **S25 (SM_S931W)** as **2.58/69** (Rev T). **Rev U (v2.59/70) is built but
+  NOT installed** — no device this session; the owner installs/tests within the hour. Device auto-locks
+  fast and you can't unlock it — ask the owner to keep it unlocked for any UI-verify pass.
+- **73 unit tests**, all green. Room schema **v17** (no schema change Rev G→U; recent work is
+  detector/scoring, the fuel + geocoding features (both schema-free), a large UI overhaul, and the
+  auto-recording trigger).
 - **Recent arc:** Rev K–M = field-test detector/scoring calibration; **Rev N** = fuel/trip-cost;
   **Rev O** = reverse-geocoded names (`GeoNamer`); **Rev P/Q/R** = 3-part trip-detail + past-trips
   **UI overhaul**; **Rev S** = UI polish (ETA range band, peak-speed gauge, fuel card); **Rev T** =
-  hybrid fuel defaults + past-trips list/map polish. **Next: auto-recording trigger (Rev U) — IN
-  PROGRESS** (see §9.2); the owner is driving a hybrid 2023 Tucson, phone wireless-charging on a mount.
+  hybrid fuel defaults + past-trips list/map polish; **Rev U** = **auto-recording trigger first cut**
+  (charging/Bluetooth → provisional record + motion-confirm + stop-grace). The owner drives a hybrid
+  2023 Tucson, phone wireless-charging on a mount. **Rev U needs on-device verification (§9.1).**
 - The separate UX-redesign worktree (`C:\Users\sinan\OneDrive\Desktop\cartrip`, branch
   `ux-redesign-v1`) is **untouched and unrelated** — do not merge it in.
 - ⚠️ **Source-encoding trap:** this Windows build mojibakes non-ASCII **string literals** in BOM-less
@@ -171,6 +175,12 @@ Full detail in `REV_HISTORY.md`. Condensed:
   polish: **full-width single-line titles** (geocoded "A → B" no longer wraps), **"Speed"→"Pace"** header
   (`softWrap=false`), **bigger frozen map** (264 dp, 6 dp side padding), start/end markers **smaller (72 px)
   + semi-transparent (alpha 0.7)**, replay car **on top** (`zIndex=10`). All six verified on device.
+- **Rev U (2.59) — built, not yet device-tested:** hands-free **auto-recording**. Pure
+  `record/AutoRecordPolicy` (+7 tests) + `AutoRecordPrefs` + `AutoRecordController` +
+  `PowerConnectionReceiver` / `CarBluetoothReceiver` (manifest) + `RecordingService.ACTION_AUTO_ARM`
+  (provisional record, 45 s motion-confirm, silent discard if it never moved) / `ACTION_AUTO_STOP_GRACE`
+  (+ `ACTION_CHARGING_RESUMED`) + `ui/AutoRecordScreen` (Home → Sensors icon). Charging is the primary
+  trigger; Bluetooth optional. **Verify the Android 12+ background-FGS-start path on device — see §9.1.**
 
 ---
 
@@ -265,7 +275,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (66 tests)
+## 7. Test suite (73 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -276,7 +286,8 @@ Files: `AutoStopTest`, `FusedEventDetectorTest` (8: peak-percentile, corner-veto
 maneuver-peak magnitude), `DisplayEventsTest`, `TripAnalyzerTest`, `MotionFusionTest`, `GnssQualityTest`,
 `SpeedTierTest`, `TilesTest`, `TripBucketsTest`, `TripLabelerTest`, `GeoAndPolylineTest`,
 `DisplayEventsTest` (8), `GeoNamerTest` (9: pickName / composeLabel), `FuelEstimatorTest` (5),
-`TripScoresTest` (3: fused drives Safety / cap / GPS-fallback). All pure-JVM (no Robolectric/instrumented).
+`TripScoresTest` (3: fused drives Safety / cap / GPS-fallback), `AutoRecordPolicyTest` (7: trigger /
+arm / stop / wireless / Bluetooth gating). All pure-JVM (no Robolectric/instrumented).
 
 Gaps: no instrumented/Room/Compose tests; network paths (Overpass, Routes, Sheets) and the
 GnssStatus reading are not unit-tested (verified manually/on-device).
@@ -326,9 +337,9 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
-1. **Auto-recording trigger (Rev U) — IN PROGRESS.** Hands-free start/stop so the owner never taps
-   Start. Context: the phone is **always wireless-charging on a mount in the owner's 2023 Tucson** and
-   pairs to the car over Bluetooth/Android Auto. Architecture being built:
+1. **Auto-recording trigger (Rev U) — FIRST CUT BUILT (v2.59), VERIFY ON DEVICE.** Hands-free start/stop
+   so the owner never taps Start. Context: the phone is **always wireless-charging on a mount in the
+   owner's 2023 Tucson** and pairs to the car over Bluetooth/Android Auto. Shipped architecture:
    - **`record/AutoRecordPrefs.kt`** (SharedPreferences `cartrip_autorecord`): `enabled` (default off),
      `requireCharging`, `useBluetooth`, `carBtAddress`/`carBtName`, `minSpeedKmh` (≈5), `stopGraceMs` (≈8 s).
    - **`record/AutoRecordPolicy.kt`** (pure, unit-tested): inputs (enabled, charging, wireless,
@@ -348,8 +359,16 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
      degraded mode). The fully hands-free path is **`CompanionDeviceManager.startObservingDevicePresence`**
      (the OS allows it to start a FGS on device appearance) — documented as the hardening step. When the app
      is foreground, `HomeScreen.AutoTripDetection` (GPS-speed) already auto-starts.
-   - Keep manual Start/Stop intact; never auto-start with the toggle off. **No device this session — the
-     owner installs/tests within the hour; build + unit-test the pure policy and flag the FGS path.**
+   - Keep manual Start/Stop intact; never auto-start with the toggle off.
+   - **ON-DEVICE VERIFICATION CHECKLIST (next agent — this was built with no device):**
+     (a) Enable auto-record (Home → Sensors icon). Plug into the car charger + drive → does it start
+     silently, or does the "Drive detected — tap to start" notification appear (FGS-start blocked)?
+     (b) Unplug → does it stop after ~8 s? (c) Plug in while parked (no driving) → confirm the
+     provisional trip is **discarded** after 45 s (no junk trip in Past Trips). (d) If (a) falls back to
+     the notification, implement `CompanionDeviceManager.startObservingDevicePresence` for true hands-free
+     start. (e) Check whether `ACL_CONNECTED` reaches `CarBluetoothReceiver` from the manifest on Android
+     14; if not, register it at runtime. (f) Grant the notification + (if BT) `BLUETOOTH_CONNECT`
+     permissions. Tune `MIN_SPEED_KMH` / `MOTION_CONFIRM_MS` / `STOP_GRACE_MS` in `AutoRecordPrefs`.
 2. **Dead-code cleanup (O5).** Unused composables in `TripDetailScreen.kt` (`FactorBar`, `FactorCell`,
    `TripLinksCard`, `ScorePanel`, `ScoreMeter`, `ReplayControls`, the `ActionButton` cluster) + stale
    helpers. Guided by compiler "unused" warnings; verify the screen still builds + renders.

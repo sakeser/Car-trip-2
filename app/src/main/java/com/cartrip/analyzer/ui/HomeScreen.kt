@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.LocalGasStation
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Stop
@@ -70,6 +71,7 @@ fun HomeScreen(
     onOpenGuide: () -> Unit,
     onOpenDebug: () -> Unit,
     onOpenVehicle: () -> Unit = {},
+    onOpenAutoRecord: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val live by RecordingState.state.collectAsStateWithLifecycle()
@@ -107,6 +109,9 @@ fun HomeScreen(
             }
             IconButton(onClick = onOpenVehicle) {
                 Icon(Icons.Filled.LocalGasStation, contentDescription = "Vehicle & fuel")
+            }
+            IconButton(onClick = onOpenAutoRecord) {
+                Icon(Icons.Filled.Sensors, contentDescription = "Auto-record")
             }
         }
 

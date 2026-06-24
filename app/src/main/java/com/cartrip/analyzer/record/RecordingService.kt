@@ -114,6 +114,10 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     // the moment the car actually came to rest, instead of trimming to a fixed grace.
     private val recentSpeedTrack = ArrayDeque<Pair<Long, Double>>()
     private var autoStopRequested = false
+    // Auto-record (Rev U): this trip was auto-armed; motion-confirm + stop-grace timers.
+    @Volatile private var autoStarted = false
+    private var motionConfirmJob: Job? = null
+    private var graceStopJob: Job? = null
     private var locationSampleCount = 0
     private var motionSampleCount = 0
     private var lastLocationAtWall = 0L
@@ -151,7 +155,10 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopRecording()
-            else -> startRecording()
+            ACTION_AUTO_ARM -> autoArm()
+            ACTION_AUTO_STOP_GRACE -> autoStopGrace()
+            ACTION_CHARGING_RESUMED -> { graceStopJob?.cancel(); graceStopJob = null }
+            else -> { autoStarted = false; startRecording() }
         }
         return START_NOT_STICKY
     }
@@ -286,6 +293,59 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 RecordingState.completeTrip(finishedId)
             }
             withContext(Dispatchers.Main) {
+                stopForegroundCompat()
+                stopSelf()
+            }
+        }
+    }
+
+    /** Auto-record: start a provisional trip and confirm real motion before keeping it. */
+    private fun autoArm() {
+        if (recording) { graceStopJob?.cancel(); graceStopJob = null; return }
+        autoStarted = true
+        startRecording()
+        motionConfirmJob?.cancel()
+        motionConfirmJob = scope.launch {
+            delay(AutoRecordPrefs.MOTION_CONFIRM_MS)
+            withContext(Dispatchers.Main) {
+                if (recording && autoStarted && maxSpeedMps * 3.6 < AutoRecordPrefs.MIN_SPEED_KMH) {
+                    discardRecording()
+                }
+            }
+        }
+    }
+
+    /** In-car trigger dropped: stop after a grace, unless charging resumes first (CHARGING_RESUMED). */
+    private fun autoStopGrace() {
+        if (!recording || !autoStarted) return
+        graceStopJob?.cancel()
+        graceStopJob = scope.launch {
+            delay(AutoRecordPrefs.STOP_GRACE_MS)
+            withContext(Dispatchers.Main) { if (recording) stopRecording() }
+        }
+    }
+
+    /** Tear down a provisional recording that never moved — delete it silently (no saved trip). */
+    private fun discardRecording() {
+        if (!recording) return
+        recording = false
+        autoStarted = false
+        tickerJob?.cancel()
+        motionConfirmJob?.cancel()
+        try { sensorManager.unregisterListener(this) } catch (_: Exception) {}
+        try { if (usingFused) locationCallback?.let { fusedClient?.removeLocationUpdates(it) } } catch (_: Exception) {}
+        try { locationManager.removeUpdates(this) } catch (_: Exception) {}
+        unregisterGnss()
+        val discardId = tripId
+        scope.launch {
+            val dao = db.tripDao()
+            runCatching {
+                dao.deleteDriveEvents(discardId); dao.deleteAnalysisPoints(discardId)
+                dao.deleteMotions(discardId); dao.deleteLocations(discardId)
+                dao.deleteGnssSamples(discardId); dao.deleteTrip(discardId)
+            }
+            withContext(Dispatchers.Main) {
+                RecordingState.reset()
                 stopForegroundCompat()
                 stopSelf()
             }
@@ -883,7 +943,12 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     companion object {
         const val ACTION_START = "com.cartrip.analyzer.START"
         const val ACTION_STOP = "com.cartrip.analyzer.STOP"
-        private const val CHANNEL_ID = "trip_recording"
+        // Auto-recording (Rev U): arm a provisional trip on an in-car trigger, confirm motion, and
+        // stop on a grace timer when the trigger drops (cancelled by CHARGING_RESUMED).
+        const val ACTION_AUTO_ARM = "com.cartrip.analyzer.AUTO_ARM"
+        const val ACTION_AUTO_STOP_GRACE = "com.cartrip.analyzer.AUTO_STOP_GRACE"
+        const val ACTION_CHARGING_RESUMED = "com.cartrip.analyzer.CHARGING_RESUMED"
+        const val CHANNEL_ID = "trip_recording"
         private const val NOTIF_ID = 42
         private const val MAX_SPEED = 75.0 // m/s (~270 km/h) plausibility cap
         private const val LOCATION_INTERVAL_MS = 500L

@@ -7,7 +7,8 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.58`, `versionCode=69`
+- Installed on S25: `versionName=2.58`, `versionCode=69` (Rev U **v2.59/70 built but NOT yet installed** —
+  owner installs/tests within the hour; no device was connected during Rev U).
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +23,39 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev U (v2.59): hands-free auto-recording trigger — FIRST CUT (not yet device-tested)
+
+Auto start/stop so the owner never taps Start (the phone always wireless-charges on a mount in the
+hybrid Tucson). **Built + unit-tested with no device connected — the owner installs/tests within the
+hour; the Android background-FGS path MUST be verified on device (see caveat).**
+
+- **`record/AutoRecordPolicy.kt`** (pure, 7 unit tests): `triggerPresent` / `shouldArm` / `shouldStop`
+  from booleans (enabled, charging, wireless, carBtConnected, recording). Charging is the primary in-car
+  signal; Bluetooth (a specific car device) optional; `requireWireless` ignores wired charging at home.
+- **`record/AutoRecordPrefs.kt`** (SharedPreferences `cartrip_autorecord`): enabled (default off),
+  requireCharging, requireWireless, useBluetooth, carBtAddress/Name; service consts MIN_SPEED_KMH=5,
+  MOTION_CONFIRM_MS=45 000, STOP_GRACE_MS=8 000.
+- **`record/AutoRecordController.kt`**: reads live battery + config, applies the policy, drives the
+  service. Wraps `startForegroundService` in try/catch; on failure posts a **"Drive detected — tap to
+  start"** notification (a tap is a user interaction that DOES allow the FGS start).
+- **Receivers** (manifest, `exported=false`): `PowerConnectionReceiver`
+  (`ACTION_POWER_CONNECTED/DISCONNECTED`) and `CarBluetoothReceiver` (`ACL_CONNECTED/DISCONNECTED`,
+  inert until a car device is picked — matches by address, no `BLUETOOTH_CONNECT` needed to read it).
+- **`RecordingService`**: `ACTION_AUTO_ARM` records **provisionally** and runs a 45 s motion-confirm —
+  if speed never reaches 5 km/h it **silently discards** the trip (deletes all rows, `RecordingState.reset`,
+  no junk trip from charging-while-parked). `ACTION_AUTO_STOP_GRACE` stops after 8 s unless
+  `ACTION_CHARGING_RESUMED` cancels it. Manual Start/Stop untouched (`autoStarted=false`).
+- **`ui/AutoRecordScreen.kt`** (Home → Sensors icon): enable toggle, require-wireless, use-Bluetooth +
+  paired-device picker, and a note about the background-start limitation.
+- Manifest: two receivers + `BLUETOOTH_CONNECT`.
+
+⚠️ **Open / verify on device:** (1) Android 12+ throws `ForegroundServiceStartNotAllowedException` when a
+`location` FGS is started from a background receiver — confirm whether the charge-connect path silently
+starts or falls back to the tap-to-start notification; the hands-free fix is
+`CompanionDeviceManager.startObservingDevicePresence`. (2) Whether `ACL_CONNECTED` reaches a manifest
+receiver on Android 14 (may need runtime registration). (3) End-to-end: plug in + drive → records;
+unplug → stops after grace; plug while parked → discards. 7 tests added (73 total). Build green.
 
 ## Rev T (v2.58): hybrid fuel defaults + Past-Trips list/map polish
 
