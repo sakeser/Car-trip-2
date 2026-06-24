@@ -6,7 +6,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 object Format {
-    private val dateFmt = SimpleDateFormat("EEE d MMM, HH:mm", Locale.getDefault())
+    private val dateFmt = SimpleDateFormat("EEE d MMM, h:mm a", Locale.getDefault())
 
     fun distance(meters: Double): String =
         if (meters < 1000) String.format(Locale.US, "%.0f m", meters)
@@ -47,7 +47,7 @@ object Format {
 
     fun dateTime(epochMs: Long): String = dateFmt.format(Date(epochMs))
 
-    private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+    private val timeFmt = SimpleDateFormat("h:mm a", Locale.getDefault())
     private val dayFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
     fun timeOfDay(epochMs: Long): String = timeFmt.format(Date(epochMs))

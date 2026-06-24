@@ -2,6 +2,7 @@ package com.cartrip.analyzer.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -56,6 +60,7 @@ fun TripListScreen(
 ) {
     val trips by viewModel.trips.collectAsStateWithLifecycle()
     var showClearAllDialog by remember { mutableStateOf(false) }
+    val collapsedBuckets = remember { mutableStateListOf<TripBuckets.Bucket>() }
     val heatPoints by produceState(initialValue = emptyList<AnalysisPointEntity>(), trips) {
         value = viewModel.loadHeatmapPoints(30)
     }
@@ -135,16 +140,36 @@ fun TripListScreen(
                 }
                 item { TripListHeader() }
                 val maxDurationS = trips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
-                itemsIndexed(trips, key = { _, t -> t.id }) { index, trip ->
-                    TripRow(
-                        number = index + 1,
-                        trip = trip,
-                        label = tripLabels[trip.id] ?: "Trip",
-                        maxDurationS = maxDurationS,
-                        onClick = { onOpen(trip.id) },
-                        onRename = { newName -> viewModel.renameTrip(trip.id, newName) },
-                        onDelete = { viewModel.deleteTrip(trip.id) }
-                    )
+                val grouped = TripBuckets.group(trips)
+                var runningOffset = 0
+                grouped.forEach { (bucket, bucketTrips) ->
+                    val startNumber = runningOffset
+                    runningOffset += bucketTrips.size
+                    val expanded = bucket !in collapsedBuckets
+                    item(key = "hdr_${bucket.name}") {
+                        SectionHeader(
+                            label = bucket.label,
+                            count = bucketTrips.size,
+                            expanded = expanded,
+                            onToggle = {
+                                if (bucket in collapsedBuckets) collapsedBuckets.remove(bucket)
+                                else collapsedBuckets.add(bucket)
+                            }
+                        )
+                    }
+                    if (expanded) {
+                        itemsIndexed(bucketTrips, key = { _, t -> t.id }) { index, trip ->
+                            TripRow(
+                                number = startNumber + index + 1,
+                                trip = trip,
+                                label = tripLabels[trip.id] ?: "Trip",
+                                maxDurationS = maxDurationS,
+                                onClick = { onOpen(trip.id) },
+                                onRename = { newName -> viewModel.renameTrip(trip.id, newName) },
+                                onDelete = { viewModel.deleteTrip(trip.id) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -365,6 +390,35 @@ private fun SampleBadge() {
             .background(Color(0x1A6366F1))
             .padding(horizontal = 6.dp, vertical = 1.dp)
     )
+}
+
+@Composable
+private fun SectionHeader(label: String, count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (expanded) "Collapse" else "Expand",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "$count",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable
