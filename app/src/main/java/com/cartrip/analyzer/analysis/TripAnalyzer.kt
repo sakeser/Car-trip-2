@@ -95,6 +95,9 @@ data class DriveMetrics(
     val roughRoadPct: Double = 0.0,
     val potholeCount: Int = 0,
     val harshStopCount: Int = 0,
+    // Discrete rough-road episodes (>=1 s sustained bumpiness) and an integrated bumpiness score.
+    val roughStretchCount: Int = 0,
+    val bumpyScore: Double = 0.0,
     // Parallel sensor-fused event detector (accelerometer forward axis + gyro yaw), for comparison
     // against the GPS detector. Not used in scoring yet. Confidence 0..1 = how well the car's
     // forward axis could be inferred from the phone's pose.
@@ -321,6 +324,8 @@ object TripAnalyzer {
             roughRoadPct = fusion.roughRoadPct,
             potholeCount = fusion.potholeCount,
             harshStopCount = fusion.harshStopCount,
+            roughStretchCount = fusion.roughStretchCount,
+            bumpyScore = fusion.bumpyScore,
             motionBrakeCount = fused.brakeCount,
             motionAccelCount = fused.accelCount,
             motionTurnCount = fused.turnCount,

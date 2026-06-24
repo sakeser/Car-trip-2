@@ -1137,7 +1137,8 @@ private fun SyncStatusRow(trip: TripEntity, syncing: Boolean, onSync: () -> Unit
 @Composable
 private fun RoadRideCard(trip: TripEntity) {
     // Only meaningful for real trips that carried accelerometer + gravity data.
-    val hasData = trip.potholeCount > 0 || trip.roughRoadPct > 0.0 || trip.harshStopCount > 0
+    val hasData = trip.potholeCount > 0 || trip.roughStretchCount > 0 || trip.harshStopCount > 0 ||
+        trip.roughRoadPct > 0.0
     if (!hasData) return
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1152,7 +1153,7 @@ private fun RoadRideCard(trip: TripEntity) {
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RoadCell("Potholes / bumps", trip.potholeCount.toString(), Color(0xFF78716C), Modifier.weight(1f))
-                RoadCell("Rough road", "${"%.0f".format(trip.roughRoadPct * 100)}%", Color(0xFFF59E0B), Modifier.weight(1f))
+                RoadCell("Rough stretches", trip.roughStretchCount.toString(), Color(0xFFF59E0B), Modifier.weight(1f))
                 RoadCell("Harsh stops", trip.harshStopCount.toString(), Color(0xFFEF4444), Modifier.weight(1f))
             }
         }

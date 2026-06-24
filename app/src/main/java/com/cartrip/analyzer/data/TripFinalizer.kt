@@ -70,6 +70,8 @@ object TripFinalizer {
             roughRoadPct = metrics.roughRoadPct,
             potholeCount = metrics.potholeCount,
             harshStopCount = metrics.harshStopCount,
+            roughStretchCount = metrics.roughStretchCount,
+            bumpyScore = metrics.bumpyScore,
             motionBrakeCount = metrics.motionBrakeCount,
             motionAccelCount = metrics.motionAccelCount,
             motionTurnCount = metrics.motionTurnCount,

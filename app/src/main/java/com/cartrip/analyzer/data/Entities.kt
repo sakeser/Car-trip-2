@@ -66,6 +66,8 @@ data class TripEntity(
     val roughRoadPct: Double = 0.0,
     val potholeCount: Int = 0,
     val harshStopCount: Int = 0,
+    val roughStretchCount: Int = 0,
+    val bumpyScore: Double = 0.0,
     // Parallel sensor-fused event detector counts (for comparison vs GPS; not scored yet).
     val motionBrakeCount: Int = 0,
     val motionAccelCount: Int = 0,

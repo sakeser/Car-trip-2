@@ -25,6 +25,9 @@ object MotionFusion {
     private const val POTHOLE_GAP_MS = 800L      // debounce repeated samples of one impact
     private const val ROUGH_RMS = 0.9            // windowed vertical RMS → "rough road"
     private const val ROUGH_WINDOW_MS = 3000L
+    // Discrete "rough stretch" detection: 1 s windows; a run of consecutive rough windows (>=1 s)
+    // is one stretch. bumpyScore integrates vertical RMS over rough time (bumpiness x duration).
+    private const val STRETCH_WINDOW_MS = 1000L
     private const val MOVING_KMH = 8.0           // only judge road/potholes while actually moving
     private const val HARSH_STOP_JERK = 3.0      // horizontal jerk (m/s^3) just before a stop → harsh
 
@@ -32,10 +35,12 @@ object MotionFusion {
         val events: List<DriveEvent>,            // POTHOLE events (timestamped, mappable)
         val roughRoadPct: Double,                // fraction of moving time on rough/vibrating road
         val potholeCount: Int,
-        val harshStopCount: Int
+        val harshStopCount: Int,
+        val roughStretchCount: Int = 0,          // discrete >=1 s sustained-bumpy episodes
+        val bumpyScore: Double = 0.0             // integral of vertical RMS over rough time
     ) {
         companion object {
-            val EMPTY = Result(emptyList(), 0.0, 0, 0)
+            val EMPTY = Result(emptyList(), 0.0, 0, 0, 0, 0.0)
         }
     }
 
@@ -79,19 +84,31 @@ object MotionFusion {
             }
         }
 
-        // Rough road: windowed vertical RMS while moving.
+        // Rough road: 1 s windows of vertical RMS while moving. Track the rough fraction (kept for
+        // compatibility), plus discrete rough *stretches* (runs of consecutive rough windows) and a
+        // bumpyScore = sum of vertical RMS over rough time (bumpiness x duration).
         var roughMs = 0L
         var movingMs = 0L
+        var roughStretchCount = 0
+        var bumpyScore = 0.0
+        var inStretch = false
         var idx = 0
         var winStart = acc.first().t
         val end = acc.last().t
         while (winStart <= end && idx < acc.size) {
-            val winEnd = winStart + ROUGH_WINDOW_MS
+            val winEnd = winStart + STRETCH_WINDOW_MS
             var sum = 0.0; var cnt = 0
             while (idx < acc.size && acc[idx].t < winEnd) { sum += acc[idx].vertical * acc[idx].vertical; cnt++; idx++ }
-            if (cnt > 0 && speedAt(winStart + ROUGH_WINDOW_MS / 2) >= MOVING_KMH) {
-                movingMs += ROUGH_WINDOW_MS
-                if (sqrt(sum / cnt) >= ROUGH_RMS) roughMs += ROUGH_WINDOW_MS
+            val moving = cnt > 0 && speedAt(winStart + STRETCH_WINDOW_MS / 2) >= MOVING_KMH
+            val rms = if (cnt > 0) sqrt(sum / cnt) else 0.0
+            val rough = moving && rms >= ROUGH_RMS
+            if (moving) movingMs += STRETCH_WINDOW_MS
+            if (rough) {
+                roughMs += STRETCH_WINDOW_MS
+                if (!inStretch) { roughStretchCount++; inStretch = true }
+                bumpyScore += rms * (STRETCH_WINDOW_MS / 1000.0)
+            } else {
+                inStretch = false
             }
             winStart = winEnd
         }
@@ -118,6 +135,6 @@ object MotionFusion {
             }
         }
 
-        return Result(events, roughRoadPct, events.size, harshStopCount)
+        return Result(events, roughRoadPct, events.size, harshStopCount, roughStretchCount, bumpyScore)
     }
 }

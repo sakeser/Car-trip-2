@@ -18,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CachedTileEntity::class,
         GnssSample::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,7 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
                         MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
-                        MIGRATION_15_16
+                        MIGRATION_15_16, MIGRATION_16_17
                     )
                     .build()
                     .also { INSTANCE = it }
@@ -253,6 +253,13 @@ abstract class AppDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 database.execSQL("CREATE INDEX IF NOT EXISTS `index_gnss_samples_tripId` ON `gnss_samples` (`tripId`)")
+            }
+        }
+
+        private val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE `trips` ADD COLUMN `roughStretchCount` INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE `trips` ADD COLUMN `bumpyScore` REAL NOT NULL DEFAULT 0")
             }
         }
     }
