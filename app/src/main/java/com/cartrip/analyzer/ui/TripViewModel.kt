@@ -104,6 +104,13 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         }.exceptionOrNull()?.message
     }
 
+    /** Lightweight route (stored analysis points) for the Past Trips map preview. */
+    suspend fun loadRoute(id: Long): List<TrackPoint> = withContext(Dispatchers.IO) {
+        dao.getAnalysisPoints(id).map {
+            TrackPoint(it.t, it.lat, it.lon, it.speedKmh, it.longAccel, it.latAccel, it.speedLimitKmh)
+        }
+    }
+
     suspend fun loadHeatmapPoints(days: Int): List<AnalysisPointEntity> = withContext(Dispatchers.IO) {
         val cutoff = System.currentTimeMillis() - days * 24L * 60L * 60L * 1000L
         dao.getAnalysisPointsSince(cutoff)

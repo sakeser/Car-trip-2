@@ -47,7 +47,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.TripEntity
 
@@ -61,11 +63,16 @@ fun TripListScreen(
     val trips by viewModel.trips.collectAsStateWithLifecycle()
     var showClearAllDialog by remember { mutableStateOf(false) }
     val collapsedBuckets = remember { mutableStateListOf<TripBuckets.Bucket>() }
+    // First tap selects (preview route on the frozen map); second tap on the same trip opens it.
+    var selectedTripId by remember { mutableStateOf<Long?>(null) }
     val heatPoints by produceState(initialValue = emptyList<AnalysisPointEntity>(), trips) {
         value = viewModel.loadHeatmapPoints(30)
     }
     val tripLabels by produceState(initialValue = emptyMap<Long, String>(), trips) {
         value = viewModel.loadTripLabels(trips)
+    }
+    val selectedRoute by produceState(initialValue = emptyList<TrackPoint>(), selectedTripId) {
+        value = selectedTripId?.let { viewModel.loadRoute(it) } ?: emptyList()
     }
 
     Scaffold(
@@ -99,75 +106,78 @@ fun TripListScreen(
                 )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    Text(
-                        "Last 30 days",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                    if (heatPoints.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(240.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                        ) {
-                            TripHeatMap(
-                                points = heatPoints,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                // Frozen map: previews the selected trip's route, else the 30-day heatmap.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .height(240.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    if (selectedTripId != null && selectedRoute.size >= 2) {
+                        TripMap(points = selectedRoute, events = emptyList(), modifier = Modifier.fillMaxSize())
+                    } else if (heatPoints.isNotEmpty()) {
+                        TripHeatMap(points = heatPoints, modifier = Modifier.fillMaxSize())
                     } else {
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
+                            modifier = Modifier.fillMaxSize(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Text(
-                                "No analyzed route data yet.",
-                                modifier = Modifier.padding(16.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                Text("No route data yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
-                item { TripListHeader() }
+                Text(
+                    if (selectedTripId == null) "Tap a trip to preview its route · tap again to open"
+                    else "Tap again to open · tap another to preview",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
                 val maxDurationS = trips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
                 val grouped = TripBuckets.group(trips)
-                var runningOffset = 0
-                grouped.forEach { (bucket, bucketTrips) ->
-                    val startNumber = runningOffset
-                    runningOffset += bucketTrips.size
-                    val expanded = bucket !in collapsedBuckets
-                    item(key = "hdr_${bucket.name}") {
-                        SectionHeader(
-                            label = bucket.label,
-                            count = bucketTrips.size,
-                            expanded = expanded,
-                            onToggle = {
-                                if (bucket in collapsedBuckets) collapsedBuckets.remove(bucket)
-                                else collapsedBuckets.add(bucket)
-                            }
-                        )
-                    }
-                    if (expanded) {
-                        itemsIndexed(bucketTrips, key = { _, t -> t.id }) { index, trip ->
-                            TripRow(
-                                number = startNumber + index + 1,
-                                trip = trip,
-                                label = tripLabels[trip.id] ?: "Trip",
-                                maxDurationS = maxDurationS,
-                                onClick = { onOpen(trip.id) },
-                                onRename = { newName -> viewModel.renameTrip(trip.id, newName) },
-                                onDelete = { viewModel.deleteTrip(trip.id) }
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item { TripListHeader() }
+                    var runningOffset = 0
+                    grouped.forEach { (bucket, bucketTrips) ->
+                        val startNumber = runningOffset
+                        runningOffset += bucketTrips.size
+                        val expanded = bucket !in collapsedBuckets
+                        item(key = "hdr_${bucket.name}") {
+                            SectionHeader(
+                                label = bucket.label,
+                                count = bucketTrips.size,
+                                expanded = expanded,
+                                onToggle = {
+                                    if (bucket in collapsedBuckets) collapsedBuckets.remove(bucket)
+                                    else collapsedBuckets.add(bucket)
+                                }
                             )
+                        }
+                        if (expanded) {
+                            itemsIndexed(bucketTrips, key = { _, t -> t.id }) { index, trip ->
+                                TripRow(
+                                    number = startNumber + index + 1,
+                                    trip = trip,
+                                    label = tripLabels[trip.id] ?: "Trip",
+                                    maxDurationS = maxDurationS,
+                                    selected = selectedTripId == trip.id,
+                                    onClick = {
+                                        if (selectedTripId == trip.id) onOpen(trip.id)
+                                        else selectedTripId = trip.id
+                                    },
+                                    onRename = { newName -> viewModel.renameTrip(trip.id, newName) },
+                                    onDelete = { viewModel.deleteTrip(trip.id) }
+                                )
+                            }
                         }
                     }
                 }
@@ -206,6 +216,7 @@ private fun TripRow(
     trip: TripEntity,
     label: String,
     maxDurationS: Double,
+    selected: Boolean,
     onClick: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit
@@ -222,8 +233,11 @@ private fun TripRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = { showActionMenu = true }),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 4.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
@@ -278,6 +292,22 @@ private fun TripRow(
                 } else {
                     Text(
                         text = "Not finished",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (selected && finished) {
+                    val quality = TripDataQuality.from(trip)
+                    val vsGoogle = if (trip.googleEtaTrafficS > 0.0 && trip.durationS > 0.0) {
+                        val d = ((trip.durationS - trip.googleEtaTrafficS) / 60.0).roundToInt()
+                        when {
+                            d > 0 -> " · +$d min vs Google"
+                            d < 0 -> " · $d min vs Google"
+                            else -> " · on par vs Google"
+                        }
+                    } else ""
+                    Text(
+                        "${Format.timeOfDay(trip.startTime)} · ${quality.level.label} quality$vsGoogle",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
