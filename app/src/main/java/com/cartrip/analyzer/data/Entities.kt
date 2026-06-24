@@ -117,6 +117,35 @@ data class AnalysisPointEntity(
     val speedLimitKmh: Double = 0.0
 )
 
+/**
+ * Locally cached OSM speed-limit way, keyed by its stable OSM way id. Lets repeat drives reuse limits
+ * instead of re-querying Overpass. OSM data (ODbL) permits caching with attribution; we keep the
+ * source + fetch time so staleness/expiry and provenance are explicit. [geometry] is "lat,lon;..."
+ */
+@Entity(tableName = "cached_ways", indices = [Index("minLat"), Index("minLon")])
+data class CachedWayEntity(
+    @PrimaryKey val wayId: Long,
+    val limitKmh: Double,
+    val source: String,
+    val minLat: Double,
+    val minLon: Double,
+    val maxLat: Double,
+    val maxLon: Double,
+    val geometry: String,
+    val fetchedAt: Long
+)
+
+/**
+ * Records that a spatial tile's ways were fetched at [fetchedAt], so an area with few/no drivable
+ * ways isn't re-queried on every trip. Expiry is by age against this timestamp.
+ */
+@Entity(tableName = "cached_tiles")
+data class CachedTileEntity(
+    @PrimaryKey val tileKey: String,
+    val fetchedAt: Long,
+    val source: String
+)
+
 @Entity(tableName = "drive_events", indices = [Index("tripId")])
 data class DriveEventEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

@@ -2,6 +2,7 @@ package com.cartrip.analyzer.data
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -202,6 +203,34 @@ interface TripDao {
         """
     )
     suspend fun deleteRawMotionsForCompletedTripsBefore(cutoff: Long)
+
+    // --- Speed-limit cache (OSM ways + per-tile fetch markers) ---
+
+    @Query(
+        "SELECT * FROM cached_ways WHERE maxLat >= :minLat AND minLat <= :maxLat " +
+            "AND maxLon >= :minLon AND minLon <= :maxLon"
+    )
+    suspend fun cachedWaysInBounds(
+        minLat: Double, minLon: Double, maxLat: Double, maxLon: Double
+    ): List<CachedWayEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCachedWays(items: List<CachedWayEntity>)
+
+    @Query("SELECT tileKey FROM cached_tiles WHERE fetchedAt >= :freshAfter")
+    suspend fun freshTileKeys(freshAfter: Long): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCachedTiles(items: List<CachedTileEntity>)
+
+    @Query("DELETE FROM cached_ways WHERE fetchedAt < :cutoff")
+    suspend fun purgeCachedWaysBefore(cutoff: Long)
+
+    @Query("DELETE FROM cached_tiles WHERE fetchedAt < :cutoff")
+    suspend fun purgeCachedTilesBefore(cutoff: Long)
+
+    @Query("SELECT COUNT(*) FROM cached_ways")
+    suspend fun cachedWayCount(): Int
 
     @Query("SELECT COUNT(*) FROM trips")
     suspend fun tripCount(): Int

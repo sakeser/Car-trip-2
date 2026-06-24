@@ -13,9 +13,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LocationSample::class,
         MotionSample::class,
         AnalysisPointEntity::class,
-        DriveEventEntity::class
+        DriveEventEntity::class,
+        CachedWayEntity::class,
+        CachedTileEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,7 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
                         MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
-                        MIGRATION_11_12, MIGRATION_12_13
+                        MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14
                     )
                     .build()
                     .also { INSTANCE = it }
@@ -188,6 +190,37 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_12_13 = object : Migration(12, 13) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE `trips` ADD COLUMN `name` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `cached_ways` (
+                        `wayId` INTEGER PRIMARY KEY NOT NULL,
+                        `limitKmh` REAL NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `minLat` REAL NOT NULL,
+                        `minLon` REAL NOT NULL,
+                        `maxLat` REAL NOT NULL,
+                        `maxLon` REAL NOT NULL,
+                        `geometry` TEXT NOT NULL,
+                        `fetchedAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_ways_minLat` ON `cached_ways` (`minLat`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_ways_minLon` ON `cached_ways` (`minLon`)")
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `cached_tiles` (
+                        `tileKey` TEXT PRIMARY KEY NOT NULL,
+                        `fetchedAt` INTEGER NOT NULL,
+                        `source` TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
             }
         }
     }

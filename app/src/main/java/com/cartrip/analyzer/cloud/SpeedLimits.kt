@@ -1,6 +1,8 @@
 package com.cartrip.analyzer.cloud
 
 import com.cartrip.analyzer.data.AnalysisPointEntity
+import com.cartrip.analyzer.data.CachedTileEntity
+import com.cartrip.analyzer.data.CachedWayEntity
 import com.cartrip.analyzer.data.TripDao
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -40,6 +42,8 @@ object SpeedLimits {
     private const val MAX_ROUTE_SPAN_DEG = 1.2
     private const val MAX_ROUTE_BOXES = 32
     private const val MAX_BOXES_PER_QUERY = 32
+    // Cached OSM ways/tiles are reused for 30 days before re-validation (limits change rarely).
+    private const val CACHE_TTL_MS = 30L * 24L * 60L * 60L * 1000L
     private const val WAY_FILTER =
         "^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"
 
@@ -61,6 +65,11 @@ object SpeedLimits {
     @Volatile
     private var lastDiag: String = ""
     fun lastDiagnostic(): String = lastDiag
+
+    // Last cache outcome, e.g. "tiles 18/20 cached · 2 fetched · 143 ways" — for debug visibility.
+    @Volatile
+    private var lastCacheStat: String = ""
+    fun lastCacheStat(): String = lastCacheStat
 
     private data class BBox(
         val minLat: Double,
@@ -96,7 +105,9 @@ object SpeedLimits {
      */
     suspend fun refreshForTrip(dao: TripDao, tripId: Long): Result? {
         val points = dao.getAnalysisPoints(tripId)
-        val annotated = annotate(points) ?: return null
+        val annotated = annotate(points, dao) ?: return null
+        // Bound cache growth: drop ways well past their useful life (tiles will re-fetch as needed).
+        runCatching { dao.purgeCachedWaysBefore(System.currentTimeMillis() - 2 * CACHE_TTL_MS) }
         dao.getTrip(tripId)?.let { trip ->
             dao.updateTripSpeedLimits(
                 trip.copy(
@@ -110,9 +121,9 @@ object SpeedLimits {
         return annotated.result
     }
 
-    fun annotate(points: List<AnalysisPointEntity>): Annotated? {
+    suspend fun annotate(points: List<AnalysisPointEntity>, dao: TripDao? = null): Annotated? {
         if (points.size < 5) return null
-        val ways = runCatching { fetchWays(points) }.getOrNull() ?: return null
+        val ways = runCatching { fetchWays(points, dao) }.getOrNull() ?: return null
         if (ways.isEmpty()) return null
 
         val limits = smoothIsolatedLimitMismatches(points.map { nearestLimit(it.lat, it.lon, ways) })
@@ -157,14 +168,50 @@ object SpeedLimits {
 
     private fun sameLimit(a: Double, b: Double): Boolean = abs(a - b) < 0.5
 
-    private fun fetchWays(points: List<AnalysisPointEntity>): List<Way> {
+    private suspend fun fetchWays(points: List<AnalysisPointEntity>, dao: TripDao?): List<Way> {
         val routeBounds = boundsFor(points, BBOX_PAD_DEG)
         if (routeBounds.latSpan > MAX_ROUTE_SPAN_DEG || routeBounds.lonSpan > MAX_ROUTE_SPAN_DEG) {
             lastDiag = "Route is too large for one speed-limit lookup."
             return emptyList()
         }
 
-        val boxes = routeBoxes(points)
+        // No cache available (e.g. a direct call) — query the whole route as before.
+        if (dao == null) {
+            lastCacheStat = ""
+            return queryWays(routeBoxes(points)).values.toList()
+        }
+
+        // Cache-first: only Overpass-query the tiles we haven't fetched recently, then serve the
+        // whole route from the cache. A repeat drive on known roads makes zero network calls.
+        val now = System.currentTimeMillis()
+        val routeTiles = Tiles.routeTiles(points.map { it.lat to it.lon })
+        val fresh = dao.freshTileKeys(now - CACHE_TTL_MS).toHashSet()
+        val missing = routeTiles.filterNot { it in fresh }
+
+        if (missing.isNotEmpty()) {
+            val boxes = missing.map { key ->
+                val b = Tiles.bounds(key)
+                BBox(b[0] - ROUTE_BOX_PAD_DEG, b[1] - ROUTE_BOX_PAD_DEG, b[2] + ROUTE_BOX_PAD_DEG, b[3] + ROUTE_BOX_PAD_DEG)
+            }
+            val fetched = queryWays(boxes)
+            if (fetched.isNotEmpty()) {
+                dao.upsertCachedWays(fetched.values.map { it.toEntity(now) })
+            }
+            // Mark every queried tile as covered (even if it had no drivable ways), so empty areas
+            // aren't re-queried every trip.
+            dao.upsertCachedTiles(missing.map { CachedTileEntity(it, now, "overpass") })
+        }
+
+        val cached = dao.cachedWaysInBounds(
+            routeBounds.minLat, routeBounds.minLon, routeBounds.maxLat, routeBounds.maxLon
+        )
+        lastCacheStat = "tiles ${routeTiles.size - missing.size}/${routeTiles.size} cached · " +
+            "${missing.size} fetched · ${cached.size} ways"
+        return cached.map { it.toWay() }
+    }
+
+    /** Run the Overpass query for a set of boxes (chunked), deduping ways by id. */
+    private fun queryWays(boxes: List<BBox>): LinkedHashMap<Long, Way> {
         val diag = StringBuilder()
         val out = LinkedHashMap<Long, Way>()
         for (batch in boxes.chunked(MAX_BOXES_PER_QUERY)) {
@@ -172,7 +219,29 @@ object SpeedLimits {
             fetchWayBatch(body, diag).forEach { out[it.id] = it }
         }
         lastDiag = if (out.isEmpty()) diag.toString().trim() else ""
-        return out.values.toList()
+        return out
+    }
+
+    private fun Way.toEntity(now: Long): CachedWayEntity = CachedWayEntity(
+        wayId = id,
+        limitKmh = limitKmh,
+        source = "osm",
+        minLat = bounds.minLat,
+        minLon = bounds.minLon,
+        maxLat = bounds.maxLat,
+        maxLon = bounds.maxLon,
+        geometry = geom.joinToString(";") { "%.6f,%.6f".format(Locale.US, it[0], it[1]) },
+        fetchedAt = now
+    )
+
+    private fun CachedWayEntity.toWay(): Way {
+        val nodes = geometry.split(";").mapNotNull { seg ->
+            val c = seg.split(",")
+            val la = c.getOrNull(0)?.toDoubleOrNull()
+            val lo = c.getOrNull(1)?.toDoubleOrNull()
+            if (la != null && lo != null) doubleArrayOf(la, lo) else null
+        }
+        return Way(wayId, limitKmh, nodes, BBox(minLat, minLon, maxLat, maxLon))
     }
 
     private fun fetchWayBatch(body: RequestBody, diag: StringBuilder): List<Way> {
