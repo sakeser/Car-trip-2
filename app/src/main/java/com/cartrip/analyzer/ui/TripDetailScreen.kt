@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CrisisAlert
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
@@ -62,7 +63,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -280,15 +283,6 @@ fun TripDetailScreen(
 
             // --- Map + replay timeline ---
             if (a.points.size >= 2) {
-                if (shownEvents.isNotEmpty()) {
-                    EventFilterBar(
-                        events = shownEvents,
-                        selected = eventFilters,
-                        onToggle = { filter ->
-                            eventFilters = if (filter in eventFilters) eventFilters - filter else eventFilters + filter
-                        }
-                    )
-                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -302,6 +296,8 @@ fun TripDetailScreen(
                         selectedPoint = selectedPoint,
                         focusKey = focusKey,
                         onEventClick = jumpToEvent,
+                        onStartOpen = { startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") } },
+                        onStopOpen = { endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Stop") } },
                         modifier = Modifier.fillMaxSize()
                     )
                     MapActions(
@@ -323,6 +319,17 @@ fun TripDetailScreen(
                     onSelectedIndex = { selectedIndex = it.coerceIn(0, maxPointIndex) },
                     onEventJump = jumpToEvent
                 )
+                // Filter chips sit below the scrubber: they gate which event markers show on the
+                // map and timeline above.
+                if (shownEvents.isNotEmpty()) {
+                    EventFilterBar(
+                        events = shownEvents,
+                        selected = eventFilters,
+                        onToggle = { filter ->
+                            eventFilters = if (filter in eventFilters) eventFilters - filter else eventFilters + filter
+                        }
+                    )
+                }
                 selectedEvent?.let { event ->
                     EventDetailCard(
                         event = event,
@@ -522,16 +529,30 @@ private fun ReplayTimeline(
     val yellowColor = Color(0xFFF59E0B)
     val cursorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val density = LocalDensity.current
-    val point = points.getOrNull(selectedIndex)
+    // The cursor/map track selectedIndex at 60fps, but the speed + clock readouts sample at ~5 Hz
+    // (and the speed eases between samples) so the digits stay readable during autoplay.
+    val currentIndex by rememberUpdatedState(selectedIndex)
+    var displayIndex by remember(points) { mutableStateOf(selectedIndex.coerceAtMost(points.lastIndex)) }
+    LaunchedEffect(points) {
+        while (true) { displayIndex = currentIndex; delay(200) }
+    }
+    val point = points.getOrNull(displayIndex)
 
     // Auto-play the scrubber on load; manual scrubbing pauses it. Replay length scales with the trip:
-    // at least 5 s, then ~1 s per 6 min of driving (1 h trip ≈ 10 s), capped at 30 s.
+    // ~50% longer than before — 5 s up to ~20 min of driving, then ~1 s per 4 min, capped at 45 s.
     var playing by remember(points) { mutableStateOf(true) }
+    var didInitialDelay by remember(points) { mutableStateOf(false) }
     LaunchedEffect(playing, points) {
         if (!playing || points.size <= 1) return@LaunchedEffect
+        // Let the screen settle for ~1 s before the replay starts moving (once, on open).
+        if (!didInitialDelay) {
+            delay(1000)
+            didInitialDelay = true
+            if (!playing) return@LaunchedEffect
+        }
         val lastIdx = points.size - 1
         val tripMs = (points.last().tMs - points.first().tMs).coerceAtLeast(1L)
-        val totalMs = (tripMs / 360f).coerceIn(5000f, 30000f)
+        val totalMs = (tripMs / 240f).coerceIn(5000f, 45000f)
         val startFrac = (if (selectedIndex >= lastIdx) 0 else selectedIndex).toFloat() / lastIdx
         val t0 = System.currentTimeMillis()
         while (playing) {
@@ -542,7 +563,7 @@ private fun ReplayTimeline(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        val curTier = tiers.getOrNull(selectedIndex) ?: SpeedTier.Tier.NONE
+        val curTier = tiers.getOrNull(displayIndex) ?: SpeedTier.Tier.NONE
         val gaugeColor = when (curTier) {
             SpeedTier.Tier.RED -> redColor
             SpeedTier.Tier.YELLOW -> yellowColor
@@ -585,11 +606,12 @@ private fun ReplayTimeline(
                 }
             }
             if (point != null) {
-                // Average a few neighbouring points so the readout doesn't flicker during autoplay.
-                val lo = (selectedIndex - 3).coerceAtLeast(0)
-                val hi = (selectedIndex + 3).coerceAtMost(points.lastIndex)
+                // Average neighbours, then ease toward it, so the gauge glides instead of jittering.
+                val lo = (displayIndex - 3).coerceAtLeast(0)
+                val hi = (displayIndex + 3).coerceAtMost(points.lastIndex)
                 val smoothed = (lo..hi).sumOf { points[it].speedKmh } / (hi - lo + 1)
-                SpeedGauge(smoothed, maxSpeed.toDouble(), gaugeColor)
+                val animSpeed by animateFloatAsState(smoothed.toFloat(), label = "replaySpeed")
+                SpeedGauge(animSpeed.toDouble(), maxSpeed.toDouble(), gaugeColor)
             }
         }
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(60.dp)) {
@@ -685,9 +707,16 @@ private fun EventFilterBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Icon(
+            Icons.Filled.FilterList,
+            contentDescription = "Filter events",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
+        )
         Text(
-            "Show",
-            style = MaterialTheme.typography.labelSmall,
+            "Filter",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         EventFilter.values().forEach { filter ->
@@ -697,9 +726,11 @@ private fun EventFilterBar(
                     selected = filter in selected,
                     onClick = { onToggle(filter) },
                     leadingIcon = {
-                        Icon(filterIcon(filter), contentDescription = filter.label, modifier = Modifier.size(18.dp))
+                        Icon(filterIcon(filter), contentDescription = filter.label, modifier = Modifier.size(15.dp))
                     },
-                    label = { Text("$count") }
+                    label = {
+                        Text("${filter.label} $count", style = MaterialTheme.typography.labelSmall)
+                    }
                 )
             }
         }

@@ -5,11 +5,13 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import android.graphics.Typeface
 import android.graphics.Color as AndroidColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +43,8 @@ fun TripMap(
     selectedPoint: TrackPoint? = null,
     focusKey: Int = 0,
     onEventClick: (DriveEvent) -> Unit = {},
+    onStartOpen: () -> Unit = {},
+    onStopOpen: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -74,14 +78,19 @@ fun TripMap(
         flush()
         segs
     }
-    val startIcon = remember { markerIcon(MarkerGlyph.START, AndroidColor.rgb(34, 197, 94)) }
-    val stopIcon = remember { markerIcon(MarkerGlyph.STOP, AndroidColor.rgb(239, 68, 68)) }
-    val brakeIcon = remember { markerIcon(MarkerGlyph.BRAKE, AndroidColor.rgb(220, 38, 38)) }
-    val accelIcon = remember { markerIcon(MarkerGlyph.ACCEL, AndroidColor.rgb(245, 158, 11)) }
-    val cornerIcon = remember { markerIcon(MarkerGlyph.TURN, AndroidColor.rgb(234, 179, 8)) }
-    val swerveIcon = remember { markerIcon(MarkerGlyph.SWERVE, AndroidColor.rgb(147, 51, 234)) }
-    val potholeIcon = remember { markerIcon(MarkerGlyph.BUMP, AndroidColor.rgb(120, 113, 108)) }
-    val replayIcon = remember { markerIcon(MarkerGlyph.REPLAY, AndroidColor.rgb(14, 165, 233)) }
+    // Start/end and the "you" car stay full size; brake & turn markers are ~30% smaller (they were
+    // visually too heavy and there are many of them).
+    val startIcon = remember { markerIcon(MarkerGlyph.START, AndroidColor.rgb(34, 197, 94), 96) }
+    val stopIcon = remember { markerIcon(MarkerGlyph.FINISH, AndroidColor.rgb(239, 68, 68), 96) }
+    val brakeIcon = remember { markerIcon(MarkerGlyph.BRAKE, AndroidColor.rgb(220, 38, 38), 67) }
+    val accelIcon = remember { markerIcon(MarkerGlyph.ACCEL, AndroidColor.rgb(245, 158, 11), 84) }
+    val cornerIcon = remember { markerIcon(MarkerGlyph.TURN, AndroidColor.rgb(234, 179, 8), 67) }
+    val swerveIcon = remember { markerIcon(MarkerGlyph.SWERVE, AndroidColor.rgb(147, 51, 234), 67) }
+    val potholeIcon = remember { markerIcon(MarkerGlyph.BUMP, AndroidColor.rgb(245, 158, 11), 84) }
+    val replayIcon = remember { markerIcon(MarkerGlyph.CAR, AndroidColor.rgb(14, 165, 233), 92) }
+    // Start/end markers act like the bottom-left chips: first tap shows the label, a second tap opens
+    // Google Maps. Tapping the map clears the "armed" state so the next tap shows the label again.
+    var armedMarker by remember(points) { mutableStateOf("") }
     val camera = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(TORONTO, 11f)
     }
@@ -115,6 +124,7 @@ fun TripMap(
             myLocationButtonEnabled = false,
             zoomControlsEnabled = false
         ),
+        onMapClick = { armedMarker = "" },
         googleMapOptionsFactory = {
             GoogleMapOptions().apply {
                 mapId?.let(::mapId)
@@ -142,12 +152,24 @@ fun TripMap(
             Marker(
                 state = MarkerState(route.first()),
                 title = "Start",
-                icon = startIcon
+                snippet = "Tap again to open in Maps",
+                icon = startIcon,
+                onClick = {
+                    if (armedMarker == "start") { armedMarker = ""; onStartOpen(); true }
+                    else { armedMarker = "start"; false }
+                },
+                onInfoWindowClick = { onStartOpen() }
             )
             Marker(
                 state = MarkerState(route.last()),
                 title = "Stop",
-                icon = stopIcon
+                snippet = "Tap again to open in Maps",
+                icon = stopIcon,
+                onClick = {
+                    if (armedMarker == "stop") { armedMarker = ""; onStopOpen(); true }
+                    else { armedMarker = "stop"; false }
+                },
+                onInfoWindowClick = { onStopOpen() }
             )
 
             // Place each event at the nearest route point by time. analysis points are downsampled
@@ -205,73 +227,167 @@ private fun relaxedBounds(bounds: LatLngBounds, visibleRouteFraction: Double = 0
     )
 }
 
-private enum class MarkerGlyph { START, STOP, BRAKE, ACCEL, TURN, SWERVE, BUMP, REPLAY }
+private enum class MarkerGlyph { START, FINISH, BRAKE, ACCEL, TURN, SWERVE, BUMP, CAR }
 
-private fun markerIcon(glyph: MarkerGlyph, fill: Int): BitmapDescriptor {
-    val size = 96
-    val center = size / 2f
+/**
+ * Draws a map marker as a [size]px bitmap: a coloured pin shape (octagon for the stop-sign brake,
+ * diamond for the warning-style turn/swerve/bump, circle otherwise) under a white symbolic glyph.
+ * Symbols are drawn with vector paths (no text), so they read at small sizes and stay ASCII-safe.
+ */
+private fun markerIcon(glyph: MarkerGlyph, fill: Int, size: Int = 96): BitmapDescriptor {
+    val c = size / 2f
+    val r = size * 0.33f
+    val shadow = size * 0.045f
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
+    fun drawShape(dy: Float) {
+        when (glyph) {
+            MarkerGlyph.BRAKE -> canvas.drawPath(octagonPath(c, c + dy, r), paint)
+            MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> canvas.drawPath(diamondPath(c, c + dy, r), paint)
+            else -> canvas.drawCircle(c, c + dy, r, paint)
+        }
+    }
     paint.color = AndroidColor.argb(70, 0, 0, 0)
-    when (glyph) {
-        MarkerGlyph.BRAKE -> canvas.drawPath(octagonPath(center, center + 4f, 32f), paint)
-        MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> canvas.drawPath(diamondPath(center, center + 4f, 31f), paint)
-        else -> canvas.drawCircle(center, center + 4f, 31f, paint)
-    }
-
+    drawShape(shadow)
     paint.color = fill
-    when (glyph) {
-        MarkerGlyph.BRAKE -> canvas.drawPath(octagonPath(center, center, 32f), paint)
-        MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> canvas.drawPath(diamondPath(center, center, 31f), paint)
-        else -> canvas.drawCircle(center, center, 31f, paint)
-    }
+    drawShape(0f)
 
     paint.color = AndroidColor.WHITE
     when (glyph) {
-        MarkerGlyph.START -> {
-            val play = Path().apply {
-                moveTo(center - 9f, center - 15f)
-                lineTo(center - 9f, center + 15f)
-                lineTo(center + 16f, center)
-                close()
-            }
-            canvas.drawPath(play, paint)
-        }
-        MarkerGlyph.STOP -> {
-            canvas.drawRoundRect(
-                RectF(center - 14f, center - 14f, center + 14f, center + 14f),
-                5f,
-                5f,
-                paint
-            )
-        }
-        MarkerGlyph.BRAKE, MarkerGlyph.ACCEL, MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> {
-            paint.textAlign = Paint.Align.CENTER
-            paint.typeface = Typeface.DEFAULT_BOLD
-            paint.textSize = if (glyph == MarkerGlyph.SWERVE) 30f else 36f
-            val baseline = center - (paint.descent() + paint.ascent()) / 2f - 1f
-            canvas.drawText(
-                when (glyph) {
-                    MarkerGlyph.BRAKE -> "B"
-                    MarkerGlyph.ACCEL -> "A"
-                    MarkerGlyph.TURN -> "T"
-                    MarkerGlyph.SWERVE -> "SW"
-                    MarkerGlyph.BUMP -> "!"
-                    else -> ""
-                },
-                center,
-                baseline,
-                paint
-            )
-        }
-        MarkerGlyph.REPLAY -> {
-            canvas.drawCircle(center, center, 13f, paint)
-        }
+        MarkerGlyph.START -> drawFlag(canvas, c, r, paint, fill, checkered = false)
+        MarkerGlyph.FINISH -> drawFlag(canvas, c, r, paint, fill, checkered = true)
+        MarkerGlyph.BRAKE -> drawStopRing(canvas, c, r, paint)
+        MarkerGlyph.ACCEL -> drawUpChevrons(canvas, c, r, paint)
+        MarkerGlyph.TURN -> drawTurnArrow(canvas, c, r, paint)
+        MarkerGlyph.SWERVE -> drawSwerve(canvas, c, r, paint)
+        MarkerGlyph.BUMP -> drawBump(canvas, c, r, paint)
+        MarkerGlyph.CAR -> drawCar(canvas, c, r, paint, fill)
     }
 
     return BitmapDescriptorFactory.fromBitmap(bitmap)
+}
+
+/** White octagon outline inside the red octagon — reads as a stop sign without any text. */
+private fun drawStopRing(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = r * 0.16f
+    canvas.drawPath(octagonPath(c, c, r * 0.66f), paint)
+    paint.style = Paint.Style.FILL
+}
+
+/** Start = solid pennant, Finish = checkered flag (its dark squares show the marker [fill] through). */
+private fun drawFlag(canvas: Canvas, c: Float, r: Float, paint: Paint, fill: Int, checkered: Boolean) {
+    val staffX = c - r * 0.42f
+    val top = c - r * 0.62f
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = r * 0.13f
+    paint.strokeCap = Paint.Cap.ROUND
+    canvas.drawLine(staffX, top, staffX, c + r * 0.66f, paint)
+    paint.style = Paint.Style.FILL
+    val bw = r * 0.86f
+    val bh = r * 0.58f
+    if (!checkered) {
+        val pennant = Path().apply {
+            moveTo(staffX, top)
+            lineTo(staffX + bw, top + bh * 0.5f)
+            lineTo(staffX, top + bh)
+            close()
+        }
+        canvas.drawPath(pennant, paint)
+    } else {
+        val cols = 3; val rows = 2
+        val cw = bw / cols; val ch = bh / rows
+        for (gx in 0 until cols) for (gy in 0 until rows) {
+            paint.color = if ((gx + gy) % 2 == 0) AndroidColor.WHITE else fill
+            canvas.drawRect(staffX + gx * cw, top + gy * ch, staffX + (gx + 1) * cw, top + (gy + 1) * ch, paint)
+        }
+        paint.color = AndroidColor.WHITE
+    }
+}
+
+/** Two stacked up-chevrons — "fast / accelerating". */
+private fun drawUpChevrons(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = r * 0.16f
+    paint.strokeCap = Paint.Cap.ROUND
+    paint.strokeJoin = Paint.Join.ROUND
+    fun chevron(dy: Float) {
+        val p = Path().apply {
+            moveTo(c - r * 0.45f, c + dy + r * 0.12f)
+            lineTo(c, c + dy - r * 0.28f)
+            lineTo(c + r * 0.45f, c + dy + r * 0.12f)
+        }
+        canvas.drawPath(p, paint)
+    }
+    chevron(-r * 0.18f)
+    chevron(r * 0.28f)
+    paint.style = Paint.Style.FILL
+}
+
+/** Bent arrow (up, then turning right with an arrowhead) — a turn/corner. */
+private fun drawTurnArrow(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = r * 0.15f
+    paint.strokeCap = Paint.Cap.ROUND
+    paint.strokeJoin = Paint.Join.ROUND
+    val shaft = Path().apply {
+        moveTo(c - r * 0.12f, c + r * 0.55f)
+        lineTo(c - r * 0.12f, c - r * 0.05f)
+        quadTo(c - r * 0.12f, c - r * 0.45f, c + r * 0.3f, c - r * 0.45f)
+    }
+    canvas.drawPath(shaft, paint)
+    paint.style = Paint.Style.FILL
+    val ax = c + r * 0.3f; val ay = c - r * 0.45f
+    val head = Path().apply {
+        moveTo(ax + r * 0.3f, ay)
+        lineTo(ax - r * 0.02f, ay - r * 0.24f)
+        lineTo(ax - r * 0.02f, ay + r * 0.24f)
+        close()
+    }
+    canvas.drawPath(head, paint)
+}
+
+/** An S-curve — a swerve / quick side-to-side. */
+private fun drawSwerve(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = r * 0.15f
+    paint.strokeCap = Paint.Cap.ROUND
+    val s = Path().apply {
+        moveTo(c - r * 0.45f, c + r * 0.5f)
+        cubicTo(c + r * 0.45f, c + r * 0.18f, c - r * 0.45f, c - r * 0.18f, c + r * 0.45f, c - r * 0.5f)
+    }
+    canvas.drawPath(s, paint)
+    paint.style = Paint.Style.FILL
+}
+
+/** A hump over a baseline — the road "bump" sign. */
+private fun drawBump(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = r * 0.14f
+    paint.strokeCap = Paint.Cap.ROUND
+    canvas.drawLine(c - r * 0.55f, c + r * 0.32f, c + r * 0.55f, c + r * 0.32f, paint)
+    canvas.drawArc(RectF(c - r * 0.42f, c - r * 0.1f, c + r * 0.42f, c + r * 0.74f), 180f, 180f, false, paint)
+    paint.style = Paint.Style.FILL
+}
+
+/** Side-view car silhouette (body + cabin), wheels cut out in the marker [fill] colour. */
+private fun drawCar(canvas: Canvas, c: Float, r: Float, paint: Paint, fill: Int) {
+    paint.style = Paint.Style.FILL
+    canvas.drawRoundRect(RectF(c - r * 0.62f, c - r * 0.04f, c + r * 0.62f, c + r * 0.3f), r * 0.12f, r * 0.12f, paint)
+    val cabin = Path().apply {
+        moveTo(c - r * 0.34f, c - r * 0.02f)
+        lineTo(c - r * 0.18f, c - r * 0.34f)
+        lineTo(c + r * 0.2f, c - r * 0.34f)
+        lineTo(c + r * 0.36f, c - r * 0.02f)
+        close()
+    }
+    canvas.drawPath(cabin, paint)
+    paint.color = fill
+    canvas.drawCircle(c - r * 0.32f, c + r * 0.32f, r * 0.15f, paint)
+    canvas.drawCircle(c + r * 0.32f, c + r * 0.32f, r * 0.15f, paint)
+    paint.color = AndroidColor.WHITE
 }
 
 private fun diamondPath(cx: Float, cy: Float, radius: Float): Path =

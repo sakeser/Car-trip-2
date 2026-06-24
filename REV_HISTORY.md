@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.52`, `versionCode=63`
+- Installed on S25: `versionName=2.53`, `versionCode=64`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,25 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev P (v2.53): trip-map markers & replay (UI overhaul 1/3)
+
+First slice of the trip-detail UI overhaul. Map markers redrawn as symbolic glyphs (no letters):
+brake = red **stop-sign octagon**, turn = bent **turn arrow**, swerve = **S-curve**, pothole = amber
+**bump sign** (hump), start = green **flag**, end = red **checkered flag**, and the "you"/replay
+marker = a small **car silhouette**. Brake & turn markers are ~30% smaller (`markerIcon` now takes a
+size). All drawn with Canvas paths in `TripMap.kt` (ASCII-safe).
+
+- **Start/End markers are now tappable like the bottom-left chips:** first tap shows the label
+  popup, a second tap opens Google Maps for that point (`onStartOpen`/`onStopOpen`; map-click clears
+  the armed state; info-window tap also opens Maps).
+- **Replay timing:** ~50% longer (`tripMs / 240f`, 5 s up to ~20 min, capped 45 s), a **1 s start
+  delay** on open, and the speed/clock **readouts throttled to ~5 Hz with an eased speed** so the
+  digits stay readable (the cursor/map still animate at 60fps).
+- **Filter chips moved below the replay scrubber** and compacted, with a "Filter" affordance and
+  per-type labels so they read as filters, not stats.
+- Build + 66 tests green, installed v2.53/64. UI not visually confirmed (device dozing; launched
+  without crashing).
 
 ## Rev O (v2.52): reverse-geocoded trip names
 
