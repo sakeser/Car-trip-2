@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.51`, `versionCode=62`
+- Installed on S25: `versionName=2.52`, `versionCode=63`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,37 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev O (v2.52): reverse-geocoded trip names
+
+Past-trips list now names unnamed trips by reverse-geocoding their start/end, e.g.
+`North York -> Scarborough`, falling back to the static `TripLabeler` on any failure. No schema change.
+
+- New `GeoNamer` (ui): pure, Android-free label composition (`describe`/`compose`/`cellKey`) layered
+  over an Android `Geocoder` lookup that is **fail-soft** -- if the geocoder is absent, offline,
+  rate-limited, returns null/empty, or throws, it returns null and the caller uses `TripLabeler`.
+  - **Caching:** results are cached in a `cartrip_geocache` SharedPreferences file keyed by
+    *quantized* coordinates (~110 m cells, 3 dp), so the list does not re-geocode every trip on every
+    refresh. A "no usable name here" sentinel is cached too (so dead cells aren't retried); transient
+    failures are **not** cached (a later refresh can succeed).
+  - **Budget:** `TripViewModel.loadTripLabels` shares a per-refresh `GeoNamer.Budget` (12 live
+    lookups) so a cold cache can't fire dozens of network calls at once; cached cells are free, so
+    over a few refreshes (and across runs, via SharedPreferences) the whole list fills in.
+  - Only **unnamed** trips are geocoded -- the list shows `trip.name.ifBlank { label }`, so a
+    user-named trip never spends a geocode. Still runs entirely on `Dispatchers.IO`.
+  - The visible separator is a real arrow glyph built from its code point (`GeoNamer.ARROW =
+    0x2192.toChar()...`) rather than a literal `->` in source: the Kotlin compiler reads a BOM-less
+    `.kt` as the platform charset (Cp1252 on Windows) and mojibakes a literal arrow, so the source is
+    kept pure ASCII. (Found the hard way: the first build's test failed on exactly this.)
+- 8 new pure unit tests in `GeoNamerTest` (describe priority, compose forms incl. loop/one-sided/null
+  fallback, cell quantization). Full suite **66 tests green**.
+- Folded in the small **Option 2** UI cleanup: removed the noisy `fusedConfidence` ("forward-axis
+  confidence") line from the trip-detail data-quality section -- it's empirically ~0.06 even on the
+  best trip and never gates trust. (The scattered dead composables in `TripDetailScreen.kt` --
+  `FactorBar`, `FactorCell`, `TripLinksCard`, `ScorePanel`, etc. -- were left alone: risky cosmetic
+  surgery in a critical screen for no functional gain.)
+- Build + tests + install OK (v2.52/63 on the S25). UI smoke test **not** visually confirmed: the
+  device was locked/dozing, so the app launched without crashing but the labels weren't eyeballed.
 
 ## Rev N (v2.51): fuel & trip-cost feature
 

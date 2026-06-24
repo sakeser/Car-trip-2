@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.50 (build 61)** · Branch `main` @ `dec6205`_
+_Last updated: 2026-06-24 · App version **2.52 (build 63)** · Branch `main` (Rev O)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -237,8 +237,9 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
   analysis runs on 1 Hz GPS. The faster-GPS request adds battery cost for no gain. To truly exceed
   1 Hz would require raw `GnssMeasurements`/`GPS_PROVIDER` work, or accept the cap and revert the
   request interval. Decision pending.
-- **O2 — `fusedConfidence` is noise.** Empirically ~0.06 even on the best trip (790, 45 Hz). Kept
-  diagnostic-only; never gate trust on it (scoring uses motion-Hz). Consider removing from the UI.
+- **O2 — `fusedConfidence` is noise. [DONE, Rev O]** Empirically ~0.06 even on the best trip (790,
+  45 Hz); never gated trust (scoring uses motion-Hz). The "forward-axis confidence" line was removed
+  from the trip-detail data-quality UI in Rev O. The field still exists in the DB/metrics, just unsurfaced.
 - **O3 — Privacy: `allowBackup=true`** backs up the unencrypted location-history DB to Google. Consider
   `allowBackup=false` or backup rules excluding `cartrip.db`; DB-at-rest encryption (SQLCipher) is a
   larger option.
@@ -247,9 +248,10 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 - **O5 — Dead code.** `TripDetailScreen.kt` still has unused `FactorBar`, `FactorCell`,
   `TripLinksCard`, `ActionButton`, `ScorePanel`, `ScoreMeter`, `ReplayControls`; `TripActions` has an
   unused `label` param. Harmless (warnings); clean up opportunistically.
-- **O6 — `TripLabeler` is GTA-hardcoded.** Names come from a fixed list of Toronto-area landmarks +
-  the owner's home/work coords, radius-guarded (Rev G) so far-away trips fall back to a time-of-day
-  label. Proper fix = reverse-geocoding (see §9).
+- **O6 — `TripLabeler` is GTA-hardcoded. [ADDRESSED, Rev O]** `GeoNamer` now reverse-geocodes
+  unnamed trips' start/end (fail-soft, SharedPreferences-cached by quantized coords) into
+  `North York -> Scarborough` labels, with the GTA `TripLabeler` as the fallback. Still open: learn
+  home/work from frequency rather than hardcoding, and the labeler remains the (GTA-biased) fallback.
 - **O7 — Field data analyzed (Rev K–L).** Narrated trips 845/847 analyzed vs transcripts: capture
   excellent (~46 Hz motion, clean 1 Hz GPS, GNSS now logged). Fixed the corner→longitudinal
   contamination (Rev K) and the GPS-detector score-blindness by promoting the fused detector into
@@ -273,9 +275,10 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 2. **Fuel / trip-cost feature.** Vehicle profile (city/hwy L/100km) + gas price + distance/speed →
    estimated fuel + $ per trip; monthly/commute cost trends. New entity/prefs; surface on trip
    detail + Insights. (From the owner's earlier backlog.)
-3. **Reverse-geocoded trip naming (O6).** Use Android `Geocoder` (fail-soft, cached) for real
-   origin/destination names; learn home/work from frequency instead of hardcoding. Keep the existing
-   labeler as fallback.
+3. **Reverse-geocoded trip naming (O6). [DONE, Rev O]** `GeoNamer` uses Android `Geocoder`
+   (fail-soft, SharedPreferences-cached by ~110 m cells, per-refresh budget) for real
+   origin/destination names, with `TripLabeler` as fallback. Still to do: learn home/work from
+   frequency instead of hardcoding the fallback.
 4. **GNSS phase 2 (optional/research).** Use `gnss_samples` to drive route/event confidence
    downweighting in urban canyons; optional raw-GNSS export behind debug. Not positioning.
 5. **Validated hybrid detector.** Promote the fused detector from "review-grade" to scored: label

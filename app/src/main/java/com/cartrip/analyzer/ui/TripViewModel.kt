@@ -30,6 +30,11 @@ import kotlinx.coroutines.withContext
 
 class TripViewModel(app: Application) : AndroidViewModel(app) {
 
+    private companion object {
+        /** Max live reverse-geocode lookups per trip-list refresh (each unnamed trip uses up to 2). */
+        const val GEO_BUDGET_PER_REFRESH = 12
+    }
+
     private val dao = AppDatabase.get(app).tripDao()
 
     val trips: StateFlow<List<TripEntity>> =
@@ -117,9 +122,33 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun loadTripLabels(trips: List<TripEntity>): Map<Long, String> = withContext(Dispatchers.IO) {
+        val ctx = getApplication<Application>()
+        // Caps live geocoder calls for this one refresh; cached cells are free, so over a few
+        // refreshes (and across runs, via SharedPreferences) the whole list fills in.
+        val budget = GeoNamer.Budget(GEO_BUDGET_PER_REFRESH)
         trips.associate { trip ->
-            trip.id to TripLabeler.label(trip, dao.getAnalysisPoints(trip.id))
+            val points = dao.getAnalysisPoints(trip.id)
+            val static = TripLabeler.label(trip, points)
+            // The label is only shown for unnamed trips (TripListScreen: name.ifBlank { label }),
+            // so don't spend a geocode on a trip the user has already named.
+            val label = if (trip.name.isNotBlank()) {
+                static
+            } else {
+                geocodedLabel(ctx, points, budget) ?: static
+            }
+            trip.id to label
         }
+    }
+
+    /** Reverse-geocoded "start -> end" label for a trip's stored route, or null to fall back. */
+    private fun geocodedLabel(
+        ctx: Application,
+        points: List<AnalysisPointEntity>,
+        budget: GeoNamer.Budget,
+    ): String? {
+        val start = points.firstOrNull() ?: return null
+        val end = points.lastOrNull() ?: return null
+        return GeoNamer.nameTrip(ctx, start.lat, start.lon, end.lat, end.lon, budget)
     }
 
     suspend fun loadAnalysis(id: Long): TripAnalysis = withContext(Dispatchers.IO) {

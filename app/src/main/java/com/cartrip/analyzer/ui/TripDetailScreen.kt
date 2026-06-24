@@ -837,13 +837,8 @@ private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, fusedEvent
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        if (trip.fusedConfidence > 0.0) {
-                            Text(
-                                "Forward-axis confidence ${"%.0f".format(trip.fusedConfidence * 100)}%",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        // fusedConfidence (forward-axis inference) is empirically noise (~0.06 even on the
+                        // best trip) and never gates trust — not worth surfacing. See HANDOFF O2.
                         // Timestamped fused events (magnitude-first detector). conf shows GPS-sign certainty.
                         val firstT = points.firstOrNull()?.tMs ?: 0L
                         fusedEvents.sortedBy { it.tMs }.take(12).forEach { e ->
