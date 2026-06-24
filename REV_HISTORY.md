@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.53`, `versionCode=64`
+- Installed on S25: `versionName=2.54`, `versionCode=65`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,24 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev Q (v2.54): header, you-vs-traffic, fuel headline (UI overhaul 2/3)
+
+- **Trip-detail header** is no longer just the date: manual trip name -> reverse-geocoded place-name
+  (`GeoNamer`, cached/fail-soft) -> relative date. New `Format.relativeDay` ("Today"/"Yesterday"/date)
+  and `TripViewModel.loadTripTitle` (IO), driven via `produceState`.
+- **You vs traffic redesigned:** the 3-dots-on-a-line gauge is replaced by **three stacked,
+  animated horizontal bars** (No traffic / Google / Actual, legend order == bar order) on a shared
+  offset scale (shortest still ~30% so all read as bars). Bars grow in on load; the **Actual bar
+  pulses**. Adds an explicit **+/- vs Google** line ("m:ss faster/slower (x%)"), a **tinted Maps
+  pin** on the Google row, better colours, and a **playful emoji animal** (turtle/dolphin/rabbit/
+  horse) for how the drive compared with Google's typical time. Emoji are built from code points so
+  the source stays ASCII (the Cp1252 trap).
+- **Fuel cost confirmed live — no Re-analyze needed:** `FuelCostCard` (and now the headline)
+  recompute from the current `VehiclePrefs` + the trip's stored aggregates every composition, so
+  changing economy/price and returning to the screen updates the numbers automatically. **Total
+  cost** added to the `TripHero` headline next to time + distance.
+- Build + 66 tests green; installed v2.54/65. UI not visually confirmed (device dozing; launched OK).
 
 ## Rev P (v2.53): trip-map markers & replay (UI overhaul 1/3)
 

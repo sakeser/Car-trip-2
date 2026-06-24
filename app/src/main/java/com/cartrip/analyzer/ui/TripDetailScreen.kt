@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
@@ -65,7 +66,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,11 +122,14 @@ fun TripDetailScreen(
     val analysis by produceState<TripAnalysis?>(initialValue = null, tripId, etaRefresh) {
         value = viewModel.loadAnalysis(tripId)
     }
+    val tripTitle by produceState("Trip", trip) {
+        value = trip?.let { viewModel.loadTripTitle(it) } ?: "Trip"
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(trip?.let { it.name.ifBlank { Format.dateOnly(it.startTime) } } ?: "Trip") },
+                title = { Text(tripTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -421,6 +430,13 @@ private fun PartialBanner(trip: TripEntity) {
 @Composable
 private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
     val endMs = if (trip.endTime > 0) trip.endTime else trip.startTime + (m.durationS * 1000).toLong()
+    // Headline fuel cost: recomputed live from the current vehicle profile + this trip's aggregates
+    // (no Re-analyze needed). Matches the Fuel & cost card below.
+    val distanceKm = m.distanceM / 1000.0
+    val cost = if (distanceKm >= 0.05) {
+        val v = VehiclePrefs.load(LocalContext.current)
+        FuelEstimator.cost(FuelEstimator.litres(distanceKm, m.avgMovingSpeedMps * 3.6, m.idleS, v), v)
+    } else null
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -442,6 +458,7 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
             ) {
                 HeroStat(Icons.Filled.Schedule, Format.tripMinutes(m.durationS))
                 HeroStat(Icons.Filled.Route, Format.tripDistance(m.distanceM))
+                cost?.let { HeroStat(Icons.Filled.LocalGasStation, String.format(java.util.Locale.US, "$%.2f", it)) }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -1315,26 +1332,33 @@ private fun EtaComparisonCard(
                 actualS <= typicalS * 1.15 -> ETA_AMBER
                 else -> ETA_RED
             }
-            val deltaMin = ((actualS - typicalS) / 60.0).roundToInt()
+            val deltaS = actualS - typicalS
+            val deltaMin = (deltaS / 60.0).roundToInt()
             val verdict = when {
                 deltaMin <= -1 -> "${-deltaMin} min faster"
                 deltaMin >= 1 -> "$deltaMin min slower"
                 else -> "On pace"
             }
+            val deltaFrac = if (typicalS > 0) deltaS / typicalS else 0.0
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(verdict, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = youColor)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(etaAnimalEmoji(deltaFrac), style = MaterialTheme.typography.titleMedium)
+                    Text(verdict, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = youColor)
+                }
             }
-            EtaRangeGauge(freeFlowS, typicalS, actualS, youColor)
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                EtaLegend(ETA_FREE, "No traffic", freeFlowS)
-                EtaLegend(ETA_TYPICAL, "Google", typicalS)
-                EtaLegend(youColor, "Actual", actualS)
-            }
+            // Stacked bars in legend order (No traffic / Google / Actual): bar length encodes the time
+            // on a shared offset scale, Actual is perf-coloured and pulses.
+            EtaBars(freeFlowS = freeFlowS, typicalS = typicalS, actualS = actualS, youColor = youColor)
+            Text(
+                etaVsGoogleText(deltaS, deltaFrac),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -1343,59 +1367,113 @@ private val ETA_GREEN = Color(0xFF22C55E)
 private val ETA_AMBER = Color(0xFFF59E0B)
 private val ETA_RED = Color(0xFFEF4444)
 private val ETA_FREE = Color(0xFF38BDF8)     // "no traffic" best case — calm blue
-private val ETA_TYPICAL = Color(0xFF94A3B8)  // Google estimate — neutral grey
+private val ETA_TYPICAL = Color(0xFF64748B)  // Google estimate — neutral slate
+private val ETA_MAPS = Color(0xFFEA4335)     // approximated Google Maps pin tint
+
+// Built from code points so the source stays ASCII (see GeoNamer.ARROW / the Cp1252 encoding note).
+private val ETA_TURTLE = String(Character.toChars(0x1F422))
+private val ETA_DOLPHIN = String(Character.toChars(0x1F42C))
+private val ETA_RABBIT = String(Character.toChars(0x1F407))
+private val ETA_HORSE = String(Character.toChars(0x1F40E))
 
 /**
- * A single scale whose endpoints ARE the fastest and slowest of the three times: three dots (no
- * traffic = blue, Google = grey, your actual = perf-coloured) sit on a line that runs only between
- * the two outer dots. Only "actual" carries the strong colour, to keep it readable.
+ * Playful animal for how the drive compared with Google's typical time, where
+ * deltaFrac = (actual - typical) / typical. Slower = turtle, about-on-pace = dolphin, faster =
+ * rabbit, much faster = horse. Thresholds are intentionally simple to re-tune later.
+ */
+private fun etaAnimalEmoji(deltaFrac: Double): String = when {
+    deltaFrac >= 0.12 -> ETA_TURTLE     // 12%+ slower than Google
+    deltaFrac >= -0.03 -> ETA_DOLPHIN   // roughly on pace
+    deltaFrac >= -0.12 -> ETA_RABBIT    // a bit faster
+    else -> ETA_HORSE                   // 12%+ faster
+}
+
+private fun etaVsGoogleText(deltaS: Double, deltaFrac: Double): String {
+    val pct = (abs(deltaFrac) * 100).roundToInt()
+    val mmss = Format.clock(abs(deltaS).roundToInt().toLong())
+    return when {
+        deltaFrac <= -0.01 -> "$mmss faster than Google ($pct%)"
+        deltaFrac >= 0.01 -> "$mmss slower than Google ($pct%)"
+        else -> "Right on Google's typical pace"
+    }
+}
+
+/**
+ * Three stacked, animated bars (No traffic / Google / Actual, in that order) on a shared offset
+ * scale: the shortest time still shows ~30% of the track so all three read as bars, and the rest of
+ * the width encodes how much longer each one is. Bars grow in on load; the Actual bar pulses.
  */
 @Composable
-private fun EtaRangeGauge(freeFlowS: Double, typicalS: Double, youS: Double, youColor: Color) {
-    val lineCol = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-    val lo = minOf(freeFlowS, typicalS, youS)
-    val hi = maxOf(freeFlowS, typicalS, youS)
+private fun EtaBars(freeFlowS: Double, typicalS: Double, actualS: Double, youColor: Color) {
+    val lo = minOf(freeFlowS, typicalS, actualS)
+    val hi = maxOf(freeFlowS, typicalS, actualS)
     val span = (hi - lo).coerceAtLeast(1.0)
-    val density = LocalDensity.current
+    fun frac(v: Double): Float = (0.30 + 0.70 * ((v - lo) / span)).toFloat().coerceIn(0f, 1f)
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(22.dp)) {
-        val wPx = with(density) { maxWidth.toPx() }
-        val insetPx = with(density) { 9.dp.toPx() }
-        val usable = (wPx - 2 * insetPx).coerceAtLeast(1f)
-        fun xDp(v: Double) = with(density) { (insetPx + ((v - lo) / span).toFloat().coerceIn(0f, 1f) * usable).toDp() }
-        val lineY = 10.dp
+    var loaded by remember(freeFlowS, typicalS, actualS) { mutableStateOf(false) }
+    LaunchedEffect(freeFlowS, typicalS, actualS) { loaded = true }
 
-        val left = xDp(lo)
-        Box(
-            modifier = Modifier.offset(x = left, y = lineY)
-                .width((xDp(hi) - left).coerceAtLeast(2.dp))
-                .height(3.dp).clip(RoundedCornerShape(2.dp)).background(lineCol)
-        )
-        GaugeDot(xDp(freeFlowS), ETA_FREE, lineY, 11.dp)
-        GaugeDot(xDp(typicalS), ETA_TYPICAL, lineY, 11.dp)
-        GaugeDot(xDp(youS), youColor, lineY, 17.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        EtaBarRow("No traffic", freeFlowS, ETA_FREE, frac(freeFlowS), loaded, pulse = false, mapsPin = false)
+        EtaBarRow("Google", typicalS, ETA_TYPICAL, frac(typicalS), loaded, pulse = false, mapsPin = true)
+        EtaBarRow("Actual", actualS, youColor, frac(actualS), loaded, pulse = true, mapsPin = false)
     }
 }
 
 @Composable
-private fun GaugeDot(x: androidx.compose.ui.unit.Dp, color: Color, lineY: androidx.compose.ui.unit.Dp, size: androidx.compose.ui.unit.Dp) {
-    Box(
-        modifier = Modifier
-            .offset(x = x - size / 2, y = lineY + 2.dp - size / 2)
-            .size(size)
-            .clip(RoundedCornerShape(size / 2))
-            .background(color)
-    )
-}
-
-@Composable
-private fun EtaLegend(color: Color, label: String, seconds: Double) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Box(modifier = Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(color))
+private fun EtaBarRow(
+    label: String,
+    seconds: Double,
+    color: Color,
+    targetFrac: Float,
+    loaded: Boolean,
+    pulse: Boolean,
+    mapsPin: Boolean
+) {
+    val animFrac by animateFloatAsState(if (loaded) targetFrac else 0f, animationSpec = tween(700), label = "etaBar")
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.width(78.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (mapsPin) {
+                Icon(Icons.Filled.Place, contentDescription = null, tint = ETA_MAPS, modifier = Modifier.size(13.dp))
+            } else {
+                Box(modifier = Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(color))
+            }
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+        }
+        Box(
+            modifier = Modifier.weight(1f).height(16.dp).clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f))
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(animFrac).height(16.dp).clip(RoundedCornerShape(8.dp)).background(color),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (pulse) {
+                    val infinite = rememberInfiniteTransition(label = "etaPulse")
+                    val a by infinite.animateFloat(
+                        initialValue = 0.3f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+                        label = "etaPulseAlpha"
+                    )
+                    Box(
+                        modifier = Modifier.padding(end = 3.dp).size(9.dp).clip(RoundedCornerShape(5.dp))
+                            .background(Color.White.copy(alpha = a))
+                    )
+                }
+            }
+        }
         Text(
-            "$label ${Format.tripMinutes(seconds)}",
+            Format.tripMinutes(seconds),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(44.dp)
         )
     }
 }

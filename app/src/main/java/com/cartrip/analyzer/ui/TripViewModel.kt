@@ -42,6 +42,21 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadTrip(id: Long): TripEntity? = withContext(Dispatchers.IO) { dao.getTrip(id) }
 
+    /**
+     * A human title for the trip-detail header: the user's manual name if set, else a reverse-geocoded
+     * "start -> end" place-name (cached, fail-soft), else a relative date ("Today" / "Yesterday" / date).
+     */
+    suspend fun loadTripTitle(trip: TripEntity): String = withContext(Dispatchers.IO) {
+        if (trip.name.isNotBlank()) return@withContext trip.name
+        val points = dao.getAnalysisPoints(trip.id)
+        val start = points.firstOrNull()
+        val end = points.lastOrNull()
+        val geo = if (start != null && end != null) {
+            GeoNamer.nameTrip(getApplication(), start.lat, start.lon, end.lat, end.lon, GeoNamer.Budget(2))
+        } else null
+        geo ?: Format.relativeDay(trip.startTime)
+    }
+
     suspend fun recoverInterruptedTrips(): Int = withContext(Dispatchers.IO) {
         TripFinalizer.recoverInterruptedTrips(dao)
     }

@@ -2,6 +2,7 @@ package com.cartrip.analyzer.ui
 
 import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -60,4 +61,19 @@ object Format {
     fun timeOfDay(epochMs: Long): String = timeFmt.format(Date(epochMs))
 
     fun dateOnly(epochMs: Long): String = dayFmt.format(Date(epochMs))
+
+    /** "Today" / "Yesterday" for recent trips, otherwise the full date ("3 Jun 2026"). */
+    fun relativeDay(epochMs: Long): String {
+        val now = Calendar.getInstance()
+        val then = Calendar.getInstance().apply { timeInMillis = epochMs }
+        fun sameDay(a: Calendar, b: Calendar) =
+            a.get(Calendar.YEAR) == b.get(Calendar.YEAR) &&
+                a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
+        val yesterday = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+        return when {
+            sameDay(then, now) -> "Today"
+            sameDay(then, yesterday) -> "Yesterday"
+            else -> dateOnly(epochMs)
+        }
+    }
 }
