@@ -1,6 +1,7 @@
 package com.cartrip.analyzer.ui
 
 import androidx.compose.ui.graphics.Color
+import com.cartrip.analyzer.analysis.GnssQuality
 import com.cartrip.analyzer.data.TripEntity
 
 /**
@@ -13,7 +14,9 @@ data class TripDataQuality(
     val level: QualityLevel,
     val motionHz: Double,
     val gpsHz: Double,
-    val gapCount: Int
+    val gapCount: Int,
+    val gnssLevel: GnssQuality.Level,
+    val gnssSummary: String?
 ) {
     fun color(): Color = when (level) {
         QualityLevel.HIGH -> Color(0xFF22C55E)
@@ -25,6 +28,7 @@ data class TripDataQuality(
         if (motionHz < 1.0) append("Motion missing") else append("${motionHz.toInt()} Hz motion")
         append(" - ${"%.1f".format(gpsHz)}/s GPS")
         if (gapCount > 0) append(" - $gapCount GPS gap${if (gapCount == 1) "" else "s"}")
+        gnssSummary?.let { append(" - $it") }
     }
 
     companion object {
@@ -33,12 +37,22 @@ data class TripDataQuality(
             val motionHz = trip.motionSampleCount / dur
             val gpsHz = trip.locationSampleCount / dur
             val gaps = trip.gpsGapCount
-            val level = when {
+            val base = when {
                 motionHz >= 15.0 && gpsHz >= 0.7 && gaps <= 1 -> QualityLevel.HIGH
                 motionHz >= 6.0 && gpsHz >= 0.4 && gaps <= 4 -> QualityLevel.MEDIUM
                 else -> QualityLevel.LOW
             }
-            return TripDataQuality(level, motionHz, gpsHz, gaps)
+            val gnss = GnssQuality.level(trip.gnssAvgSatsUsed, trip.gnssAvgCn0, trip.gnssSampleCount)
+            // Weak satellite geometry/signal undercuts an otherwise-clean capture: cap High at Medium.
+            val level = if (gnss == GnssQuality.Level.WEAK && base == QualityLevel.HIGH) {
+                QualityLevel.MEDIUM
+            } else {
+                base
+            }
+            val summary = GnssQuality.summary(
+                trip.gnssAvgSatsUsed, trip.gnssAvgCn0, trip.gnssL5Seen, trip.gnssSampleCount
+            )
+            return TripDataQuality(level, motionHz, gpsHz, gaps, gnss, summary)
         }
     }
 }

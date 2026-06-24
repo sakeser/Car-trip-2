@@ -12,11 +12,13 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
@@ -118,6 +120,15 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private var gpsGapOpen = false
     private var stoppingNormally = false
 
+    // GNSS quality accumulators (GnssStatus callback, main thread). Aggregated into a per-trip summary.
+    private var gnssCallback: GnssStatus.Callback? = null
+    private var gnssUpdates = 0
+    private var gnssSatsUsedSum = 0L
+    private var gnssCn0Sum = 0.0
+    private var gnssCn0Count = 0L
+    private var gnssTopCn0 = 0.0
+    private var gnssL5Seen = false
+
     private data class TrimCutoff(val locationT: Long, val motionT: Long)
 
     override fun onCreate() {
@@ -204,6 +215,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             locationManager.removeUpdates(this)
         } catch (_: Exception) {
         }
+        unregisterGnss()
         val finishedId = tripId
         scope.launch {
             flushBuffers(writeCheckpoint = false)
@@ -297,6 +309,12 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         gpsGapCount = 0
         gpsGapOpen = false
         stoppingNormally = false
+        gnssUpdates = 0
+        gnssSatsUsedSum = 0L
+        gnssCn0Sum = 0.0
+        gnssCn0Count = 0L
+        gnssTopCn0 = 0.0
+        gnssL5Seen = false
     }
 
     /**
@@ -395,6 +413,48 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         val playOk = GoogleApiAvailability.getInstance()
             .isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS
         if (playOk) startFused() else startGps()
+        registerGnss()
+    }
+
+    /**
+     * Listen to raw GNSS satellite status for a per-trip quality summary (sat count, C/N0, L5). This
+     * does not change positioning (fused location still drives the track) — it explains data quality
+     * and lets analysis downweight confidence when the sky view was poor.
+     */
+    private fun registerGnss() {
+        val cb = object : GnssStatus.Callback() {
+            override fun onSatelliteStatusChanged(status: GnssStatus) = accumulateGnss(status)
+        }
+        try {
+            locationManager.registerGnssStatusCallback(cb, Handler(Looper.getMainLooper()))
+            gnssCallback = cb
+        } catch (_: SecurityException) {
+        }
+    }
+
+    private fun unregisterGnss() {
+        gnssCallback?.let { runCatching { locationManager.unregisterGnssStatusCallback(it) } }
+        gnssCallback = null
+    }
+
+    private fun accumulateGnss(status: GnssStatus) {
+        if (!recording) return
+        var used = 0
+        for (i in 0 until status.satelliteCount) {
+            if (!status.usedInFix(i)) continue
+            used++
+            val cn0 = status.getCn0DbHz(i).toDouble()
+            gnssCn0Sum += cn0
+            gnssCn0Count++
+            if (cn0 > gnssTopCn0) gnssTopCn0 = cn0
+            // L5/E5a/B2a band (~1176 MHz) — dual-frequency improves multipath rejection in cities.
+            if (status.hasCarrierFrequencyHz(i)) {
+                val f = status.getCarrierFrequencyHz(i)
+                if (f in 1.164e9f..1.189e9f) gnssL5Seen = true
+            }
+        }
+        gnssSatsUsedSum += used
+        gnssUpdates++
     }
 
     private fun startFused() {
@@ -493,6 +553,16 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             motionSampleCount = motionSampleCount,
             gpsGapCount = gpsGapCount
         )
+        if (gnssUpdates > 0) {
+            db.tripDao().updateTripGnss(
+                id = id,
+                avgSats = gnssSatsUsedSum.toDouble() / gnssUpdates,
+                avgCn0 = if (gnssCn0Count > 0) gnssCn0Sum / gnssCn0Count else 0.0,
+                topCn0 = gnssTopCn0,
+                l5Seen = gnssL5Seen,
+                count = gnssUpdates
+            )
+        }
     }
 
     // ---- Location handling (shared by fused callback and GPS listener) ----
@@ -732,6 +802,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             locationManager.removeUpdates(this)
         } catch (_: Exception) {
         }
+        unregisterGnss()
         if (interruptedTripId > 0L) {
             runBlocking(Dispatchers.IO) {
                 flushBuffers(writeCheckpoint = false)

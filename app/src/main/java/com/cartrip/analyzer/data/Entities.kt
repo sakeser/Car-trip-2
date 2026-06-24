@@ -70,7 +70,13 @@ data class TripEntity(
     val motionBrakeCount: Int = 0,
     val motionAccelCount: Int = 0,
     val motionTurnCount: Int = 0,
-    val fusedConfidence: Double = 0.0
+    val fusedConfidence: Double = 0.0,
+    // GNSS capture summary (GnssStatus.Callback): satellite/signal health for confidence + diagnostics.
+    val gnssAvgSatsUsed: Double = 0.0,
+    val gnssAvgCn0: Double = 0.0,
+    val gnssTopCn0: Double = 0.0,
+    val gnssL5Seen: Boolean = false,
+    val gnssSampleCount: Int = 0
 )
 
 @Entity(tableName = "locations", indices = [Index("tripId")])

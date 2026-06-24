@@ -146,6 +146,14 @@ interface TripDao {
         gpsGapCount: Int
     )
 
+    @Query(
+        "UPDATE trips SET gnssAvgSatsUsed = :avgSats, gnssAvgCn0 = :avgCn0, " +
+            "gnssTopCn0 = :topCn0, gnssL5Seen = :l5Seen, gnssSampleCount = :count WHERE id = :id"
+    )
+    suspend fun updateTripGnss(
+        id: Long, avgSats: Double, avgCn0: Double, topCn0: Double, l5Seen: Boolean, count: Int
+    )
+
     @Query("UPDATE trips SET name = :name WHERE id = :id")
     suspend fun renameTrip(id: Long, name: String)
 
