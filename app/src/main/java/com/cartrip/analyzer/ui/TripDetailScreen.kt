@@ -590,7 +590,11 @@ private fun ReplayTimeline(
                 }
             }
             if (point != null) {
-                SpeedGauge(point.speedKmh, maxSpeed.toDouble(), gaugeColor)
+                // Average a few neighbouring points so the readout doesn't flicker during autoplay.
+                val lo = (selectedIndex - 3).coerceAtLeast(0)
+                val hi = (selectedIndex + 3).coerceAtMost(points.lastIndex)
+                val smoothed = (lo..hi).sumOf { points[it].speedKmh } / (hi - lo + 1)
+                SpeedGauge(smoothed, maxSpeed.toDouble(), gaugeColor)
             }
         }
         BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(60.dp)) {
@@ -1296,9 +1300,9 @@ private fun EtaComparisonCard(
             }
             EtaRangeGauge(freeFlowS, typicalS, actualS, youColor)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                EtaLegend(ETA_GREEN, "Free", freeFlowS)
-                EtaLegend(ETA_AMBER, "Traffic", typicalS)
-                EtaLegend(youColor, "You", actualS)
+                EtaLegend(ETA_FREE, "No traffic", freeFlowS)
+                EtaLegend(ETA_TYPICAL, "Google", typicalS)
+                EtaLegend(youColor, "Actual", actualS)
             }
         }
     }
@@ -1307,40 +1311,38 @@ private fun EtaComparisonCard(
 private val ETA_GREEN = Color(0xFF22C55E)
 private val ETA_AMBER = Color(0xFFF59E0B)
 private val ETA_RED = Color(0xFFEF4444)
+private val ETA_FREE = Color(0xFF38BDF8)     // "no traffic" best case — calm blue
+private val ETA_TYPICAL = Color(0xFF94A3B8)  // Google estimate — neutral grey
 
 /**
- * One horizontal scale: free-flow→typical is the shaded "expected" range, and a bigger dot shows
- * where your actual time landed (green ahead of traffic, amber close, red behind).
+ * A single scale whose endpoints ARE the fastest and slowest of the three times: three dots (no
+ * traffic = blue, Google = grey, your actual = perf-coloured) sit on a line that runs only between
+ * the two outer dots. Only "actual" carries the strong colour, to keep it readable.
  */
 @Composable
 private fun EtaRangeGauge(freeFlowS: Double, typicalS: Double, youS: Double, youColor: Color) {
-    val track = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
-    val band = ETA_GREEN.copy(alpha = 0.28f)
+    val lineCol = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
     val lo = minOf(freeFlowS, typicalS, youS)
     val hi = maxOf(freeFlowS, typicalS, youS)
-    val pad = ((hi - lo) * 0.18).coerceAtLeast(30.0)
-    val sMin = lo - pad
-    val span = (hi + pad - sMin).coerceAtLeast(1.0)
+    val span = (hi - lo).coerceAtLeast(1.0)
     val density = LocalDensity.current
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(28.dp)) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(22.dp)) {
         val wPx = with(density) { maxWidth.toPx() }
-        fun xDp(v: Double) = with(density) { (((v - sMin) / span).toFloat().coerceIn(0f, 1f) * wPx).toDp() }
-        val lineY = 12.dp
+        val insetPx = with(density) { 9.dp.toPx() }
+        val usable = (wPx - 2 * insetPx).coerceAtLeast(1f)
+        fun xDp(v: Double) = with(density) { (insetPx + ((v - lo) / span).toFloat().coerceIn(0f, 1f) * usable).toDp() }
+        val lineY = 10.dp
 
+        val left = xDp(lo)
         Box(
-            modifier = Modifier.fillMaxWidth().height(4.dp).offset(y = lineY)
-                .clip(RoundedCornerShape(2.dp)).background(track)
+            modifier = Modifier.offset(x = left, y = lineY)
+                .width((xDp(hi) - left).coerceAtLeast(2.dp))
+                .height(3.dp).clip(RoundedCornerShape(2.dp)).background(lineCol)
         )
-        val bandA = xDp(minOf(freeFlowS, typicalS))
-        val bandB = xDp(maxOf(freeFlowS, typicalS))
-        Box(
-            modifier = Modifier.offset(x = bandA, y = lineY).width((bandB - bandA).coerceAtLeast(3.dp))
-                .height(4.dp).clip(RoundedCornerShape(2.dp)).background(band)
-        )
-        GaugeDot(xDp(freeFlowS), ETA_GREEN, lineY, 10.dp)
-        GaugeDot(xDp(typicalS), ETA_AMBER, lineY, 10.dp)
-        GaugeDot(xDp(youS), youColor, lineY, 16.dp)
+        GaugeDot(xDp(freeFlowS), ETA_FREE, lineY, 11.dp)
+        GaugeDot(xDp(typicalS), ETA_TYPICAL, lineY, 11.dp)
+        GaugeDot(xDp(youS), youColor, lineY, 17.dp)
     }
 }
 

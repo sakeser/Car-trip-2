@@ -1,12 +1,18 @@
 package com.cartrip.analyzer.ui
 
+import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
 object Format {
-    private val dateFmt = SimpleDateFormat("EEE d MMM, h:mm a", Locale.getDefault())
+    // Compact lowercase am/pm (no dots), e.g. "7:07am".
+    private val amPmSymbols = DateFormatSymbols(Locale.getDefault()).apply {
+        amPmStrings = arrayOf("am", "pm")
+    }
+    private val dateFmt = SimpleDateFormat("EEE d MMM, h:mma", Locale.getDefault())
+        .apply { dateFormatSymbols = amPmSymbols }
 
     fun distance(meters: Double): String =
         if (meters < 1000) String.format(Locale.US, "%.0f m", meters)
@@ -47,7 +53,8 @@ object Format {
 
     fun dateTime(epochMs: Long): String = dateFmt.format(Date(epochMs))
 
-    private val timeFmt = SimpleDateFormat("h:mm a", Locale.getDefault())
+    private val timeFmt = SimpleDateFormat("h:mma", Locale.getDefault())
+        .apply { dateFormatSymbols = amPmSymbols }
     private val dayFmt = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 
     fun timeOfDay(epochMs: Long): String = timeFmt.format(Date(epochMs))
