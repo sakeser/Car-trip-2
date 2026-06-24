@@ -1,5 +1,8 @@
 # Claude Code Handoff - Car Trip Analyzer
 
+> ⚠️ **SUPERSEDED (historical).** This is the pre-Rev-G brief (v2.34). For current state, build
+> workflow, tuning reference, open issues, and roadmap, see **`HANDOFF.md`**. Kept for context only.
+
 Date: June 23, 2026
 
 This is the comprehensive handoff for continuing work on Car Trip Analyzer after the field-test/debugging session that started from `v2.21`.
