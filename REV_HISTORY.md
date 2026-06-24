@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.45`, `versionCode=56`
+- Installed on S25: `versionName=2.47`, `versionCode=58`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -45,8 +45,15 @@ The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
   (runs of ≥1 s sustained vibration) + a `bumpyScore` (RMS×duration). Schema v17 (migration 16→17);
   Road & ride card shows the stretch count.
 
-Test suite 46. Still open: Driving/Events section consolidation (overlap) — deferred, benefits from
-on-device visual iteration.
+- **J5 (v2.46) — review feedback:** lowercase am/pm with no dots/space ("12:14pm"); You-vs-Traffic
+  gauge line now runs only between the two outer dots (no overhang), recoloured (blue "No traffic" /
+  grey "Google" / perf-coloured "Actual"), legend renamed; replay speed readout averaged so it
+  doesn't flicker.
+- **J6 (v2.47) — consolidation:** folded the standalone Events card into the Driving card as an
+  expandable "All events · N" list (summaries + speeding always visible, detail on demand). Removed
+  dead EventsSection/CountPill.
+
+Test suite 46, all green. All of the 2026-06-24 review feedback addressed and verified on device.
 
 ## Rev I (v2.40–v2.41): field-test prep + review UX — branch `rev-g-functional`
 
