@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.41`, `versionCode=52`
+- Installed on S25: `versionName=2.43`, `versionCode=54`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,24 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev J (v2.42–v2.43): detection fixes + graphical UX — branch `rev-g-functional`
+
+- **J1 (v2.42) — event detection:** fixed the clustering bug where distinct slow-drive events
+  10–30 s apart merged into one (3 swerves + a brake across 31 s). `DisplayEvents` now clusters by
+  time only (4 s window, hard 8 s span cap); the detail card's grouped-signals list is ±6 s
+  (no spatial chaining). **Speed-aware turn/swerve flagging**: <10 km/h never; 10–30 km/h needs
+  ≥0.40g; ≥30 km/h needs ≥0.30g (a 0.26g swerve at 20 km/h is gone). Corner detection 0.27→0.32 g.
+  Brake/accel left as-is. **Variable replay autoplay**: max(5 s, tripSeconds/360), capped 30 s.
+- **J2 (v2.43) — graphical UX:** landscape (car-mount) shows one full-screen Start/Stop button for
+  eyes-free pressing (verified on device); portrait buttons enlarged. Trip hero shows Safety/Comfort/
+  Pace as small score rings (fixes word-wrap); avg speed dropped from the headline. Event filter
+  toggles are compact icon chips.
+
+Still open (next): rough-road as discrete bumpy *episodes* (bumpiness×duration, schema add);
+You-vs-Traffic redesign (compressed, free-flow→typical range with "you" marker, Maps colours, less
+text); replay header (bigger play, drop wordy line, cleaner timer + speed gauge); Driving/Events
+consolidation. Test suite 44.
 
 ## Rev I (v2.40–v2.41): field-test prep + review UX — branch `rev-g-functional`
 
