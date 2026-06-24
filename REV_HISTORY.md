@@ -7,10 +7,42 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.34`, `versionCode=45`
-- Last verified install: June 23, 2026 at 15:31 local time
-- Build artifact: `app/build/outputs/apk/debug/app-debug.apk`
-- Maps key: supplied at build time from the original worktree `local.properties`; do not commit or print it.
+- Installed on S25: `versionName=2.36`, `versionCode=47`
+- Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
+- Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
+
+### Build note: OneDrive lock workaround
+
+OneDrive holds handles on `app/build` (kotlin-classes / snapshot), which breaks incremental
+Kotlin compile with `Unable to delete directory`. Builds now relocate output out of OneDrive via an
+init script:
+
+```powershell
+.\gradlew.bat --init-script 'C:\Users\sinan\cartrip-build-tools\relocate-build.gradle' :app:assembleDebug --no-daemon
+```
+
+The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev G (v2.35 / v2.36): functional hardening — branch `rev-g-functional`
+
+Directive: focus on functionality, accuracy, correctness, robustness, sensitivity — not UI. Added
+the project's first unit-test suite (23 tests) and used it to verify each fix.
+
+- **Auto-stop end time (P0):** trip end is now placed at the real rest moment (last sample >4 km/h,
+  then first stationary sample after it) instead of a fixed +60 s grace ~6 min late. New pure
+  `record/AutoStop.kt`, fed by a rolling speed window in `RecordingService`.
+- **Robust peak-G:** `FusedEventDetector.maxHorizG` uses p99.5 of horizontal-accel magnitude, not the
+  raw max. Verified on real data: trip 784's spurious 1.10 g → 0.29 g; 790's 0.73 g → 0.14 g.
+- **Sensor-stall recovery:** now also recovers a mid-trip motion stall, not just startup starvation.
+- **Detection accuracy:** swerves gated on speed (≥25 km/h) so routine low-speed turns aren't labelled
+  swerves; vertical-bump veto stops potholes fabricating brake/accel events.
+- **ETA robustness:** `RoutesClient` retries transient failures with backoff, longer timeouts for long
+  routes, and surfaces `lastDiagnostic()` instead of a silent null.
+- **Trip naming:** nearest-place matching guarded by a 4 km radius (no more stray GTA landmark for
+  out-of-area trips); time-of-day generic fallback. Full reverse-geocoding remains a roadmap item.
+- Minor: `DisplayEvents.nearestPoint` trailing-event branch fix; correct `rawFixes` on trip reload.
+
+## Main changes since v2.21
 
 ## Build environment used
 
