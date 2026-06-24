@@ -26,7 +26,7 @@ object FusedEventDetector {
 
     private const val G = 9.80665
     private const val HARD_LONG_G = 0.25          // horizontal-accel spike → brake/accel candidate
-    private const val HARD_CORNER_G = 0.27        // sustained lateral-g (speed × yaw) → corner
+    private const val HARD_CORNER_G = 0.32        // sustained lateral-g (speed × yaw) → corner
     private const val SWERVE_YAW = 0.45           // rad/s, a sharp yaw flick (not a sustained corner)
     // Below this speed a sharp yaw is just a normal tight/parking-lot turn, not a "swerve" — gating
     // on it stops the detector over-labeling routine low-speed turns (the 36-vs-14 swerve/corner skew).

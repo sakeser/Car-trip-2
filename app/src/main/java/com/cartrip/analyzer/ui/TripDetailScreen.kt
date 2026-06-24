@@ -79,7 +79,6 @@ import androidx.compose.ui.unit.dp
 import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.EventType
-import com.cartrip.analyzer.analysis.GeoUtils
 import com.cartrip.analyzer.analysis.SpeedTier
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
@@ -515,12 +514,14 @@ private fun ReplayTimeline(
     val density = LocalDensity.current
     val point = points.getOrNull(selectedIndex)
 
-    // Auto-play the scrubber across the trip over ~5 s on load; manual scrubbing pauses it.
+    // Auto-play the scrubber on load; manual scrubbing pauses it. Replay length scales with the trip:
+    // at least 5 s, then ~1 s per 6 min of driving (1 h trip ≈ 10 s), capped at 30 s.
     var playing by remember(points) { mutableStateOf(true) }
     LaunchedEffect(playing, points) {
         if (!playing || points.size <= 1) return@LaunchedEffect
         val lastIdx = points.size - 1
-        val totalMs = 5000f
+        val tripMs = (points.last().tMs - points.first().tMs).coerceAtLeast(1L)
+        val totalMs = (tripMs / 360f).coerceIn(5000f, 30000f)
         val startFrac = (if (selectedIndex >= lastIdx) 0 else selectedIndex).toFloat() / lastIdx
         val t0 = System.currentTimeMillis()
         while (playing) {
@@ -658,7 +659,7 @@ private fun EventDetailCard(
     val style = eventStyle(event)
     val point = points.getOrNull(nearestPointIndex(points, event.tMs))
     val firstT = points.firstOrNull()?.tMs ?: event.tMs
-    val rawSignals = remember(event, rawEvents, points) { rawSignalsForEvent(event, rawEvents, points) }
+    val rawSignals = remember(event, rawEvents) { rawSignalsForEvent(event, rawEvents) }
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -1440,18 +1441,11 @@ private fun rawSignalLine(event: DriveEvent, firstT: Long): String {
 
 private fun rawSignalsForEvent(
     event: DriveEvent,
-    rawEvents: List<DriveEvent>,
-    points: List<TrackPoint>
+    rawEvents: List<DriveEvent>
 ): List<DriveEvent> =
-    rawEvents.filter {
-        abs(it.tMs - event.tMs) <= 7_000L || closeOnRoute(points, it.tMs, event.tMs)
-    }.sortedBy { it.tMs }
-
-private fun closeOnRoute(points: List<TrackPoint>, aMs: Long, bMs: Long): Boolean {
-    val a = points.getOrNull(nearestPointIndex(points, aMs)) ?: return false
-    val b = points.getOrNull(nearestPointIndex(points, bMs)) ?: return false
-    return GeoUtils.haversine(a.lat, a.lon, b.lat, b.lon) <= 80.0
-}
+    // Strictly time-windowed: only signals that are part of the same moment (no spatial chaining,
+    // which merged distinct slow-drive events seconds-to-tens-of-seconds apart).
+    rawEvents.filter { abs(it.tMs - event.tMs) <= 6_000L }.sortedBy { it.tMs }
 
 
 @Composable

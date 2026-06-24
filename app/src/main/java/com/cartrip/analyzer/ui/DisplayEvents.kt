@@ -2,9 +2,7 @@ package com.cartrip.analyzer.ui
 
 import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.EventType
-import com.cartrip.analyzer.analysis.GeoUtils
 import com.cartrip.analyzer.analysis.TrackPoint
-import kotlin.math.abs
 
 /**
  * Main-screen event cleanup. Raw detector events are intentionally kept in storage/export/advanced
@@ -12,26 +10,39 @@ import kotlin.math.abs
  */
 object DisplayEvents {
     private const val G = 9.80665
-    private const val CLUSTER_TIME_MS = 6_000L
-    private const val CLUSTER_DISTANCE_M = 70.0
+    // One real-world "moment": signals within CLUSTER_TIME_MS of each other, but a single cluster can
+    // never span more than MAX_CLUSTER_SPAN_MS — otherwise slow-drive events 10-30s apart chain into
+    // one bogus blob (e.g. three swerves + a brake merged across 31s).
+    private const val CLUSTER_TIME_MS = 4_000L
+    private const val MAX_CLUSTER_SPAN_MS = 8_000L
     private const val LOW_CONFIDENCE = 0.6
+
+    // Speed/g gating for turn-like events (corners & swerves). A sharp-feeling number at a crawl, or a
+    // gentle one at speed, usually isn't a notable maneuver — so require more g the slower you're going.
+    private const val TURN_MIN_SPEED_KMH = 10.0
+    private const val TURN_MID_SPEED_KMH = 30.0
+    private const val TURN_MIN_G_LOW = 0.40   // 10-30 km/h
+    private const val TURN_MIN_G_HIGH = 0.30  // >=30 km/h
 
     fun clean(rawEvents: List<DriveEvent>, points: List<TrackPoint>): List<DriveEvent> {
         if (rawEvents.isEmpty()) return emptyList()
-        if (points.isEmpty()) return rawEvents.sortedBy { it.tMs }.filter(::passesDisplayThreshold)
-
-        val filtered = rawEvents
-            .sortedBy { it.tMs }
-            .filter(::passesDisplayThreshold)
+        val sorted = rawEvents.sortedBy { it.tMs }
+        val filtered = sorted
+            .filter { passesDisplayThreshold(it, speedAt(points, it.tMs)) }
             .filterNot { isBumpEcho(it, rawEvents) }
         if (filtered.isEmpty()) return emptyList()
 
+        // Cluster strictly by time, bounded so a cluster can't stretch across distinct moments.
         val clusters = ArrayList<MutableList<DriveEvent>>()
         filtered.forEach { event ->
-            val lastCluster = clusters.lastOrNull()
-            val lastEvent = lastCluster?.lastOrNull()
-            if (lastEvent != null && sameMoment(lastEvent, event, points)) {
-                lastCluster.add(event)
+            val cluster = clusters.lastOrNull()
+            val last = cluster?.lastOrNull()
+            val start = cluster?.firstOrNull()
+            if (last != null && start != null &&
+                event.tMs - last.tMs <= CLUSTER_TIME_MS &&
+                event.tMs - start.tMs <= MAX_CLUSTER_SPAN_MS
+            ) {
+                cluster.add(event)
             } else {
                 clusters.add(arrayListOf(event))
             }
@@ -71,16 +82,22 @@ object DisplayEvents {
                 .thenBy { it.magnitude }) ?: cluster.first()
     }
 
-    private fun passesDisplayThreshold(event: DriveEvent): Boolean {
+    private fun passesDisplayThreshold(event: DriveEvent, speedKmh: Double): Boolean {
         val g = event.magnitude / G
         return when (event.type) {
             EventType.BRAKE, EventType.ACCEL -> {
                 g >= 0.28 && !(event.source == "fused" && event.confidence < LOW_CONFIDENCE && g < 0.35)
             }
-            EventType.CORNER -> g >= 0.28
-            EventType.SWERVE -> g >= 0.25 || (event.source == "fused" && event.confidence >= 0.8 && g >= 0.10)
+            EventType.CORNER, EventType.SWERVE -> turnNotable(g, speedKmh)
             EventType.POTHOLE -> g >= 0.33
         }
+    }
+
+    /** Speed-aware notability for turns/swerves: more g required the slower you're going. */
+    private fun turnNotable(g: Double, speedKmh: Double): Boolean {
+        if (speedKmh < TURN_MIN_SPEED_KMH) return false
+        val minG = if (speedKmh < TURN_MID_SPEED_KMH) TURN_MIN_G_LOW else TURN_MIN_G_HIGH
+        return g >= minG
     }
 
     private fun isBumpEcho(event: DriveEvent, rawEvents: List<DriveEvent>): Boolean {
@@ -88,17 +105,13 @@ object DisplayEvents {
         if (event.type != EventType.ACCEL && event.type != EventType.BRAKE) return false
         if (event.confidence >= LOW_CONFIDENCE) return false
         val nearPothole = rawEvents.any {
-            it.type == EventType.POTHOLE && abs(it.tMs - event.tMs) <= 1_000L
+            it.type == EventType.POTHOLE && kotlin.math.abs(it.tMs - event.tMs) <= 1_000L
         }
         return nearPothole
     }
 
-    private fun sameMoment(a: DriveEvent, b: DriveEvent, points: List<TrackPoint>): Boolean {
-        if (abs(b.tMs - a.tMs) <= CLUSTER_TIME_MS) return true
-        val pa = nearestPoint(points, a.tMs) ?: return false
-        val pb = nearestPoint(points, b.tMs) ?: return false
-        return GeoUtils.haversine(pa.lat, pa.lon, pb.lat, pb.lon) <= CLUSTER_DISTANCE_M
-    }
+    private fun speedAt(points: List<TrackPoint>, tMs: Long): Double =
+        nearestPoint(points, tMs)?.speedKmh ?: Double.MAX_VALUE
 
     private fun nearestPoint(points: List<TrackPoint>, tMs: Long): TrackPoint? {
         if (points.isEmpty()) return null
