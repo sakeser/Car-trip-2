@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.57 (build 68)** · Branch `main` (Rev S complete)_
+_Last updated: 2026-06-24 · App version **2.58 (build 69)** · Branch `main` (Rev T)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;

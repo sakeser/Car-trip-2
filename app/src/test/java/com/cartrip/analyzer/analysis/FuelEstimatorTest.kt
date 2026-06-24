@@ -6,23 +6,26 @@ import org.junit.Test
 
 class FuelEstimatorTest {
 
-    private val v = FuelEstimator.DEFAULT  // 10.2 city / 8.4 hwy, $1.84/L
+    private val v = FuelEstimator.DEFAULT  // Tucson Hybrid: 6.4 city / 6.6 hwy, $1.84/L
 
     /** A steady-highway trip should use close to the highway rating, not the city rating. */
     @Test fun highwayTripUsesHighwayEconomy() {
         val km = 100.0
         val litres = FuelEstimator.litres(km, avgMovingSpeedKmh = 100.0, idleSeconds = 0.0, v)
-        // ~8.4 L/100km over 100 km ≈ 8.4 L
-        assertEquals(8.4, litres, 0.3)
+        // ~6.6 L/100km over 100 km ≈ 6.6 L
+        assertEquals(6.6, litres, 0.3)
     }
 
     /** A slow city trip should use the (worse) city economy. */
     @Test fun cityTripUsesCityEconomy() {
         val litres = FuelEstimator.litres(100.0, avgMovingSpeedKmh = 25.0, idleSeconds = 0.0, v)
-        assertEquals(10.2, litres, 0.3)
-        // and city must cost more fuel than highway for the same distance
+        assertEquals(6.4, litres, 0.3)
+        // The speed curve interpolates between the city and highway anchors (don't assume which is
+        // larger — a hybrid's city economy is actually better than its highway economy).
         val hwy = FuelEstimator.litres(100.0, avgMovingSpeedKmh = 100.0, idleSeconds = 0.0, v)
-        assertTrue("city ($litres) should exceed hwy ($hwy)", litres > hwy)
+        val mid = FuelEstimator.litres(100.0, avgMovingSpeedKmh = 65.0, idleSeconds = 0.0, v)
+        assertTrue("mid ($mid) should sit between city ($litres) and hwy ($hwy)",
+            mid in minOf(litres, hwy)..maxOf(litres, hwy))
     }
 
     /** Idle time burns fuel even with no distance, and cost tracks the per-litre price. */
@@ -43,7 +46,7 @@ class FuelEstimatorTest {
     @Test fun tripL100AndCombinedAreSane() {
         val litres = FuelEstimator.litres(50.0, 70.0, 30.0, v)
         val l100 = FuelEstimator.tripL100(50.0, litres)
-        assertTrue("trip L/100 ($l100) should sit near the rated band", l100 in 7.5..11.0)
-        assertEquals(9.39, FuelEstimator.combinedL100(v), 0.05)  // 10.2*.55 + 8.4*.45
+        assertTrue("trip L/100 ($l100) should sit near the rated band", l100 in 5.5..7.5)
+        assertEquals(6.49, FuelEstimator.combinedL100(v), 0.05)  // 6.4*.55 + 6.6*.45
     }
 }

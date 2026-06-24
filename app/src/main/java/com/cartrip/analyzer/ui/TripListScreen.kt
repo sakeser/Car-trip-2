@@ -109,11 +109,12 @@ fun TripListScreen(
         } else {
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
                 // Frozen map: previews the selected trip's route, else the 30-day heatmap.
+                // Maximized: near-edge-to-edge and taller so the route reads clearly.
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .height(196.dp)
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                        .height(264.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
                     if (selectedTripId != null && selectedRoute.size >= 2) {
@@ -237,89 +238,87 @@ private fun TripRow(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 4.dp else 1.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Text(
-                text = "$number",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(22.dp)
-            )
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            // Title spans the full card width on its own line so geocoded "A -> B" names stay one line
+            // instead of wrapping (the scores now sit on the meta row below, not beside the title).
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "$number",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(22.dp)
+                )
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (trip.isSample) SampleBadge()
+            }
+            if (partial) {
+                Text(
+                    text = "Partial - ${trip.partialReasonText()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFD97706),
+                    maxLines = 1
+                )
+            }
+            if (finished) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        // Allow 2 lines so place-name labels with a "->" (e.g. "Mississauga -> North
-                        // York") show the destination instead of truncating after the arrow.
-                        text = displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    if (trip.isSample) SampleBadge()
-                }
-                if (partial) {
-                    Text(
-                        text = "Partial - ${trip.partialReasonText()}",
+                        Format.tripDistance(trip.distanceM),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFD97706),
-                        maxLines = 1
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(58.dp)
                     )
-                }
-                if (finished) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            Format.tripDistance(trip.distanceM),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.width(58.dp)
-                        )
-                        DurationBar(
-                            durationS = trip.durationS,
-                            fraction = (trip.durationS / maxDurationS).coerceIn(0.03, 1.0).toFloat(),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "Not finished",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    DurationBar(
+                        durationS = trip.durationS,
+                        fraction = (trip.durationS / maxDurationS).coerceIn(0.03, 1.0).toFloat(),
+                        modifier = Modifier.weight(1f)
                     )
-                }
-                if (selected && finished) {
-                    val quality = TripDataQuality.from(trip)
-                    val vsGoogle = if (trip.googleEtaTrafficS > 0.0 && trip.durationS > 0.0) {
-                        val d = ((trip.durationS - trip.googleEtaTrafficS) / 60.0).roundToInt()
-                        when {
-                            d > 0 -> " · +$d min vs Google"
-                            d < 0 -> " · $d min vs Google"
-                            else -> " · on par vs Google"
+                    if (scores != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(SCORE_COL_GAP)) {
+                            MiniScore(scores.safety)
+                            MiniScore(scores.comfort)
+                            MiniScore(scores.speed)
                         }
-                    } else ""
-                    Text(
-                        "${Format.timeOfDay(trip.startTime)} · ${quality.level.label} quality$vsGoogle",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    }
                 }
+            } else {
+                Text(
+                    text = "Not finished",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            if (scores != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(SCORE_COL_GAP)) {
-                    MiniScore(scores.safety)
-                    MiniScore(scores.comfort)
-                    MiniScore(scores.speed)
-                }
+            if (selected && finished) {
+                val quality = TripDataQuality.from(trip)
+                val vsGoogle = if (trip.googleEtaTrafficS > 0.0 && trip.durationS > 0.0) {
+                    val d = ((trip.durationS - trip.googleEtaTrafficS) / 60.0).roundToInt()
+                    when {
+                        d > 0 -> " · +$d min vs Google"
+                        d < 0 -> " · $d min vs Google"
+                        else -> " · on par vs Google"
+                    }
+                } else ""
+                Text(
+                    "${Format.timeOfDay(trip.startTime)} · ${quality.level.label} quality$vsGoogle",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -464,7 +463,7 @@ private fun SectionHeader(
             ) {
                 HeaderCol("Safe")
                 HeaderCol("Comf")
-                HeaderCol("Speed")
+                HeaderCol("Pace")
             }
         }
     }
@@ -477,7 +476,9 @@ private fun HeaderCol(label: String) {
             label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

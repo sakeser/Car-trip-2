@@ -78,10 +78,10 @@ fun TripMap(
         flush()
         segs
     }
-    // Start/end and the "you" car stay full size; brake & turn markers are ~30% smaller (they were
-    // visually too heavy and there are many of them).
-    val startIcon = remember { markerIcon(MarkerGlyph.START, AndroidColor.rgb(34, 197, 94), 96) }
-    val stopIcon = remember { markerIcon(MarkerGlyph.FINISH, AndroidColor.rgb(239, 68, 68), 96) }
+    // Start/end are smaller (72) and drawn semi-transparent (alpha below) so the route detail shows
+    // through; the "you" car stays prominent and on top. Brake & turn markers are ~30% smaller again.
+    val startIcon = remember { markerIcon(MarkerGlyph.START, AndroidColor.rgb(34, 197, 94), 72) }
+    val stopIcon = remember { markerIcon(MarkerGlyph.FINISH, AndroidColor.rgb(239, 68, 68), 72) }
     val brakeIcon = remember { markerIcon(MarkerGlyph.BRAKE, AndroidColor.rgb(220, 38, 38), 67) }
     val accelIcon = remember { markerIcon(MarkerGlyph.ACCEL, AndroidColor.rgb(245, 158, 11), 84) }
     val cornerIcon = remember { markerIcon(MarkerGlyph.TURN, AndroidColor.rgb(234, 179, 8), 67) }
@@ -154,6 +154,7 @@ fun TripMap(
                 title = "Start",
                 snippet = "Tap again to open in Maps",
                 icon = startIcon,
+                alpha = 0.7f,
                 onClick = {
                     if (armedMarker == "start") { armedMarker = ""; onStartOpen(); true }
                     else { armedMarker = "start"; false }
@@ -165,6 +166,7 @@ fun TripMap(
                 title = "Stop",
                 snippet = "Tap again to open in Maps",
                 icon = stopIcon,
+                alpha = 0.7f,
                 onClick = {
                     if (armedMarker == "stop") { armedMarker = ""; onStopOpen(); true }
                     else { armedMarker = "stop"; false }
@@ -196,10 +198,12 @@ fun TripMap(
             }
 
             selectedPoint?.let { point ->
+                // The replay car rides above the route and every other marker (start/end/events).
                 Marker(
                     state = MarkerState(LatLng(point.lat, point.lon)),
                     title = "Replay ${"%.0f".format(point.speedKmh)} km/h",
-                    icon = replayIcon
+                    icon = replayIcon,
+                    zIndex = 10f
                 )
             }
         }

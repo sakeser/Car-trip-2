@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.57`, `versionCode=68`
+- Installed on S25: `versionName=2.58`, `versionCode=69`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,25 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev T (v2.58): hybrid fuel defaults + Past-Trips list/map polish
+
+Owner fix-requests:
+- **Hybrid Tucson:** `FuelEstimator.DEFAULT` reseeded for a **2023 Tucson Hybrid (HEV) AWD** — ~6.4 city
+  / 6.6 hwy L/100km (was the 2.5L gas 10.2/8.4). Tests updated (a hybrid's city economy is *better* than
+  its highway economy, so the old "city > hwy" assumption was dropped). NOTE: the on-device profile is
+  stored in prefs and isn't changed by the default — set City 6.4 / Hwy 6.6 (calibration 1.0) in the
+  fuel settings, or keep calibrating from real car readings.
+- **Past-Trips trip rows:** title now spans the **full card width on its own line** (number + name +
+  SAMPLE badge), single-line with ellipsis; distance/duration **and** the Safe/Comf/Pace scores moved to
+  a compact meta row below — so geocoded "A → B" names no longer wrap to 2 lines.
+- **Score header:** "Speed" → **"Pace"** (consistent with the hero/Insights) + `softWrap=false` so it
+  never wraps to a 2nd line.
+- **Frozen map:** bigger — near-edge (6 dp side padding) and taller (264 dp).
+- **Map markers:** start/end icons smaller (72 px) and **semi-transparent (alpha 0.7)** so the route
+  shows through; the **replay car rides on top** (`zIndex=10`) above the route and all other markers.
+
+Build + 57 tests green; installed v2.58/69. On-device visual check pending (phone locked).
 
 ## Rev S (v2.56–2.57): ETA range gauge, peak-speed gauge, fuel card, 2-line names (UI polish)
 

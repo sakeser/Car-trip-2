@@ -9,8 +9,8 @@ import kotlin.math.max
  * The model is intentionally simple and **calibratable**: a speed-dependent L/100km curve anchored on
  * the vehicle's city/highway ratings, plus an idle burn, all scaled by a [Vehicle.calibration] factor.
  * Real cars report actual distance / fuel / L-100km per trip; feeding those back (adjust the ratings or
- * the calibration factor) is how this converges. Seeded for a 2023 Hyundai Tucson 2.5L AWD
- * (~10.2 city / 8.4 hwy L/100km, NRCan/EPA) at a GTA fuel price; everything is user-editable.
+ * the calibration factor) is how this converges. Seeded for a 2023 Hyundai Tucson Hybrid (HEV) AWD
+ * (~6.4 city / 6.6 hwy L/100km, NRCan/EPA) at a GTA fuel price; everything is user-editable.
  */
 object FuelEstimator {
 
@@ -63,9 +63,13 @@ object FuelEstimator {
     fun tripL100(distanceKm: Double, litres: Double): Double =
         if (distanceKm > 0.0) litres / distanceKm * 100.0 else 0.0
 
-    /** Default seed: a 2023 Hyundai Tucson 2.5L AWD at a representative GTA regular price. */
+    /**
+     * Default seed: the owner's 2023 Hyundai Tucson **Hybrid (HEV) AWD** at a representative GTA
+     * regular price. NRCan/EPA-equivalent ~6.4 city / 6.6 hwy L/100km (EPA ~37/36 mpg). Editable in
+     * VehicleScreen and calibratable from real car-reported economy.
+     */
     val DEFAULT = Vehicle(
-        year = 2023, make = "Hyundai", model = "Tucson",
-        cityL100 = 10.2, hwyL100 = 8.4, pricePerL = 1.84,
+        year = 2023, make = "Hyundai", model = "Tucson Hybrid",
+        cityL100 = 6.4, hwyL100 = 6.6, pricePerL = 1.84,
     )
 }
