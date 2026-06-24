@@ -7,7 +7,7 @@ For the full Claude Code continuation brief, including UX worktree notes, GNSS/r
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.36`, `versionCode=47`
+- Installed on S25: `versionName=2.39`, `versionCode=50`
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 
@@ -22,6 +22,29 @@ init script:
 ```
 
 The APK then lands under `C:\Users\sinan\cartrip-build-out\app\outputs\...`.
+
+## Rev H (v2.37–v2.39): caching, GNSS, list structure — branch `rev-g-functional`
+
+Addendum work, prioritised for technical value (accuracy/robustness/reduced API dependency).
+First a verification pass on the prior backlog (auto-stop, ETA fallback, naming, odd-turn all done
+in Rev G; You-vs-Traffic and replay timeline already existed; AM/PM, debug mode, passive mode,
+fuel/cost still open).
+
+- **H1 (v2.37):** AM/PM time formatting; Past Trips grouped into collapsible recency buckets
+  (Last 24 h / 3 days / 7 days / Last month / Older) via pure `TripBuckets`.
+- **H2 (v2.38) — speed-limit cache:** new Room tables (schema v14) `cached_ways` (keyed by stable
+  **OSM way id**, not Google Roads placeId — this app uses OSM/Overpass, and ODbL permits caching)
+  and `cached_tiles` (~2.2 km fetch markers). `SpeedLimits` is now cache-first: only Overpass-queries
+  tiles not fetched within a 30-day TTL, then serves the route from cache → a repeat drive makes zero
+  network calls. `Tiles` helper (pure, tested); `lastCacheStat()` for debug.
+- **H3 (v2.39) — GNSS quality layer:** `GnssStatus.Callback` aggregates a per-trip summary (sats
+  used, mean/top C/N0, L5 seen) into trip schema v15; `GnssQuality` (pure, tested) → Strong/Moderate/
+  Weak; folded into the data-quality badge (weak sky view caps High→Medium; detail shows "GNSS N
+  sats M dB-Hz L5"). Diagnostics/confidence only — does not replace fused positioning.
+
+Test suite now 35 unit tests (all green). Migrations 13→14→15 verified on the device DB.
+Deferred (next): speed-limit-cache population QA (drive same road twice), reverse-geocoded naming,
+debug screen (surface `lastCacheStat`/GNSS), passive auto-start, fuel/cost, frozen-map trip selection.
 
 ## Rev G (v2.35 / v2.36): functional hardening — branch `rev-g-functional`
 
