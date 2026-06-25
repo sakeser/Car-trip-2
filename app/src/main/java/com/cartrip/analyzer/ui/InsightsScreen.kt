@@ -20,6 +20,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingFlat
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Weekend
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -102,10 +110,6 @@ fun InsightsScreen(
         }.ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
         val averages = ScoreAverages.from(wScores)
-        val driveSeries = Series("Drive", Color(0xFF0EA5E9), wScores.map { it.overall.toFloat() })
-        val safetySeries = Series("Safety", Color(0xFF22C55E), wScores.map { it.safety.toFloat() })
-        val comfortSeries = Series("Comfort", Color(0xFF38BDF8), wScores.map { it.comfort.toFloat() })
-        val paceSeries = Series("Pace", Color(0xFF8B5CF6), wScores.map { (it.speed ?: it.overall).toFloat() })
         val best = windowTrips.maxByOrNull { it.smoothness }
         val worst = windowTrips.minByOrNull { it.smoothness }
         val longest = windowTrips.maxByOrNull { it.distanceM }
@@ -125,19 +129,7 @@ fun InsightsScreen(
 
             item {
                 SectionTitle("Score trends")
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    MultiSeriesChart(
-                        title = "Drive score over ${window.label.lowercase()}",
-                        series = listOf(driveSeries, safetySeries, comfortSeries, paceSeries),
-                        yMin = 0f,
-                        yMax = 100f,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp)
-                    )
-                }
+                ScoreTrendsCard(wScores, window.label)
             }
 
             item { SectionTitle("Health metrics") }
@@ -457,6 +449,8 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                 DivergingBarChart(
                     values = margins.map { it.toFloat() },
                     average = avgMargin.toFloat(),
+                    minScale = 3f,        // don't exaggerate sub-3-min differences
+                    scalePercentile = 0.85f,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
@@ -530,6 +524,107 @@ private fun WhenYouDriveCard(trips: List<TripEntity>) {
             }
         }
     }
+}
+
+/**
+ * Score trends, re-imagined: one row per score (icon + current average + 0-100 bar + a trend chip
+ * comparing the later half of the window to the earlier half) instead of four overlapping lines.
+ */
+@Composable
+private fun ScoreTrendsCard(scores: List<TripScores>, windowLabel: String) {
+    if (scores.isEmpty()) return
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            ScoreTrendRow("Drive", Color(0xFF0EA5E9), Icons.Filled.Star, scores.map { it.overall.toFloat() })
+            ScoreTrendRow("Safety", Color(0xFF22C55E), Icons.Filled.Shield, scores.map { it.safety.toFloat() })
+            ScoreTrendRow("Comfort", Color(0xFF38BDF8), Icons.Filled.Weekend, scores.map { it.comfort.toFloat() })
+            ScoreTrendRow("Pace", Color(0xFF8B5CF6), Icons.Filled.Timer, scores.mapNotNull { it.speed?.toFloat() })
+            Text(
+                "Arrows compare the later half of ${windowLabel.lowercase()} with the earlier half.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScoreTrendRow(label: String, color: Color, icon: ImageVector, values: List<Float>) {
+    val avg = if (values.isEmpty()) null else values.average().roundToInt()
+    val delta = trendDelta(values)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(18.dp)).background(color.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        avg?.toString() ?: "-",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (avg != null) color else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (avg != null) TrendChip(delta)
+                }
+            }
+            Box(
+                modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f))
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(((avg ?: 0) / 100f)).height(7.dp)
+                        .clip(RoundedCornerShape(4.dp)).background(color)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrendChip(delta: Int) {
+    val up = Color(0xFF22C55E)
+    val down = Color(0xFFEF4444)
+    val flat = MaterialTheme.colorScheme.onSurfaceVariant
+    val (icon, c, txt) = when {
+        delta >= 1 -> Triple(Icons.AutoMirrored.Filled.TrendingUp, up, "+$delta")
+        delta <= -1 -> Triple(Icons.AutoMirrored.Filled.TrendingDown, down, "$delta")
+        else -> Triple(Icons.AutoMirrored.Filled.TrendingFlat, flat, "steady")
+    }
+    Row(
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(c.copy(alpha = 0.14f))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = c, modifier = Modifier.size(14.dp))
+        Text(txt, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = c)
+    }
+}
+
+/** Change in a score series: average of the later half minus the earlier half (0 if too few points). */
+private fun trendDelta(values: List<Float>): Int {
+    if (values.size < 4) return 0
+    val half = values.size / 2
+    val first = values.take(half).average()
+    val second = values.takeLast(half).average()
+    return (second - first).roundToInt()
 }
 
 @Composable

@@ -132,9 +132,6 @@ fun TimeSeriesChart(
     }
 }
 
-/** One named series for [MultiSeriesChart]. */
-class Series(val label: String, val color: Color, val values: List<Float>)
-
 /** A tiny inline line, no axes - for small-multiples and hero cards. */
 @Composable
 fun MiniSparkline(
@@ -185,8 +182,12 @@ fun MiniSparkline(
 
 /**
  * A per-item diverging bar chart around a zero baseline: each bar is coloured by sign
- * ([positiveColor] up, [negativeColor] down) and scaled to the largest magnitude. Built for
- * "minutes vs traffic per trip" — green = faster, red = slower — with an optional dashed average.
+ * ([positiveColor] up, [negativeColor] down). Built for "minutes vs traffic per trip" — green =
+ * faster, red = slower — with an optional dashed average.
+ *
+ * The vertical scale is **robust**: it's the [scalePercentile] of the absolute values (floored at
+ * [minScale]) rather than the single max, so a couple of outliers don't crush every other bar to
+ * near-zero. Bars past the scale clamp to full height and get a light cap to show they run off it.
  */
 @Composable
 fun DivergingBarChart(
@@ -194,10 +195,13 @@ fun DivergingBarChart(
     modifier: Modifier = Modifier,
     positiveColor: Color = Color(0xFF22C55E),
     negativeColor: Color = Color(0xFFEF4444),
-    average: Float? = null
+    average: Float? = null,
+    scalePercentile: Float = 0.85f,
+    minScale: Float = 0.001f
 ) {
     val baselineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
     val avgColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val capColor = Color.White.copy(alpha = 0.75f)
     if (values.isEmpty()) {
         Box(modifier = modifier.fillMaxWidth().height(48.dp))
         return
@@ -206,8 +210,10 @@ fun DivergingBarChart(
         val w = size.width
         val h = size.height
         val mid = h / 2f
-        val amp = max(values.max(), -values.min()).coerceAtLeast(0.001f)
-        fun yAt(v: Float) = mid - (v / amp) * (mid * 0.88f)
+        val absSorted = values.map { abs(it) }.sorted()
+        val pIdx = ((absSorted.size - 1) * scalePercentile).toInt().coerceIn(0, absSorted.lastIndex)
+        val amp = absSorted[pIdx].coerceAtLeast(minScale)
+        fun yAt(v: Float) = mid - (v.coerceIn(-amp, amp) / amp) * (mid * 0.88f)
         drawLine(baselineColor, Offset(0f, mid), Offset(w, mid), 1.5f)
         val slot = w / values.size
         val barW = (slot * 0.6f).coerceAtMost(16f)
@@ -216,11 +222,13 @@ fun DivergingBarChart(
             val y = yAt(v)
             val top = min(y, mid)
             val barH = abs(mid - y).coerceAtLeast(2f)
-            drawRect(
-                color = if (v >= 0f) positiveColor else negativeColor,
-                topLeft = Offset(cx - barW / 2f, top),
-                size = Size(barW, barH)
-            )
+            val col = if (v >= 0f) positiveColor else negativeColor
+            drawRect(col, topLeft = Offset(cx - barW / 2f, top), size = Size(barW, barH))
+            // Off-the-scale marker: a light cap at the bar's outer tip.
+            if (abs(v) > amp * 1.02f) {
+                val tipY = if (v >= 0f) top else top + barH - 2.5f
+                drawRect(capColor, topLeft = Offset(cx - barW / 2f, tipY), size = Size(barW, 2.5f))
+            }
         }
         if (average != null) {
             val ay = yAt(average)
@@ -235,83 +243,3 @@ fun DivergingBarChart(
     }
 }
 
-/**
- * Overlays several series on a shared, fixed y-range ([yMin]..[yMax]) - built for the 0-100
- * driving scores so Safety/Comfort/Pace can be compared on one set of axes over time.
- */
-@Composable
-fun MultiSeriesChart(
-    title: String,
-    series: List<Series>,
-    yMin: Float,
-    yMax: Float,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            series.forEach { s ->
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(s.color.copy(alpha = 0.11f))
-                        .padding(horizontal = 9.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(s.color)
-                    )
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        s.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-        val maxLen = series.maxOfOrNull { it.values.size } ?: 0
-        if (maxLen < 2) {
-            Text(
-                "Not enough data",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            return
-        }
-        val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
-        Canvas(
-            modifier = Modifier.fillMaxWidth().height(164.dp).padding(top = 8.dp)
-        ) {
-            val w = size.width
-            val h = size.height
-            val span = (yMax - yMin).coerceAtLeast(0.001f)
-            fun yAt(v: Float) = h - (v - yMin) / span * h
-
-            listOf(0f, 0.25f, 0.5f, 0.75f, 1f).forEach { frac ->
-                val y = h * frac
-                drawLine(gridColor, Offset(0f, y), Offset(w, y), 1f)
-            }
-
-            series.forEach { s ->
-                if (s.values.size < 2) return@forEach
-                fun xAt(i: Int) = w * i / (s.values.size - 1)
-                val path = Path()
-                path.moveTo(xAt(0), yAt(s.values[0]))
-                for (i in 1 until s.values.size) path.lineTo(xAt(i), yAt(s.values[i]))
-                drawPath(path, s.color, style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                drawCircle(s.color, radius = 4f, center = Offset(xAt(s.values.lastIndex), yAt(s.values.last())))
-            }
-        }
-    }
-}
