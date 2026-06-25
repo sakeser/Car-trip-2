@@ -135,6 +135,14 @@ fun TripListScreen(
 
                 val maxDurationS = trips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
                 val grouped = TripBuckets.group(trips)
+                // Differentiate same-named trips ("North York Loop (10:14am)") across the whole list.
+                val shownNames = remember(trips, tripLabels) {
+                    TripNaming.disambiguate(
+                        trips.map {
+                            TripNaming.Entry(it.id, it.name.ifBlank { tripLabels[it.id] ?: "Trip" }, it.startTime)
+                        }
+                    )
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -167,6 +175,7 @@ fun TripListScreen(
                                     number = startNumber + index + 1,
                                     trip = trip,
                                     label = tripLabels[trip.id] ?: "Trip",
+                                    shownName = shownNames[trip.id] ?: trip.name.ifBlank { tripLabels[trip.id] ?: "Trip" },
                                     maxDurationS = maxDurationS,
                                     selected = selectedTripId == trip.id,
                                     onClick = {
@@ -214,6 +223,7 @@ private fun TripRow(
     number: Int,
     trip: TripEntity,
     label: String,
+    shownName: String,
     maxDurationS: Double,
     selected: Boolean,
     onClick: () -> Unit,
@@ -256,7 +266,7 @@ private fun TripRow(
                     modifier = Modifier.width(22.dp)
                 )
                 Text(
-                    text = displayName,
+                    text = shownName,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,

@@ -434,7 +434,11 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
             } else {
                 val wins = withEta.count { it.durationS < it.googleEtaTrafficS }
                 val winRate = (wins * 100.0 / withEta.size).roundToInt()
-                val avgMargin = withEta.map { (it.googleEtaTrafficS - it.durationS) / 60.0 }.average()
+                // Per trip: minutes vs Google's typical estimate (positive = you were faster).
+                val margins = withEta.map { (it.googleEtaTrafficS - it.durationS) / 60.0 }
+                val avgMargin = margins.average()
+                val totalHours = withEta.sumOf { it.durationS } / 3600.0
+                val perHour = if (totalHours > 0) margins.sum() / totalHours else 0.0
                 val marginColor = if (avgMargin >= 0.0) Color(0xFF22C55E) else Color(0xFFEF4444)
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("$winRate%", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = marginColor)
@@ -445,14 +449,15 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
-                MiniSparkline(
-                    values = withEta.map { ((it.googleEtaTrafficS - it.durationS) / 60.0).toFloat() },
-                    color = marginColor,
-                    zeroBaseline = true,
+                // Diverging bars: each trip's minutes saved (green) or lost (red) vs Google, with the
+                // average as a dashed line.
+                DivergingBarChart(
+                    values = margins.map { it.toFloat() },
+                    average = avgMargin.toFloat(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    String.format(Locale.US, "Avg %+.1f min vs typical · via Google", avgMargin),
+                    String.format(Locale.US, "Avg %+.1f min/trip (%+.1f min/hr driven) vs Google", avgMargin, perHour),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

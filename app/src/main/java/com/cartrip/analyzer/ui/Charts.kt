@@ -20,13 +20,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Lightweight time-series line chart drawn on a Canvas (no third-party chart lib).
@@ -176,6 +180,58 @@ fun MiniSparkline(
         drawPath(fill, color.copy(alpha = 0.11f))
         drawPath(path, color, style = Stroke(width = 3f, cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawCircle(color, radius = 3.6f, center = Offset(xAt(values.lastIndex), yAt(values.last())))
+    }
+}
+
+/**
+ * A per-item diverging bar chart around a zero baseline: each bar is coloured by sign
+ * ([positiveColor] up, [negativeColor] down) and scaled to the largest magnitude. Built for
+ * "minutes vs traffic per trip" — green = faster, red = slower — with an optional dashed average.
+ */
+@Composable
+fun DivergingBarChart(
+    values: List<Float>,
+    modifier: Modifier = Modifier,
+    positiveColor: Color = Color(0xFF22C55E),
+    negativeColor: Color = Color(0xFFEF4444),
+    average: Float? = null
+) {
+    val baselineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    val avgColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    if (values.isEmpty()) {
+        Box(modifier = modifier.fillMaxWidth().height(48.dp))
+        return
+    }
+    Canvas(modifier = modifier.fillMaxWidth().height(48.dp)) {
+        val w = size.width
+        val h = size.height
+        val mid = h / 2f
+        val amp = max(values.max(), -values.min()).coerceAtLeast(0.001f)
+        fun yAt(v: Float) = mid - (v / amp) * (mid * 0.88f)
+        drawLine(baselineColor, Offset(0f, mid), Offset(w, mid), 1.5f)
+        val slot = w / values.size
+        val barW = (slot * 0.6f).coerceAtMost(16f)
+        values.forEachIndexed { i, v ->
+            val cx = slot * i + slot / 2f
+            val y = yAt(v)
+            val top = min(y, mid)
+            val barH = abs(mid - y).coerceAtLeast(2f)
+            drawRect(
+                color = if (v >= 0f) positiveColor else negativeColor,
+                topLeft = Offset(cx - barW / 2f, top),
+                size = Size(barW, barH)
+            )
+        }
+        if (average != null) {
+            val ay = yAt(average)
+            drawLine(
+                avgColor,
+                Offset(0f, ay),
+                Offset(w, ay),
+                2f,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(9f, 6f))
+            )
+        }
     }
 }
 

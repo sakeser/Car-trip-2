@@ -763,7 +763,7 @@ private fun filterIcon(filter: EventFilter): ImageVector = when (filter) {
     EventFilter.BRAKING -> Icons.Filled.StopCircle
     EventFilter.ACCEL -> Icons.Filled.Speed
     EventFilter.TURNS -> Icons.Filled.Route
-    EventFilter.BUMPS -> Icons.Filled.ReportProblem
+    EventFilter.BUMPS -> BumpGlyph
 }
 
 @Composable
@@ -1073,12 +1073,31 @@ private fun SpeedingSummaryRow(speedingSummary: SpeedingSummary?, points: List<T
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Speeding", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
-                    Text(
-                        if (speedingSummary == null) "No notable speeding on covered roads."
-                        else "${Format.duration(speedingSummary.speedingDurationS)} over the limit",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (speedingSummary == null) {
+                        Text(
+                            "No notable speeding on covered roads.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        // Headline lives here (full row width) so "+11 km/h over the limit" reads on
+                        // one line instead of wrapping inside the narrow side gauge.
+                        val over = (speedingSummary.peakSpeedKmh - speedingSummary.peakLimitKmh)
+                            .roundToInt().coerceAtLeast(1)
+                        Text(
+                            "+$over km/h over the limit",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = SPEED_RED,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Text(
+                            "for ${Format.durationFloorMin(speedingSummary.speedingDurationS)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             // The trip as a blue line, turning yellow (0-10 over) / red (10+ over) where you sped.
@@ -1115,8 +1134,8 @@ private fun SpeedTierSparkline(points: List<TrackPoint>) {
 
 /**
  * Compact vertical gauge for the side of the speeding row: peak speed filled bottom-up — blue up to
- * the limit, red for the overage — with a limit tick. The headline is the **+X km/h over** (red,
- * highlighted) when speeding, else the peak speed in blue.
+ * the limit, red for the overage — with a limit tick. Pure visual: the "+X km/h over" headline now
+ * lives in the full-width text column, so here we just label the peak value and the limit.
  */
 @Composable
 private fun PeakSpeedGauge(peakKmh: Double, limitKmh: Double) {
@@ -1127,21 +1146,15 @@ private fun PeakSpeedGauge(peakKmh: Double, limitKmh: Double) {
     val limitFrac = (limitKmh / maxV).toFloat().coerceIn(0.02f, 0.99f)
     val barH = 54.dp
     Column(
-        modifier = Modifier.width(58.dp),
+        modifier = Modifier.width(46.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Text(
-            if (over) "+${overKmh.roundToInt()}" else Format.speedKmh(peakKmh),
-            style = MaterialTheme.typography.titleMedium,
+            "${peakKmh.roundToInt()}",
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = if (over) SPEED_RED else SPEED_BLUE,
-            maxLines = 1
-        )
-        Text(
-            if (over) "km/h over" else "peak",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (over) SPEED_RED else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
         Box(
@@ -1163,7 +1176,7 @@ private fun PeakSpeedGauge(peakKmh: Double, limitKmh: Double) {
             )
         }
         Text(
-            "limit ${Format.speedKmh(limitKmh)}",
+            "limit ${limitKmh.roundToInt()}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
@@ -1560,17 +1573,27 @@ private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, you
     }
 }
 
-/** Google's best-case..typical estimate as a single range band on the shared axis. */
+/**
+ * Google's estimate as a fill-from-left bar on the shared axis — the same encoding as the "Your trip"
+ * bar so the two lengths read directly against each other. The best-case..typical spread shows as a
+ * lighter tail past the solid best-case portion.
+ */
 @Composable
 private fun EtaGoogleRow(fBest: Float, fTyp: Float, timeText: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
-            modifier = Modifier.width(52.dp),
+            modifier = Modifier.width(70.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(Icons.Filled.Place, contentDescription = null, tint = ETA_MAPS, modifier = Modifier.size(12.dp))
-            Text("Google", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                "Google",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
         }
         BoxWithConstraints(modifier = Modifier.weight(1f).height(9.dp)) {
             val w = maxWidth
@@ -1578,9 +1601,14 @@ private fun EtaGoogleRow(fBest: Float, fTyp: Float, timeText: String) {
                 modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp))
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
             )
-            val x1 = w * fBest
+            // Lighter full bar to the typical estimate...
             Box(
-                modifier = Modifier.offset(x = x1).width((w * fTyp - x1).coerceAtLeast(4.dp)).fillMaxHeight()
+                modifier = Modifier.width((w * fTyp).coerceAtLeast(3.dp)).fillMaxHeight()
+                    .clip(RoundedCornerShape(4.dp)).background(ETA_TYPICAL.copy(alpha = 0.4f))
+            )
+            // ...with the solid portion up to the best-case time.
+            Box(
+                modifier = Modifier.width((w * fBest).coerceAtLeast(3.dp)).fillMaxHeight()
                     .clip(RoundedCornerShape(4.dp)).background(ETA_TYPICAL)
             )
         }
@@ -1599,14 +1627,22 @@ private fun EtaGoogleRow(fBest: Float, fTyp: Float, timeText: String) {
 @Composable
 private fun EtaYouRow(fYou: Float, youColor: Color, timeText: String, loaded: Boolean) {
     val grow by animateFloatAsState(if (loaded) fYou else 0f, animationSpec = tween(700), label = "etaYouBar")
+    val youIcon = UiPrefs.vector(UiPrefs.youIcon(LocalContext.current))
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
-            modifier = Modifier.width(52.dp),
+            modifier = Modifier.width(70.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(youColor))
-            Text("You", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Icon(youIcon, contentDescription = null, tint = youColor, modifier = Modifier.size(13.dp))
+            Text(
+                "Your trip",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
         }
         BoxWithConstraints(modifier = Modifier.weight(1f).height(9.dp)) {
             val w = maxWidth
@@ -1747,7 +1783,8 @@ private fun eventStyle(event: DriveEvent): EventStyle = when (event.type) {
     EventType.SWERVE ->
         EventStyle("Swerve", Color(0xFFF59E0B), Icons.Filled.Route)
     EventType.POTHOLE ->
-        EventStyle("Pothole / big bump", Color(0xFF78716C), Icons.Filled.ReportProblem)
+        // Yellow hump, matching the map's bump marker (TripMap MarkerGlyph.BUMP, rgb 245,158,11).
+        EventStyle("Pothole / big bump", Color(0xFFF59E0B), BumpGlyph)
 }
 
 /** A plain-language explanation of what the magnitude means. */

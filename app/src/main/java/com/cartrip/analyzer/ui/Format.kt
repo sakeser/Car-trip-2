@@ -5,6 +5,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 object Format {
@@ -43,6 +44,15 @@ object Format {
 
     fun tripMinutes(seconds: Double): String =
         "${(seconds / 60.0).roundToInt().coerceAtLeast(1)} min"
+
+    /**
+     * Whole minutes, rounded DOWN (floored) — e.g. 3m47s -> "3 min", 47s -> "<1 min".
+     * Used for the speeding-duration readout, where over-stating the time felt misleading.
+     */
+    fun durationFloorMin(seconds: Double): String {
+        val m = floor(seconds / 60.0).toInt()
+        return if (m < 1) "<1 min" else "$m min"
+    }
 
     fun clock(seconds: Long): String {
         val h = seconds / 3600

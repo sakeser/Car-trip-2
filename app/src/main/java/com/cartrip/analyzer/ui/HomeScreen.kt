@@ -4,7 +4,11 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Looper
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +23,10 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Stop
@@ -27,9 +35,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -75,6 +86,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val live by RecordingState.state.collectAsStateWithLifecycle()
+    var showOptions by remember { mutableStateOf(false) }
     AutoTripDetection(recording = live.recording, onStart = onStart)
 
     // In the car mount (landscape) show one giant Start/Stop button you can hit without looking.
@@ -91,28 +103,33 @@ fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // The settings destinations (info / diagnostics / vehicle / auto-record) now live behind a
+        // single Options menu, so the title gets the full width back and nothing is clipped.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "Car Trip Analyzer",
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = onOpenGuide) {
-                Icon(Icons.Filled.Info, contentDescription = "How it works")
+            IconButton(onClick = { showOptions = true }, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Filled.Tune, contentDescription = "Options")
             }
-            IconButton(onClick = onOpenDebug) {
-                Icon(Icons.Filled.BugReport, contentDescription = "Diagnostics")
-            }
-            IconButton(onClick = onOpenVehicle) {
-                Icon(Icons.Filled.LocalGasStation, contentDescription = "Vehicle & fuel")
-            }
-            IconButton(onClick = onOpenAutoRecord) {
-                Icon(Icons.Filled.Sensors, contentDescription = "Auto-record")
-            }
+        }
+
+        if (showOptions) {
+            OptionsSheet(
+                onDismiss = { showOptions = false },
+                onOpenGuide = { showOptions = false; onOpenGuide() },
+                onOpenDebug = { showOptions = false; onOpenDebug() },
+                onOpenVehicle = { showOptions = false; onOpenVehicle() },
+                onOpenAutoRecord = { showOptions = false; onOpenAutoRecord() }
+            )
         }
 
         if (live.recording) {
@@ -208,6 +225,122 @@ fun HomeScreen(
                 onConnect = onConnectCloud,
                 onDisconnect = onDisconnectCloud,
                 modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+/**
+ * The Home "Options" menu: the former header icons (info / diagnostics / vehicle / auto-record) as a
+ * tidy list, plus room for cosmetic settings — currently the "your trip" icon picker. Add more rows
+ * here rather than crowding the header.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OptionsSheet(
+    onDismiss: () -> Unit,
+    onOpenGuide: () -> Unit,
+    onOpenDebug: () -> Unit,
+    onOpenVehicle: () -> Unit,
+    onOpenAutoRecord: () -> Unit
+) {
+    val context = LocalContext.current
+    var youIcon by remember { mutableStateOf(UiPrefs.youIcon(context)) }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 28.dp)
+        ) {
+            Text(
+                "Options",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 12.dp, bottom = 6.dp)
+            )
+            OptionRow(Icons.Filled.Info, "How it works", "What the app records and how to read a trip", onOpenGuide)
+            OptionRow(Icons.Filled.BugReport, "Diagnostics", "Live capture health, cache and Routes status", onOpenDebug)
+            OptionRow(Icons.Filled.LocalGasStation, "Vehicle & fuel", "Set your car to estimate fuel and cost", onOpenVehicle)
+            OptionRow(Icons.Filled.Sensors, "Auto-record drives", "Start and stop hands-free in the car", onOpenAutoRecord)
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+
+            Text(
+                "Your trip icon",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 12.dp)
+            )
+            Text(
+                "Represents you in You-vs-traffic",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 10.dp)
+            )
+            Row(
+                modifier = Modifier.padding(start = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                UiPrefs.YouIcon.values().forEach { opt ->
+                    val selected = opt == youIcon
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .clickable {
+                                    youIcon = opt
+                                    UiPrefs.setYouIcon(context, opt)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                UiPrefs.vector(opt),
+                                contentDescription = opt.label,
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            opt.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
