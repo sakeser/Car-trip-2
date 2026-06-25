@@ -42,6 +42,7 @@ fun TripMap(
     events: List<DriveEvent>,
     selectedPoint: TrackPoint? = null,
     focusKey: Int = 0,
+    resetKey: Int = 0,
     onEventClick: (DriveEvent) -> Unit = {},
     onStartOpen: () -> Unit = {},
     onStopOpen: () -> Unit = {},
@@ -87,7 +88,16 @@ fun TripMap(
     val cornerIcon = remember { markerIcon(MarkerGlyph.TURN, AndroidColor.rgb(234, 179, 8), 67) }
     val swerveIcon = remember { markerIcon(MarkerGlyph.SWERVE, AndroidColor.rgb(147, 51, 234), 67) }
     val potholeIcon = remember { markerIcon(MarkerGlyph.BUMP, AndroidColor.rgb(245, 158, 11), 84) }
-    val replayIcon = remember { markerIcon(MarkerGlyph.CAR, AndroidColor.rgb(14, 165, 233), 92) }
+    // The "you" replay marker glyph is user-selectable (Options -> Your trip icon).
+    val youGlyph = remember {
+        when (UiPrefs.youIcon(context)) {
+            UiPrefs.YouIcon.CAR -> MarkerGlyph.CAR
+            UiPrefs.YouIcon.ARROW -> MarkerGlyph.ARROW
+            UiPrefs.YouIcon.PERSON -> MarkerGlyph.PERSON
+            UiPrefs.YouIcon.DOT -> MarkerGlyph.DOT
+        }
+    }
+    val replayIcon = remember(youGlyph) { markerIcon(youGlyph, AndroidColor.rgb(14, 165, 233), 92) }
     // Start/end markers act like the bottom-left chips: first tap shows the label, a second tap opens
     // Google Maps. Tapping the map clears the "armed" state so the next tap shows the label again.
     var armedMarker by remember(points) { mutableStateOf("") }
@@ -111,6 +121,13 @@ fun TripMap(
                     camera.animate(CameraUpdateFactory.newLatLngZoom(LatLng(p.lat, p.lon), 15f))
                 }
             }
+        }
+    }
+
+    // Pressing Play resets the camera to the whole route, undoing any manual pan/zoom or event-zoom.
+    LaunchedEffect(resetKey) {
+        if (resetKey > 0) {
+            bounds?.let { runCatching { camera.animate(CameraUpdateFactory.newLatLngBounds(it, 56)) } }
         }
     }
 
@@ -231,7 +248,7 @@ private fun relaxedBounds(bounds: LatLngBounds, visibleRouteFraction: Double = 0
     )
 }
 
-private enum class MarkerGlyph { START, FINISH, BRAKE, ACCEL, TURN, SWERVE, BUMP, CAR }
+private enum class MarkerGlyph { START, FINISH, BRAKE, ACCEL, TURN, SWERVE, BUMP, CAR, ARROW, PERSON, DOT }
 
 /**
  * Draws a map marker as a [size]px bitmap: a coloured pin shape (octagon for the stop-sign brake,
@@ -268,6 +285,9 @@ private fun markerIcon(glyph: MarkerGlyph, fill: Int, size: Int = 96): BitmapDes
         MarkerGlyph.SWERVE -> drawSwerve(canvas, c, r, paint)
         MarkerGlyph.BUMP -> drawBump(canvas, c, r, paint)
         MarkerGlyph.CAR -> drawCar(canvas, c, r, paint, fill)
+        MarkerGlyph.ARROW -> drawNavArrow(canvas, c, r, paint)
+        MarkerGlyph.PERSON -> drawPerson(canvas, c, r, paint)
+        MarkerGlyph.DOT -> { /* a plain coloured dot — the marker circle is the glyph */ }
     }
 
     return BitmapDescriptorFactory.fromBitmap(bitmap)
@@ -374,6 +394,26 @@ private fun drawBump(canvas: Canvas, c: Float, r: Float, paint: Paint) {
     canvas.drawLine(c - r * 0.55f, c + r * 0.32f, c + r * 0.55f, c + r * 0.32f, paint)
     canvas.drawArc(RectF(c - r * 0.42f, c - r * 0.1f, c + r * 0.42f, c + r * 0.74f), 180f, 180f, false, paint)
     paint.style = Paint.Style.FILL
+}
+
+/** A navigation cursor (kite) pointing up — the "you are here / heading" arrow. */
+private fun drawNavArrow(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.FILL
+    val p = Path().apply {
+        moveTo(c, c - r * 0.6f)
+        lineTo(c + r * 0.46f, c + r * 0.52f)
+        lineTo(c, c + r * 0.22f)
+        lineTo(c - r * 0.46f, c + r * 0.52f)
+        close()
+    }
+    canvas.drawPath(p, paint)
+}
+
+/** A simple person silhouette — head + shoulders. */
+private fun drawPerson(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.FILL
+    canvas.drawCircle(c, c - r * 0.34f, r * 0.24f, paint)
+    canvas.drawArc(RectF(c - r * 0.46f, c - r * 0.04f, c + r * 0.46f, c + r * 0.92f), 180f, 180f, true, paint)
 }
 
 /** Side-view car silhouette (body + cabin), wheels cut out in the marker [fill] colour. */

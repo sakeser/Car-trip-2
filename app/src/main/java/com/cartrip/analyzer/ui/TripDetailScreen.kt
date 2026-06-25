@@ -194,6 +194,7 @@ fun TripDetailScreen(
         val scores = trip?.let { TripScores.from(it) }
         var selectedIndex by remember(a.points) { mutableStateOf(0) }
         var focusKey by remember(a.points) { mutableStateOf(0) }
+        var cameraResetKey by remember(a.points) { mutableStateOf(0) }
         var mapAnchorY by remember(a.points) { mutableStateOf(0) }
         val scrollState = rememberScrollState()
         val maxPointIndex = (a.points.size - 1).coerceAtLeast(0)
@@ -310,6 +311,7 @@ fun TripDetailScreen(
                         events = visibleEvents,
                         selectedPoint = selectedPoint,
                         focusKey = focusKey,
+                        resetKey = cameraResetKey,
                         onEventClick = jumpToEvent,
                         onStartOpen = { startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") } },
                         onStopOpen = { endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Stop") } },
@@ -332,7 +334,8 @@ fun TripDetailScreen(
                     events = visibleEvents,
                     selectedIndex = safeSelectedIndex,
                     onSelectedIndex = { selectedIndex = it.coerceIn(0, maxPointIndex) },
-                    onEventJump = jumpToEvent
+                    onEventJump = jumpToEvent,
+                    onReplayStart = { cameraResetKey++ }
                 )
                 // Filter chips sit below the scrubber: they gate which event markers show on the
                 // map and timeline above.
@@ -539,7 +542,8 @@ private fun ReplayTimeline(
     events: List<DriveEvent>,
     selectedIndex: Int,
     onSelectedIndex: (Int) -> Unit,
-    onEventJump: (DriveEvent) -> Unit
+    onEventJump: (DriveEvent) -> Unit,
+    onReplayStart: () -> Unit = {}
 ) {
     val t0 = points.first().tMs
     val tN = points.last().tMs.coerceAtLeast(t0 + 1)
@@ -610,6 +614,7 @@ private fun ReplayTimeline(
                             } else {
                                 if (selectedIndex >= points.size - 1) onSelectedIndex(0)
                                 playing = true
+                                onReplayStart()
                             }
                         },
                     contentAlignment = Alignment.Center
@@ -957,15 +962,9 @@ private fun SafetyFactorsCard(
                 }
             }
             if (hasLimits) {
+                // Speed limits auto-fetch on open and cache by OSM way id, so no manual "refresh" button.
                 val notable = speedingSummary != null && speedingSummary.speedingDurationS >= 1.0
                 SpeedingSummaryRow(speedingSummary = if (notable) speedingSummary else null, points = points)
-                OutlinedButton(onClick = onCheckLimits, enabled = !checking) {
-                    if (checking) {
-                        CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("Refresh speed limits")
-                    }
-                }
             } else {
                 if (needsMapRefresh) {
                     Text(
@@ -1330,9 +1329,10 @@ private fun FuelCostCard(trip: TripEntity) {
                         contentDescription = null, tint = chip, modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        if (pct < 1) String.format(loc, "On par with your %s's %.1f L/100km rating", v.model, ratedCombined)
-                        else String.format(loc, "%d%% %s fuel than your %s's %.1f rating", pct, if (better) "less" else "more", v.model, ratedCombined),
-                        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = chip
+                        if (pct < 1) String.format(loc, "On par with rated %.1f L/100km", ratedCombined)
+                        else String.format(loc, "%d%% %s fuel vs rated %.1f", pct, if (better) "less" else "more", ratedCombined),
+                        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = chip,
+                        maxLines = 1
                     )
                 }
             }
