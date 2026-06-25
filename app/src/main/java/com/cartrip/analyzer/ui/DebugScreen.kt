@@ -17,12 +17,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -143,7 +146,12 @@ fun DebugScreen(onBack: () -> Unit) {
 
             DebugCard("Auto-record log") {
                 val ctx = LocalContext.current
-                val log = remember { AutoRecordLog.entries(ctx) }
+                var logKey by remember { mutableStateOf(0) }
+                val log = remember(logKey) { AutoRecordLog.entries(ctx) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { logKey++ }) { Text("Refresh") }
+                    OutlinedButton(onClick = { AutoRecordLog.clear(ctx); logKey++ }) { Text("Clear") }
+                }
                 if (log.isEmpty()) {
                     Text(
                         "No auto-record activity yet. Enable auto-record, then plug into the car and drive — " +

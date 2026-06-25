@@ -63,6 +63,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
+import com.cartrip.analyzer.record.AutoRecordLog
 import com.cartrip.analyzer.record.RecordingState
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -411,6 +412,7 @@ private fun AutoTripDetection(recording: Boolean, onStart: () -> Unit) {
                             now - start >= AUTO_PROMPT_MIN_MS
                         ) {
                             mutedUntil = now + AUTO_PROMPT_SNOOZE_MS
+                            AutoRecordLog.add(context, "foreground GPS auto-start (app open on Home)")
                             onStart()
                         }
                     } else if (speedKmh < AUTO_PROMPT_RESET_KMH) {

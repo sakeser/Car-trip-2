@@ -109,7 +109,7 @@ fun AutoRecordScreen(onBack: () -> Unit) {
                 ToggleRow("Require wireless charging", "Ignore wired charging (e.g. at home)", requireWireless) {
                     requireWireless = it; AutoRecordPrefs.setRequireWireless(context, it)
                 }
-                ToggleRow("Also use car Bluetooth", "Optional — connect to a specific car device", useBluetooth) {
+                ToggleRow("Also start on car Bluetooth", "Optional — also arm when your car device connects", useBluetooth) {
                     useBluetooth = it; AutoRecordPrefs.setUseBluetooth(context, it)
                     if (it && AutoRecordPrefs.carBtAddress(context) == null) pickCarDevice()
                 }

@@ -329,7 +329,18 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         graceStopJob?.cancel()
         graceStopJob = scope.launch {
             delay(AutoRecordPrefs.STOP_GRACE_MS)
-            withContext(Dispatchers.Main) { if (recording) { AutoRecordLog.add(this@RecordingService, "auto-stopped"); stopRecording() } }
+            withContext(Dispatchers.Main) {
+                if (recording) {
+                    // Trim the trip back to the moment the car actually came to rest (not the unplug +
+                    // grace tail), the same retrospective rule the 6-min idle auto-stop uses. A non-null
+                    // cutoff also marks the trip AUTO_STOP rather than MANUAL_STOP.
+                    val restT = AutoStop.retrospectiveEndTime(recentSpeedTrack.toList())
+                        ?: lastDrivingLocT.takeIf { it > 0L }
+                    val trim = restT?.let { TrimCutoff(it + AUTO_STOP_END_GRACE_MS, it + AUTO_STOP_END_GRACE_MS) }
+                    AutoRecordLog.add(this@RecordingService, if (trim != null) "auto-stopped (trimmed to rest)" else "auto-stopped")
+                    stopRecording(trim)
+                }
+            }
         }
     }
 

@@ -38,16 +38,19 @@ class AutoRecordPolicyTest {
         assertTrue(AutoRecordPolicy.triggerPresent(cfg, charging = true, wireless = true, carBtConnected = false))
     }
 
-    @Test fun bluetoothCanTriggerWhenChargingNotRequired() {
-        val cfg = AutoRecordPolicy.Config(enabled = true, requireCharging = false, useBluetooth = true)
+    @Test fun bluetoothIsAnAlternateTrigger() {
+        // With Bluetooth enabled, the car's BT arms recording on its own (not just while charging).
+        val cfg = AutoRecordPolicy.Config(enabled = true, useBluetooth = true)
         assertTrue(AutoRecordPolicy.triggerPresent(cfg, charging = false, wireless = false, carBtConnected = true))
-        // but the car's BT must be the connected one
+        // but only the car's BT (matched by address upstream) counts
         assertFalse(AutoRecordPolicy.triggerPresent(cfg, charging = false, wireless = false, carBtConnected = false))
+        // charging still triggers too
+        assertTrue(AutoRecordPolicy.triggerPresent(cfg, charging = true, wireless = false, carBtConnected = false))
     }
 
-    @Test fun bluetoothIgnoredWhenChargingRequired() {
-        // requireCharging defaults true → BT alone is not enough
-        val cfg = AutoRecordPolicy.Config(enabled = true, useBluetooth = true)
+    @Test fun bluetoothIgnoredWhenNotEnabled() {
+        // useBluetooth off → a BT connection is not a trigger; only charging is.
+        val cfg = AutoRecordPolicy.Config(enabled = true)
         assertFalse(AutoRecordPolicy.triggerPresent(cfg, charging = false, wireless = false, carBtConnected = true))
         assertTrue(AutoRecordPolicy.triggerPresent(cfg, charging = true, wireless = false, carBtConnected = true))
     }

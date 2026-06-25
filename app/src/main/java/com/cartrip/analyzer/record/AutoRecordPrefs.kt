@@ -14,9 +14,6 @@ object AutoRecordPrefs {
     fun enabled(c: Context) = p(c).getBoolean("enabled", false)
     fun setEnabled(c: Context, v: Boolean) = p(c).edit().putBoolean("enabled", v).apply()
 
-    fun requireCharging(c: Context) = p(c).getBoolean("requireCharging", true)
-    fun setRequireCharging(c: Context, v: Boolean) = p(c).edit().putBoolean("requireCharging", v).apply()
-
     fun requireWireless(c: Context) = p(c).getBoolean("requireWireless", false)
     fun setRequireWireless(c: Context, v: Boolean) = p(c).edit().putBoolean("requireWireless", v).apply()
 
@@ -30,7 +27,6 @@ object AutoRecordPrefs {
 
     fun config(c: Context) = AutoRecordPolicy.Config(
         enabled = enabled(c),
-        requireCharging = requireCharging(c),
         requireWireless = requireWireless(c),
         useBluetooth = useBluetooth(c),
     )

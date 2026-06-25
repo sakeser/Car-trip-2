@@ -14,7 +14,6 @@ object AutoRecordPolicy {
 
     data class Config(
         val enabled: Boolean,
-        val requireCharging: Boolean = true,
         val requireWireless: Boolean = false,
         val useBluetooth: Boolean = false,
     )
@@ -22,9 +21,12 @@ object AutoRecordPolicy {
     /** Is an in-car trigger currently present, given the user's config? */
     fun triggerPresent(cfg: Config, charging: Boolean, wireless: Boolean, carBtConnected: Boolean): Boolean {
         if (!cfg.enabled) return false
+        // Any enabled in-car signal arms it: charging on the mount (optionally wireless-only), and — if
+        // the user turned it on — the car's Bluetooth as a true alternate trigger. The service's
+        // motion-confirm discards a non-drive, so a stray BT connect or parked charging never keeps a trip.
         val chargeOk = charging && (!cfg.requireWireless || wireless)
         val btOk = cfg.useBluetooth && carBtConnected
-        return if (cfg.requireCharging) chargeOk else (chargeOk || btOk)
+        return chargeOk || btOk
     }
 
     /** Arm a provisional recording when a trigger appears and nothing is recording yet. */
