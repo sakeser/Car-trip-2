@@ -13,8 +13,10 @@ import android.content.Intent
 class PowerConnectionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_POWER_CONNECTED, Intent.ACTION_POWER_DISCONNECTED ->
-                AutoRecordController.reevaluate(context.applicationContext)
+            Intent.ACTION_POWER_CONNECTED ->
+                AutoRecordController.reevaluate(context.applicationContext, "charger-on")
+            Intent.ACTION_POWER_DISCONNECTED ->
+                AutoRecordController.reevaluate(context.applicationContext, "charger-off")
         }
     }
 }

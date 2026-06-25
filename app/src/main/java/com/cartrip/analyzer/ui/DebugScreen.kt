@@ -34,6 +34,7 @@ import com.cartrip.analyzer.analysis.GnssQuality
 import com.cartrip.analyzer.cloud.RoutesClient
 import com.cartrip.analyzer.cloud.RoutesConfig
 import com.cartrip.analyzer.cloud.SpeedLimits
+import com.cartrip.analyzer.record.AutoRecordLog
 import com.cartrip.analyzer.record.RecordingState
 
 /**
@@ -138,6 +139,24 @@ fun DebugScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            DebugCard("Auto-record log") {
+                val ctx = LocalContext.current
+                val log = remember { AutoRecordLog.entries(ctx) }
+                if (log.isEmpty()) {
+                    Text(
+                        "No auto-record activity yet. Enable auto-record, then plug into the car and drive — " +
+                            "the charger/Bluetooth trigger, the foreground-service start result (this reveals the " +
+                            "Android 12+ background block), and motion-confirm all land here.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    log.take(40).forEach {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
             }
         }
     }

@@ -26,11 +26,11 @@ class CarBluetoothReceiver : BroadcastReceiver() {
         when (intent.action) {
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
                 AutoRecordController.setCarBtConnected(true)
-                AutoRecordController.reevaluate(app)
+                AutoRecordController.reevaluate(app, "bt-connect")
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                 AutoRecordController.setCarBtConnected(false)
-                AutoRecordController.reevaluate(app)
+                AutoRecordController.reevaluate(app, "bt-disconnect")
             }
         }
     }

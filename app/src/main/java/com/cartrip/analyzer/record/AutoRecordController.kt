@@ -41,19 +41,27 @@ object AutoRecordController {
         return charging to (plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS)
     }
 
-    /** Re-evaluate after any in-car signal (charging or Bluetooth) changes. */
-    fun reevaluate(context: Context) {
+    /** Re-evaluate after any in-car signal (charging or Bluetooth) changes. [source] tags the log. */
+    fun reevaluate(context: Context, source: String = "?") {
         val cfg = AutoRecordPrefs.config(context)
-        if (!cfg.enabled) return
+        if (!cfg.enabled) { AutoRecordLog.add(context, "$source: ignored (auto-record off)"); return }
         val (charging, wireless) = chargeState(context)
         val bt = carBtConnected
         val recording = RecordingState.state.value.recording
+        val state = "chg=$charging wl=$wireless bt=$bt rec=$recording"
         when {
-            AutoRecordPolicy.shouldArm(cfg, recording, charging, wireless, bt) -> arm(context)
-            AutoRecordPolicy.shouldStop(cfg, recording, charging, wireless, bt) ->
+            AutoRecordPolicy.shouldArm(cfg, recording, charging, wireless, bt) -> {
+                AutoRecordLog.add(context, "$source -> ARM [$state]"); arm(context)
+            }
+            AutoRecordPolicy.shouldStop(cfg, recording, charging, wireless, bt) -> {
+                AutoRecordLog.add(context, "$source -> STOP-grace [$state]")
                 send(context, RecordingService.ACTION_AUTO_STOP_GRACE)
-            recording -> // trigger still present mid-recording → cancel any pending grace stop
+            }
+            recording -> { // trigger still present mid-recording → cancel any pending grace stop
+                AutoRecordLog.add(context, "$source -> trigger still present, cancel grace [$state]")
                 send(context, RecordingService.ACTION_CHARGING_RESUMED)
+            }
+            else -> AutoRecordLog.add(context, "$source -> no-op [$state]")
         }
     }
 
@@ -61,7 +69,11 @@ object AutoRecordController {
         val intent = Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_AUTO_ARM)
         try {
             ContextCompat.startForegroundService(context, intent)
+            AutoRecordLog.add(context, "  FGS start OK")
         } catch (e: Exception) {
+            // Android 12+ blocks a background FGS start — this is the suspected cause of "auto-start
+            // didn't work". Log which exception so the field test confirms it, then fall back.
+            AutoRecordLog.add(context, "  FGS start BLOCKED (${e.javaClass.simpleName}) -> tap-to-start notif")
             postStartFallback(context)
         }
     }

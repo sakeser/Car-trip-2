@@ -301,15 +301,22 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     /** Auto-record: start a provisional trip and confirm real motion before keeping it. */
     private fun autoArm() {
-        if (recording) { graceStopJob?.cancel(); graceStopJob = null; return }
+        if (recording) {
+            AutoRecordLog.add(this, "AUTO_ARM ignored (already recording); cancel grace")
+            graceStopJob?.cancel(); graceStopJob = null; return
+        }
         autoStarted = true
         startRecording()
+        AutoRecordLog.add(this, "AUTO_ARM: provisional trip started, confirming motion (${AutoRecordPrefs.MOTION_CONFIRM_MS / 1000}s)")
         motionConfirmJob?.cancel()
         motionConfirmJob = scope.launch {
             delay(AutoRecordPrefs.MOTION_CONFIRM_MS)
             withContext(Dispatchers.Main) {
                 if (recording && autoStarted && maxSpeedMps * 3.6 < AutoRecordPrefs.MIN_SPEED_KMH) {
+                    AutoRecordLog.add(this@RecordingService, "motion-confirm FAILED (max ${"%.0f".format(maxSpeedMps * 3.6)} km/h) -> discard")
                     discardRecording()
+                } else if (recording && autoStarted) {
+                    AutoRecordLog.add(this@RecordingService, "motion-confirm OK (max ${"%.0f".format(maxSpeedMps * 3.6)} km/h) -> keeping trip")
                 }
             }
         }
@@ -318,10 +325,11 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     /** In-car trigger dropped: stop after a grace, unless charging resumes first (CHARGING_RESUMED). */
     private fun autoStopGrace() {
         if (!recording || !autoStarted) return
+        AutoRecordLog.add(this, "AUTO_STOP grace (${AutoRecordPrefs.STOP_GRACE_MS / 1000}s)")
         graceStopJob?.cancel()
         graceStopJob = scope.launch {
             delay(AutoRecordPrefs.STOP_GRACE_MS)
-            withContext(Dispatchers.Main) { if (recording) stopRecording() }
+            withContext(Dispatchers.Main) { if (recording) { AutoRecordLog.add(this@RecordingService, "auto-stopped"); stopRecording() } }
         }
     }
 
