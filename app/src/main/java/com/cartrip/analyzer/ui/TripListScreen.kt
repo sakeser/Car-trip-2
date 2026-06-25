@@ -315,7 +315,6 @@ private fun TripRow(
                 )
             }
             if (selected && finished) {
-                val quality = TripDataQuality.from(trip)
                 val vsGoogle = if (trip.googleEtaTrafficS > 0.0 && trip.durationS > 0.0) {
                     val d = ((trip.durationS - trip.googleEtaTrafficS) / 60.0).roundToInt()
                     when {
@@ -325,7 +324,7 @@ private fun TripRow(
                     }
                 } else ""
                 Text(
-                    "${Format.timeOfDay(trip.startTime)} · ${quality.level.label} quality$vsGoogle",
+                    "${Format.relativeDay(trip.startTime)}, ${Format.timeOfDay(trip.startTime)}$vsGoogle",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

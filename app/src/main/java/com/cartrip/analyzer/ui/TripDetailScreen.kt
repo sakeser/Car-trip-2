@@ -224,8 +224,9 @@ fun TripDetailScreen(
                 }
             }
         }
-        // Bumps/potholes are noisy and off by default to keep the map/timeline uncluttered.
-        var eventFilters by remember(a) { mutableStateOf(EventFilter.values().toSet() - EventFilter.BUMPS) }
+        // Default to a clean map: only the start/end markers, no event icons. The user turns on
+        // brake/accel/turn/bump layers from the filter chips when they want them.
+        var eventFilters by remember(a) { mutableStateOf(emptySet<EventFilter>()) }
         var selectedEvent by remember(a) { mutableStateOf<DriveEvent?>(null) }
         var eventDetailAnchorY by remember(a) { mutableStateOf(0) }
         val visibleEvents = remember(shownEvents, eventFilters) {

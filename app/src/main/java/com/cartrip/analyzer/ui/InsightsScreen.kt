@@ -121,7 +121,7 @@ fun InsightsScreen(
         ) {
             item { WindowSelector(window) { window = it } }
 
-            item { DriveScoreHero(averages, wScores, windowTrips.size, window.label) }
+            item { DriveScoreHero(averages, windowTrips.size, window.label) }
 
             item { GoogleVsYouHero(windowTrips) }
 
@@ -273,9 +273,8 @@ private fun WindowSelector(selected: InsightWindow, onSelect: (InsightWindow) ->
 }
 
 @Composable
-private fun DriveScoreHero(averages: ScoreAverages, scores: List<TripScores>, tripCount: Int, windowLabel: String) {
+private fun DriveScoreHero(averages: ScoreAverages, tripCount: Int, windowLabel: String) {
     val driveColor = TripScores.color(averages.drive)
-    val trend = driveTrendText(scores.map { it.overall })
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -312,11 +311,6 @@ private fun DriveScoreHero(averages: ScoreAverages, scores: List<TripScores>, tr
                 ScorePill("Comfort", averages.comfort, Color(0xFF38BDF8), Modifier.weight(1f))
                 ScorePill("Pace", averages.pace, Color(0xFF8B5CF6), Modifier.weight(1f))
             }
-            Text(
-                trend,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -370,7 +364,7 @@ private fun ScorePill(label: String, value: Int?, color: Color, modifier: Modifi
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 9.dp, vertical = 6.dp),
+            .padding(horizontal = 7.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
@@ -380,11 +374,13 @@ private fun ScorePill(label: String, value: Int?, color: Color, modifier: Modifi
                 .clip(RoundedCornerShape(4.dp))
                 .background(color)
         )
-        Spacer(Modifier.width(5.dp))
+        Spacer(Modifier.width(4.dp))
         Text(
             "$label ${value?.toString() ?: "-"}",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -397,18 +393,6 @@ private fun scoreBand(score: Int): String = when {
     else -> "High-risk pattern"
 }
 
-private fun driveTrendText(scores: List<Int>): String {
-    if (scores.size < 4) return "Trend will sharpen as more trips are recorded."
-    val segment = (scores.size / 3).coerceAtLeast(2)
-    val recent = scores.takeLast(segment).average()
-    val previous = scores.dropLast(segment).takeLast(segment).average()
-    val delta = (recent - previous).roundToInt()
-    return when {
-        delta >= 3 -> "Trend: improving by $delta points recently."
-        delta <= -3 -> "Trend: down ${-delta} points recently."
-        else -> "Trend: steady recently."
-    }
-}
 
 @Composable
 private fun GoogleVsYouHero(trips: List<TripEntity>) {
