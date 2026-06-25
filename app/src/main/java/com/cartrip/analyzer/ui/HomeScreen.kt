@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Tune
@@ -28,7 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Button
@@ -203,14 +203,14 @@ fun HomeScreen(
                 onClick = onViewTrips,
                 modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
-                Icon(Icons.Filled.List, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.List, contentDescription = null)
                 Text("  Past trips", style = MaterialTheme.typography.titleMedium)
             }
             OutlinedButton(
                 onClick = onViewInsights,
                 modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
-                Icon(Icons.Filled.ShowChart, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.ShowChart, contentDescription = null)
                 Text("  Insights", style = MaterialTheme.typography.titleMedium)
             }
             OutlinedButton(

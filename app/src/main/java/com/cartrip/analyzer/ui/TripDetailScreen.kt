@@ -30,8 +30,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.LocalGasStation
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
@@ -1325,7 +1325,7 @@ private fun FuelCostCard(trip: TripEntity) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
-                        if (better) Icons.Filled.TrendingDown else Icons.Filled.TrendingUp,
+                        if (better) Icons.AutoMirrored.Filled.TrendingDown else Icons.AutoMirrored.Filled.TrendingUp,
                         contentDescription = null, tint = chip, modifier = Modifier.size(18.dp)
                     )
                     Text(
@@ -1803,7 +1803,7 @@ private fun speedingSummary(points: List<TrackPoint>): SpeedingSummary? {
         if (over <= 3.0) { flushRun(); continue }
 
         speedingS += dt
-        if (fallbackPeak == null || isWorseSpeedingPoint(p, fallbackPeak!!)) fallbackPeak = p
+        if (fallbackPeak == null || isWorseSpeedingPoint(p, fallbackPeak)) fallbackPeak = p
         runS += dt
         if (runBest == null || isWorseSpeedingPoint(p, runBest!!)) runBest = p
     }

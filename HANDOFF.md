@@ -1,7 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.59 (build 70)** · Branch `main` (Rev U — built, not yet
-installed: the auto-recording first cut needs on-device verification)_
+_Last updated: 2026-06-24 · App version **2.64 (build 75)** · Branch `main` (Rev V–Y shipped + pushed;
+only the Rev U auto-recording trigger still needs the owner's on-device drive test)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -14,23 +14,27 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - Android app (Kotlin, Jetpack Compose, Room, Google Maps) that records trips from phone GPS +
   motion sensors, analyzes them offline, and enriches with Google traffic ETAs, OSM speed limits,
   and Google Sheets sync. Package `com.cartrip.analyzer`.
-- **Branch `main` = `rev-g-functional` = `origin/main`**, all at `08a81ed` (Rev T, v2.58) — fully
-  pushed/aligned. `rev-g-functional` is a vestigial ref kept fast-forwarded to `main`; work happens
-  on `main`. **Convention: after each rev, `git branch -f rev-g-functional main` then push both.**
+- **Branch `main` = `origin/main`** at `189a273` (Rev Y, v2.64) — fully pushed. Work happens on `main`.
   (Pushing to `main` needs explicit per-turn user authorization — the owner has authorized the ongoing
-  ship-and-push workflow for this project.)
-- Installed on the Samsung **S25 (SM_S931W)** as **2.58/69** (Rev T). **Rev U (v2.59/70) is built but
-  NOT installed** — no device this session; the owner installs/tests within the hour. Device auto-locks
-  fast and you can't unlock it — ask the owner to keep it unlocked for any UI-verify pass.
-- **73 unit tests**, all green. Room schema **v17** (no schema change Rev G→U; recent work is
-  detector/scoring, the fuel + geocoding features (both schema-free), a large UI overhaul, and the
-  auto-recording trigger).
-- **Recent arc:** Rev K–M = field-test detector/scoring calibration; **Rev N** = fuel/trip-cost;
-  **Rev O** = reverse-geocoded names (`GeoNamer`); **Rev P/Q/R** = 3-part trip-detail + past-trips
-  **UI overhaul**; **Rev S** = UI polish (ETA range band, peak-speed gauge, fuel card); **Rev T** =
-  hybrid fuel defaults + past-trips list/map polish; **Rev U** = **auto-recording trigger first cut**
-  (charging/Bluetooth → provisional record + motion-confirm + stop-grace). The owner drives a hybrid
-  2023 Tucson, phone wireless-charging on a mount. **Rev U needs on-device verification (§9.1).**
+  ship-and-push workflow for this project.) `rev-g-functional` is a vestigial mirror ref; it has NOT
+  been fast-forwarded since `ea2fa88` (the auto-classifier blocks force-moving/pushing it) — ignore it
+  or sync it manually if wanted.
+- Installed on the Samsung **S25 (SM_S931W)** as **2.64/75** (Rev Y). Device auto-locks fast; for a
+  UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
+  awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
+- **82 unit tests**, all green. Room schema **v17** (no schema change Rev G→Y; all recent work is
+  detector/scoring, computed features, and UI).
+- **Recent arc:** Rev K–M = field-test calibration; **Rev N** = fuel/cost; **Rev O** = geocoded names;
+  **Rev P–T** = trip-detail/past-trips **UI overhaul** + polish + hybrid fuel; **Rev U** =
+  **auto-recording trigger first cut** (charging/Bluetooth → provisional record + motion-confirm +
+  stop-grace) — **still needs the owner's on-device drive test (§9.1)**; **Rev V** = 8-item UI polish
+  batch (trip-name disambiguation, bump-icon alignment, speeding-time floor, "+X km/h over" headline,
+  you-vs-traffic labels/scaling, Home **Options** menu, "your trip" icon picker, Insights diverging
+  bar chart); **Rev W** = **non-drive/walk guard** (`TripKind`) + privacy (`allowBackup=false`, O3) +
+  dead-code removal (O5); **Rev X** = "When you drive" daypart insights + speeding-peak run-length
+  guard (O8) + fuel suppressed for non-drives; **Rev Y** = Insights polish (robust diverging-bar
+  scale; Score-trends re-imagined as per-score icon+bar+trend rows). The owner drives a hybrid 2023
+  Tucson, phone wireless-charging on a mount.
 - The separate UX-redesign worktree (`C:\Users\sinan\OneDrive\Desktop\cartrip`, branch
   `ux-redesign-v1`) is **untouched and unrelated** — do not merge it in.
 - ⚠️ **Source-encoding trap:** this Windows build mojibakes non-ASCII **string literals** in BOM-less
@@ -110,7 +114,7 @@ Pipeline: **record → analyze (offline) → persist → enrich → present.**
 | Analysis | `analysis/TripAnalyzer.kt` (Kalman/RTS speed+accel, events, metrics), `analysis/MotionFusion.kt` (potholes/rough-road/harsh-stops), `analysis/FusedEventDetector.kt` (magnitude-first sensor detector), `analysis/FuelEstimator.kt` (pure fuel/cost model), `analysis/GnssQuality.kt`, `analysis/SpeedTier.kt` |
 | Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema v17 + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
 | Cloud | `cloud/SpeedLimits.kt` (OSM/Overpass + tile cache), `cloud/Tiles.kt`, `cloud/RoutesClient.kt` (Google Routes ETA), `cloud/TripSync.kt`/`SheetsClient.kt`/`GoogleAuth.kt` (Sheets) |
-| UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt` |
+| UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/TripKind.kt` (walk/non-drive guard), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref), `ui/Components.kt` (shared bits + Options sheet) |
 
 Speed/accel are estimated with a **constant-acceleration Kalman filter + RTS smoother** (offline,
 zero-lag) with ZUPT at stops. The GPS detector drives scoring; the sensor-fused detector is
@@ -181,6 +185,23 @@ Full detail in `REV_HISTORY.md`. Condensed:
   (provisional record, 45 s motion-confirm, silent discard if it never moved) / `ACTION_AUTO_STOP_GRACE`
   (+ `ACTION_CHARGING_RESUMED`) + `ui/AutoRecordScreen` (Home → Sensors icon). Charging is the primary
   trigger; Bluetooth optional. **Verify the Android 12+ background-FGS-start path on device — see §9.1.**
+- **Rev V (2.61):** 8-item UI polish batch — same-name trip disambiguation (`TripNaming`, +test);
+  bump/pothole icon aligned to the map's yellow hump (`EventGlyphs`, shared by the speed timeline +
+  event list); speeding duration floored to the minute (`Format.durationFloorMin`, +test); "+X km/h
+  over" headline cleanup; You-vs-traffic "Google"/"Your trip" labels + same-scale bars; Home
+  **Options** sheet (folds the old four header icons) + a "your trip" icon picker (`UiPrefs`); Insights
+  You-vs-traffic **diverging bar chart** (`Charts.DivergingBarChart`). All verified on device.
+- **Rev W (2.62):** **non-drive/walk guard** (`TripKind.isLikelyNonDrive`: top speed 0.1–12 km/h →
+  walk) — suppresses the driving You-vs-traffic in trip detail, returns null Pace, and is excluded from
+  Insights traffic aggregates (+3 tests); **privacy O3** (`allowBackup=false`); **dead-code O5** removed
+  (`FactorBar`/`FactorCell`/`TripLinksCard`/`ActionButton`/`ScorePanel`/`ScoreMeter`/`ReplayControls`).
+- **Rev X (2.63):** "When you drive" Insights card (`DrivingTimes` daypart buckets: count + avg Safety,
+  +2 tests) + **O8 speeding-peak run-length guard** (`MIN_PEAK_RUN_S=2 s` so a single GPS snap can't
+  set "+X over") + fuel cost suppressed for non-drives (hero + card).
+- **Rev Y (2.64):** Insights polish — `DivergingBarChart` **robust scale** (85th-pct of |value|,
+  floored `minScale`, off-scale bars clamped + light-capped) so outliers don't crush the rest;
+  **Score trends re-imagined** as per-score rows (icon + current avg + 0–100 bar + a trend chip =
+  later-half vs earlier-half delta), replacing the old `MultiSeriesChart` (+ `Series`, both removed).
 
 ---
 
@@ -275,7 +296,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (73 tests)
+## 7. Test suite (82 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -287,7 +308,9 @@ maneuver-peak magnitude), `DisplayEventsTest`, `TripAnalyzerTest`, `MotionFusion
 `SpeedTierTest`, `TilesTest`, `TripBucketsTest`, `TripLabelerTest`, `GeoAndPolylineTest`,
 `DisplayEventsTest` (8), `GeoNamerTest` (9: pickName / composeLabel), `FuelEstimatorTest` (5),
 `TripScoresTest` (3: fused drives Safety / cap / GPS-fallback), `AutoRecordPolicyTest` (7: trigger /
-arm / stop / wireless / Bluetooth gating). All pure-JVM (no Robolectric/instrumented).
+arm / stop / wireless / Bluetooth gating), `FormatTest`, `TripNamingTest` (same-name disambiguation),
+`TripKindTest` (3: walk vs drive vs zero-speed), `DrivingTimesTest` (2: dayparts / summarize). All
+pure-JVM (no Robolectric/instrumented).
 
 Gaps: no instrumented/Room/Compose tests; network paths (Overpass, Routes, Sheets) and the
 GnssStatus reading are not unit-tested (verified manually/on-device).
@@ -304,14 +327,16 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 - **O2 — `fusedConfidence` is noise. [DONE, Rev O]** Empirically ~0.06 even on the best trip (790,
   45 Hz); never gated trust (scoring uses motion-Hz). The "forward-axis confidence" line was removed
   from the trip-detail data-quality UI in Rev O. The field still exists in the DB/metrics, just unsurfaced.
-- **O3 — Privacy: `allowBackup=true`** backs up the unencrypted location-history DB to Google. Consider
-  `allowBackup=false` or backup rules excluding `cartrip.db`; DB-at-rest encryption (SQLCipher) is a
-  larger option.
+- **O3 — Privacy: `allowBackup`. [DONE, Rev W]** Now `allowBackup=false`, so the unencrypted
+  location-history DB is no longer backed up to Google. DB-at-rest encryption (SQLCipher) remains a
+  larger optional follow-up.
 - **O4 — Overpass dependency.** Free public endpoints; the cache greatly reduces calls, but heavy
   first-time use of a new area still hits them. No per-request rate limiting beyond endpoint failover.
-- **O5 — Dead code.** `TripDetailScreen.kt` still has unused `FactorBar`, `FactorCell`,
-  `TripLinksCard`, `ActionButton`, `ScorePanel`, `ScoreMeter`, `ReplayControls`; `TripActions` has an
-  unused `label` param. Harmless (warnings); clean up opportunistically.
+- **O5 — Dead code. [DONE, Rev W/Y]** Removed the unused `FactorBar`, `FactorCell`, `TripLinksCard`,
+  `ActionButton`, `ScorePanel`, `ScoreMeter`, `ReplayControls` from `TripDetailScreen.kt` (Rev W) and
+  `MultiSeriesChart`/`Series` from `Charts.kt` (Rev Y); swapped the deprecated `List`/`ShowChart`/
+  `TrendingUp`/`TrendingDown` icons to their `AutoMirrored` forms. (A `t0` name-shadow warning in the
+  replay block remains, harmless.)
 - **O6 — `TripLabeler` is GTA-hardcoded. [ADDRESSED, Rev O]** `GeoNamer` now reverse-geocodes
   unnamed trips' start/end (fail-soft, SharedPreferences-cached by quantized coords) into
   `North York -> Scarborough` labels, with the GTA `TripLabeler` as the fallback. Still open: learn
@@ -325,8 +350,9 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
   severity-weighted Safety term (vs the current count rate) is the natural next step; (b) a dedicated
   **severe-corner** count (≥~0.45 g) would let hard cornering hit Safety distinctly without penalizing
   normal city turns (needs a stored field). See memory `field-test-2026-06-24-trips-845-847`.
-- **O8 — Peak-over speeding** has no minimum-run-length requirement (a brief snap can set the peak).
-  Smoothing of isolated limit mismatches exists; a run-length guard would harden it further.
+- **O8 — Peak-over speeding. [DONE, Rev X]** The "+X over" peak now must sit within an over-limit run
+  sustained ≥ `MIN_PEAK_RUN_S` (2 s) in `speedingSummary`, so a single GPS snap can't set it; it falls
+  back to the worst point only if speeding was entirely momentary.
 - **O9 — Rough stretches aren't mappable.** `MotionFusion` stores `roughStretchCount`/`bumpyScore`/
   `roughRoadPct` as aggregates only (no per-stretch geometry), unlike potholes (timestamped `POTHOLE`
   events). To label rough stretches on the map like potholes, the analyzer would need to emit stretch
@@ -369,20 +395,24 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
      start. (e) Check whether `ACL_CONNECTED` reaches `CarBluetoothReceiver` from the manifest on Android
      14; if not, register it at runtime. (f) Grant the notification + (if BT) `BLUETOOTH_CONNECT`
      permissions. Tune `MIN_SPEED_KMH` / `MOTION_CONFIRM_MS` / `STOP_GRACE_MS` in `AutoRecordPrefs`.
-2. **Dead-code cleanup (O5).** Unused composables in `TripDetailScreen.kt` (`FactorBar`, `FactorCell`,
-   `TripLinksCard`, `ScorePanel`, `ScoreMeter`, `ReplayControls`, the `ActionButton` cluster) + stale
-   helpers. Guided by compiler "unused" warnings; verify the screen still builds + renders.
+2. **Severe-corner count (O7b) / validated hybrid detector.** Add a stored `severeCornerCount`
+   (≥~0.45 g) so hard cornering hits Safety distinctly (schema v17→v18 migration + analyzer change +
+   re-analyze). NB: this driver's events cluster 0.25–0.50 g so it may rarely trigger; severity-weighted
+   Safety was already tried & **rejected** (§4 Rev M note). Pairs with promoting the fused detector
+   from "review-grade" to scored (label events GPS-confirmed / sensor-only / bump-echo / ambiguous).
 3. **GNSS phase 2 (optional/research).** Use `gnss_samples` to downweight route/event confidence in
    urban canyons; optional raw-GNSS export behind debug. Not positioning.
-4. **Validated hybrid detector.** Promote the fused detector from "review-grade" to scored: label each
-   event GPS-confirmed / sensor-only / bump-echo / ambiguous; score only reviewed events. (NB:
-   severity-weighted Safety was tried & **rejected** — see the §4 Rev M note.)
-5. **Insights depth.** Repeated-commute comparison, Last-X filters, speeding/pothole heatmaps, per-km.
-6. **Rough-stretch mapping (O9)** + `allowBackup` privacy (O3) + revisit O1/O2.
+4. **Insights depth (partly done).** Done: "When you drive" daypart card, You-vs-traffic diverging
+   chart + robust scale, re-imagined Score trends. **Still open:** repeated-commute/route comparison
+   (needs per-trip start/end coords — `TripEntity` only stores aggregates, so this requires loading
+   `analysis_points` per trip or storing endpoints), speeding/pothole heatmaps, per-km stats, Last-X.
+5. **Rough-stretch mapping (O9)** — emit per-stretch geometry from `MotionFusion` so rough stretches
+   map like potholes (re-analyze required). Revisit O1 (1 Hz GPS) / O2.
 
-_Done recently: field-test calibration (Rev K–M), fuel/trip-cost (Rev N), reverse-geocoded naming
-(Rev O), trip-detail/past-trips UI overhaul (Rev P/Q/R), UI polish (Rev S), hybrid fuel + list/map
-polish (Rev T)._
+_Done recently: trip-detail/past-trips UI overhaul (Rev P–T), 8-item UI polish batch (Rev V),
+non-drive guard + privacy + dead-code (Rev W), daypart insights + speeding run-length guard (Rev X),
+Insights chart normalization + re-imagined Score trends (Rev Y). Only Rev U (auto-recording) awaits
+the owner's on-device drive test._
 
 ---
 
