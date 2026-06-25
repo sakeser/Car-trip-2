@@ -387,7 +387,8 @@ fun TripDetailScreen(
                 )
             }
             trip?.let { t -> RoadRideCard(t) }
-            trip?.let { t -> FuelCostCard(t) }
+            // No fuel/cost card for non-drives (a walk burns no fuel).
+            trip?.let { t -> if (!TripKind.isLikelyNonDrive(t)) FuelCostCard(t) }
 
             // --- Advanced (collapsed): charts, raw metrics, detector comparison ---
             AdvancedSection(trip = trip, metrics = m, fusedEvents = a.fusedEvents, points = a.points)
@@ -438,7 +439,7 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
     // Headline fuel cost: recomputed live from the current vehicle profile + this trip's aggregates
     // (no Re-analyze needed). Matches the Fuel & cost card below.
     val distanceKm = m.distanceM / 1000.0
-    val cost = if (distanceKm >= 0.05) {
+    val cost = if (distanceKm >= 0.05 && !TripKind.isLikelyNonDrive(trip)) {
         val v = VehiclePrefs.load(LocalContext.current)
         FuelEstimator.cost(FuelEstimator.litres(distanceKm, m.avgMovingSpeedMps * 3.6, m.idleS, v), v)
     } else null
@@ -1769,30 +1770,47 @@ private data class SpeedingSummary(
     }
 }
 
+/** O8: the speeding peak must sit within an over-limit run sustained this long, not a single GPS snap. */
+private const val MIN_PEAK_RUN_S = 2.0
+
 private fun speedingSummary(points: List<TrackPoint>): SpeedingSummary? {
     if (points.size < 2) return null
     var speedingS = 0.0
     var coveredMovingS = 0.0
-    var peak: TrackPoint? = null
+    var peak: TrackPoint? = null         // best within a sustained over-limit run
+    var fallbackPeak: TrackPoint? = null // best overall, used only if no run is sustained
+    // Current run of consecutive over-limit samples.
+    var runS = 0.0
+    var runBest: TrackPoint? = null
+
+    fun flushRun() {
+        val rb = runBest
+        if (rb != null && runS >= MIN_PEAK_RUN_S && (peak == null || isWorseSpeedingPoint(rb, peak!!))) {
+            peak = rb
+        }
+        runS = 0.0
+        runBest = null
+    }
 
     for (i in 1 until points.size) {
         val p = points[i]
-        if (p.speedKmh < 8.0 || p.speedLimitKmh <= 0.0) continue
+        if (p.speedKmh < 8.0 || p.speedLimitKmh <= 0.0) { flushRun(); continue }
 
         val dt = ((p.tMs - points[i - 1].tMs) / 1000.0).coerceIn(0.0, 3.0)
         coveredMovingS += dt
 
         val over = p.speedKmh - p.speedLimitKmh
-        if (over <= 3.0) continue
+        if (over <= 3.0) { flushRun(); continue }
 
         speedingS += dt
-        val currentPeak = peak
-        if (currentPeak == null || isWorseSpeedingPoint(p, currentPeak)) {
-            peak = p
-        }
+        if (fallbackPeak == null || isWorseSpeedingPoint(p, fallbackPeak!!)) fallbackPeak = p
+        runS += dt
+        if (runBest == null || isWorseSpeedingPoint(p, runBest!!)) runBest = p
     }
+    flushRun()
 
-    val peakPoint = peak ?: return null
+    // Prefer a peak from a sustained run; fall back to the worst point only if speeding was all snaps.
+    val peakPoint = peak ?: fallbackPeak ?: return null
     if (coveredMovingS <= 0.0 || speedingS <= 0.0) return null
     return SpeedingSummary(
         speedingDurationS = speedingS,

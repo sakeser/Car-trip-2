@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.analysis.FuelEstimator
@@ -119,6 +120,8 @@ fun InsightsScreen(
             item { DriveScoreHero(averages, wScores, windowTrips.size, window.label) }
 
             item { GoogleVsYouHero(windowTrips) }
+
+            item { WhenYouDriveCard(windowTrips) }
 
             item {
                 SectionTitle("Score trends")
@@ -458,6 +461,69 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                 )
                 Text(
                     String.format(Locale.US, "Avg %+.1f min/trip (%+.1f min/hr driven) vs Google", avgMargin, perHour),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** "When you drive": trips bucketed by daypart with how much and how safely you drove each. */
+@Composable
+private fun WhenYouDriveCard(trips: List<TripEntity>) {
+    if (trips.isEmpty()) return
+    val buckets = remember(trips) {
+        DrivingTimes.summarize(
+            trips.map { DrivingTimes.Entry(it.startTime, TripScores.from(it).safety, it.distanceM / 1000.0) }
+        )
+    }
+    val active = buckets.filter { it.tripCount > 0 }
+    if (active.isEmpty()) return
+    val maxCount = active.maxOf { it.tripCount }
+    val mostDriven = active.maxByOrNull { it.tripCount }
+    val safest = active.filter { it.avgSafety != null }.maxByOrNull { it.avgSafety!! }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text("When you drive", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            active.forEach { b ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(b.part.label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(70.dp))
+                    Box(
+                        modifier = Modifier.weight(1f).height(10.dp).clip(RoundedCornerShape(5.dp))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(b.tripCount.toFloat() / maxCount)
+                                .height(10.dp).clip(RoundedCornerShape(5.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                    Text(
+                        "${b.tripCount}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.width(22.dp)
+                    )
+                    Text(
+                        b.avgSafety?.toString() ?: "-",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = b.avgSafety?.let { TripScores.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.width(34.dp)
+                    )
+                }
+            }
+            if (mostDriven != null && safest != null) {
+                Text(
+                    "Most drives ${mostDriven.part.label.lowercase()}, safest ${safest.part.label.lowercase()} (bars = trips, right = avg Safety)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
