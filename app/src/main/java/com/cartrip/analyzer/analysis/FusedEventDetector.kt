@@ -60,6 +60,14 @@ object FusedEventDetector {
     // (a narrated 0.5 g brake was being stored as 0.28 g). Scan forward this far for the peak.
     private const val PEAK_WINDOW_MS = 1500L
 
+    // Startup & plausibility guards (Rev AA, from field trip 1126): motion is logged before the first
+    // GPS fix, and those early samples get a stale *extrapolated* speed, so phone-handling yaw fabricated
+    // a 4.65 g "corner" ~2 min before GPS locked; and a pothole's gyro buzz on a fast off-ramp faked a
+    // 0.71 g "corner" (the corner channel had no vertical-bump veto).
+    private const val WARMUP_MS = 1500L            // skip pre-GPS + the first settling samples (stale speed)
+    private const val MAX_PLAUSIBLE_LAT_G = 0.9    // a car can't pull more sustained lateral g — reject as artifact
+    private const val CORNER_BUMP_VERT_G = 0.38    // a coincident vertical jolt this big = bump, not a corner
+
     data class Result(
         val events: List<DriveEvent>,
         val brakeCount: Int,
@@ -90,6 +98,9 @@ object FusedEventDetector {
         // GPS speed + longitudinal-accel lookups by time (binary search, nearest).
         val ptT = LongArray(points.size) { points[it].tMs }
         val ptV = DoubleArray(points.size) { points[it].speedKmh / 3.6 }
+        // No events until the first GPS fix has settled — before it, motion samples get a stale
+        // extrapolated speed that turns phone-handling yaw into a giant phantom corner.
+        val warmupUntil = ptT.first() + WARMUP_MS
         fun idxAt(t: Long): Int {
             if (t <= ptT.first()) return 0
             if (t >= ptT.last()) return ptT.lastIndex
@@ -154,19 +165,21 @@ object FusedEventDetector {
         }
         val sn = sT.size
 
-        // Windowed maxima of the turning channels (two forward-only pointers over the sorted times).
-        val wYawLatG = DoubleArray(sn); val wYaw = DoubleArray(sn)
+        // Windowed maxima of the turning channels + the vertical-jolt channel (two forward-only
+        // pointers over the sorted times). wVertG flags a coincident road bump so it can't fake a corner.
+        val wYawLatG = DoubleArray(sn); val wYaw = DoubleArray(sn); val wVertG = DoubleArray(sn)
         var lo = 0; var hi = 0
         for (i in 0 until sn) {
             while (sT[lo] < sT[i] - CORNER_VETO_MS) lo++
             if (hi < i) hi = i
             while (hi < sn - 1 && sT[hi + 1] <= sT[i] + CORNER_VETO_MS) hi++
-            var ml = 0.0; var my = 0.0
+            var ml = 0.0; var my = 0.0; var mv = 0.0
             for (k in lo..hi) {
                 if (sYawLatG[k] > ml) ml = sYawLatG[k]
                 val ay = abs(sYaw[k]); if (ay > my) my = ay
+                if (sVertG[k] > mv) mv = sVertG[k]
             }
-            wYawLatG[i] = ml; wYaw[i] = my
+            wYawLatG[i] = ml; wYaw[i] = my; wVertG[i] = mv
         }
 
         // Severity = the peak of the maneuver window (see PEAK_WINDOW_MS), restricted to samples that
@@ -193,6 +206,7 @@ object FusedEventDetector {
         var lastLong = Long.MIN_VALUE; var lastTurn = Long.MIN_VALUE; var lastSwerve = Long.MIN_VALUE
         val yawSamples = ArrayList<YawSample>()
         for (i in 0 until sn) {
+            if (sT[i] < warmupUntil) continue
             val sp = sSpeed[i]
             if (sp < MOVING_MPS) continue
             val t = sT[i]; val hMagG = sHmagG[i]; val vertG = sVertG[i]
@@ -200,8 +214,11 @@ object FusedEventDetector {
             horizMagsG.add(hMagG)
             yawSamples.add(YawSample(t, yaw, sp))
 
-            // Corner: sustained lateral-g (takes precedence over a swerve), one event per turn.
-            if (yawLatG >= HARD_CORNER_G && debounced(t, lastTurn, TURN_GAP_MS)) {
+            // Corner: sustained lateral-g (takes precedence over a swerve), one event per turn. A
+            // coincident vertical jolt (windowed) means a road bump shook the gyro — not a corner; and a
+            // physically impossible magnitude (> MAX_PLAUSIBLE_LAT_G) is a handling artifact, rejected.
+            if (yawLatG >= HARD_CORNER_G && wVertG[i] < CORNER_BUMP_VERT_G &&
+                peakLatG(i) <= MAX_PLAUSIBLE_LAT_G && debounced(t, lastTurn, TURN_GAP_MS)) {
                 events.add(DriveEvent(t, EventType.CORNER, peakLatG(i) * G, "fused", 0.8))
                 turn++; lastTurn = t
             }
@@ -209,7 +226,7 @@ object FusedEventDetector {
             // it's a normal tight turn (parking lot, side street), not an evasive maneuver.
             else if (abs(yaw) >= SWERVE_YAW && yawLatG < HARD_CORNER_G && sp >= SWERVE_MIN_SPEED_MPS &&
                 debounced(t, lastSwerve, TURN_GAP_MS)) {
-                events.add(DriveEvent(t, EventType.SWERVE, peakLatG(i) * G, "fused", 0.7))
+                events.add(DriveEvent(t, EventType.SWERVE, peakLatG(i).coerceAtMost(MAX_PLAUSIBLE_LAT_G) * G, "fused", 0.7))
                 turn++; lastSwerve = t; lastTurn = t
             }
             // Longitudinal: horizontal spike not dominated by turning (windowed, see above) or by a

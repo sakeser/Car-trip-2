@@ -168,4 +168,62 @@ class FusedEventDetectorTest {
         assertNotNull("expected an accel event", accel)
         assertEquals("magnitude should be the maneuver peak", 0.50, accel!!.magnitude / 9.80665, 0.04)
     }
+
+    /**
+     * Field trip 1126 logged a 4.65 g and a 1.45 g "very sharp turn" at startup — phone handling.
+     * A car physically can't pull that much lateral g, so a non-physical magnitude must be rejected,
+     * not just clamped.
+     */
+    @Test fun nonPhysicalLateralGIsNotACorner() {
+        val n = 300
+        val ms = (0 until n).map { i ->
+            MotionSample(
+                tripId = 1, t = i * 20L, ax = 0.02 * 9.80665, ay = 0.0, az = 0.0,
+                gx = 0.0, gy = 0.0, gz = if (i in 100..140) 1.2 else 0.0,   // ~1.7 g lateral at 50 km/h
+                grx = 0.0, gry = 0.0, grz = 9.8
+            )
+        }
+        val r = FusedEventDetector.detect(ms, movingPoints(n * 20L))
+        assertEquals("a >0.9 g 'corner' is a handling artifact", 0, r.turnCount)
+    }
+
+    /**
+     * Field trip 1126 @14m03s: a pothole on a fast off-ramp rattled the gyro and faked a 0.71 g
+     * "very sharp turn". A yaw spike coincident with a strong vertical jolt is a bump, not a corner.
+     */
+    @Test fun potholeJoltIsNotACorner() {
+        val n = 300
+        val ms = (0 until n).map { i ->
+            val jolt = i in 118..126
+            MotionSample(
+                tripId = 1, t = i * 20L,
+                ax = 0.05 * 9.80665, ay = 0.0,
+                az = (if (jolt) 0.55 else 0.02) * 9.80665,        // strong vertical pothole jolt
+                gx = 0.0, gy = 0.0, gz = if (jolt) 0.35 else 0.0, // gyro spike from the bump (~0.5 g at 50 km/h)
+                grx = 0.0, gry = 0.0, grz = 9.8
+            )
+        }
+        val r = FusedEventDetector.detect(ms, movingPoints(n * 20L))
+        assertEquals("a pothole's gyro spike must not become a corner", 0, r.turnCount)
+    }
+
+    /** A genuine startup nudge before the first GPS fix must not produce events (stale extrapolated speed). */
+    @Test fun preGpsHandlingIsIgnored() {
+        // Motion starts 2 s before the first GPS fix; a hard yaw there must be ignored.
+        val ms = (0 until 300).map { i ->
+            MotionSample(
+                tripId = 1, t = i * 20L, ax = 0.02 * 9.80665, ay = 0.0, az = 0.0,
+                gx = 0.0, gy = 0.0, gz = if (i in 10..40) 0.5 else 0.0,
+                grx = 0.0, gry = 0.0, grz = 9.8
+            )
+        }
+        // First GPS fix at t=2000 ms, so the i=10..40 (200-800 ms) yaw is pre-GPS.
+        val pts = listOf(
+            TrackPoint(2000L, 43.0, -79.0, 50.0, 0.0, 0.0),
+            TrackPoint(4000L, 43.0, -79.0, 50.0, 0.0, 0.0),
+            TrackPoint(6000L, 43.0, -79.0, 50.0, 0.0, 0.0)
+        )
+        val r = FusedEventDetector.detect(ms, pts)
+        assertEquals("pre-GPS handling must not fire events", 0, r.turnCount)
+    }
 }

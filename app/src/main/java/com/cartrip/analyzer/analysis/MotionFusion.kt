@@ -19,11 +19,17 @@ import kotlin.math.sqrt
 object MotionFusion {
 
     private const val MIN_GRAVITY = 5.0          // ignore samples before the gravity sensor warms up
-    // Field-calibrated against trips 778/779: a manhole read 0.33 g vertical, a speed bump 0.49 g.
-    // The old 0.46 g cutoff missed the manhole, so lower it to catch real bumps/manholes/potholes.
-    private const val POTHOLE_VERT = 3.2         // m/s^2 vertical jolt → pothole/bump (~0.33 g)
+    // Road excitation grows with speed: at highway speed normal expansion-joint/texture buzz exceeds a
+    // city-speed cutoff and fabricates dozens of "potholes" (field trip 1126: 34 in 34 min, mostly at
+    // 90-114 km/h). So the bar rises with speed — a city manhole (0.33 g @ <=40 km/h) still counts,
+    // highway buzz (~0.40 g @ 110 km/h) doesn't. Field-calibrated low end against trips 778/779.
+    private const val POTHOLE_VERT = 3.2         // base ~0.33 g at/under POTHOLE_SPEED_LO (catches a manhole)
+    private const val POTHOLE_VERT_HWY = 4.9     // ~0.50 g at/over POTHOLE_SPEED_HI
+    private const val POTHOLE_SPEED_LO = 40.0
+    private const val POTHOLE_SPEED_HI = 110.0
     private const val POTHOLE_GAP_MS = 800L      // debounce repeated samples of one impact
-    private const val ROUGH_RMS = 0.9            // windowed vertical RMS → "rough road"
+    private const val ROUGH_RMS = 1.1            // windowed vertical RMS → "rough road" (raised from 0.9
+                                                 // so only genuinely rough stretches count — Rev AA)
     private const val ROUGH_WINDOW_MS = 3000L
     // Discrete "rough stretch" detection: 1 s windows; a run of consecutive rough windows (>=1 s)
     // is one stretch. bumpyScore integrates vertical RMS over rough time (bumpiness x duration).
@@ -45,6 +51,12 @@ object MotionFusion {
     }
 
     private class Acc(val t: Long, val vertical: Double, val horizontal: Double)
+
+    /** Speed-aware pothole cutoff: base at city speed, ramping up to the highway value (see notes above). */
+    private fun potholeThreshold(speedKmh: Double): Double {
+        val f = ((speedKmh - POTHOLE_SPEED_LO) / (POTHOLE_SPEED_HI - POTHOLE_SPEED_LO)).coerceIn(0.0, 1.0)
+        return POTHOLE_VERT + f * (POTHOLE_VERT_HWY - POTHOLE_VERT)
+    }
 
     fun analyze(motions: List<MotionSample>, points: List<TrackPoint>): Result {
         if (motions.size < 20 || points.size < 2) return Result.EMPTY
@@ -77,8 +89,9 @@ object MotionFusion {
         val events = ArrayList<DriveEvent>()
         var lastPothole = Long.MIN_VALUE
         for (a in acc) {
+            val sp = speedAt(a.t)
             val gapOk = lastPothole == Long.MIN_VALUE || a.t - lastPothole >= POTHOLE_GAP_MS
-            if (abs(a.vertical) >= POTHOLE_VERT && gapOk && speedAt(a.t) >= MOVING_KMH) {
+            if (abs(a.vertical) >= potholeThreshold(sp) && gapOk && sp >= MOVING_KMH) {
                 events.add(DriveEvent(a.t, EventType.POTHOLE, abs(a.vertical), "motion", 1.0))
                 lastPothole = a.t
             }
@@ -106,7 +119,10 @@ object MotionFusion {
             if (rough) {
                 roughMs += STRETCH_WINDOW_MS
                 if (!inStretch) { roughStretchCount++; inStretch = true }
-                bumpyScore += rms * (STRETCH_WINDOW_MS / 1000.0)
+                // Severity weighted non-linearly: (RMS over threshold)^2 x seconds, so a few hard,
+                // sustained stretches score far above many marginal ones (Rev AA, owner's proposal).
+                val excess = rms - ROUGH_RMS
+                bumpyScore += excess * excess * (STRETCH_WINDOW_MS / 1000.0)
             } else {
                 inStretch = false
             }

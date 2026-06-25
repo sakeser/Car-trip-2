@@ -40,4 +40,20 @@ class MotionFusionTest {
         assertEquals(0, r.roughStretchCount)
         assertEquals(0.0, r.bumpyScore, 1e-9)
     }
+
+    private fun pointsAt(durMs: Long, kmh: Double) = listOf(
+        TrackPoint(0L, 43.0, -79.0, kmh, 0.0, 0.0),
+        TrackPoint(durMs / 2, 43.0, -79.0, kmh, 0.0, 0.0),
+        TrackPoint(durMs, 43.0, -79.0, kmh, 0.0, 0.0)
+    )
+
+    /**
+     * The same 0.40 g vertical jolt is a pothole at city speed but just expansion-joint/texture buzz at
+     * highway speed — field trip 1126 logged 34 such "potholes" on the highway. Threshold rises with speed.
+     */
+    @Test fun potholeThresholdRisesWithSpeed() {
+        val ms = motions(250) { _, t -> if (t == 2000L) 3.9 else 0.02 }   // a lone 0.40 g jolt
+        assertTrue("city jolt is a pothole", MotionFusion.analyze(ms, pointsAt(5000, 35.0)).potholeCount >= 1)
+        assertEquals("highway buzz is not a pothole", 0, MotionFusion.analyze(ms, pointsAt(5000, 110.0)).potholeCount)
+    }
 }
