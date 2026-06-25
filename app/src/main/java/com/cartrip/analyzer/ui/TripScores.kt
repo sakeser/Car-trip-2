@@ -101,7 +101,8 @@ data class TripScores(
             val comfort = (100.0 - comfortPenalty).coerceIn(0.0, 100.0).roundToInt()
 
             val speed: Int? =
-                if (trip.googleEtaTrafficS > 0 && trip.durationS > 0) {
+                // No "you vs traffic" pace for non-drives (a walk's stored driving ETA is meaningless).
+                if (trip.googleEtaTrafficS > 0 && trip.durationS > 0 && !TripKind.isLikelyNonDrive(trip)) {
                     val ratio = trip.googleEtaTrafficS / trip.durationS // >1 => faster than Google
                     (75.0 + (ratio - 1.0) * 150.0).coerceIn(0.0, 100.0).roundToInt()
                 } else null

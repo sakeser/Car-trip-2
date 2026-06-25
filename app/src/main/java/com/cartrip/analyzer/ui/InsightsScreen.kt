@@ -222,7 +222,7 @@ private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>, veh
         ((it.hardBrakeCount + it.hardAccelCount + it.hardCornerCount) / km * 100.0).toFloat()
     }
     val paceVsGoogle = trips
-        .filter { it.googleEtaTrafficS > 0.0 && it.durationS > 0.0 }
+        .filter { it.googleEtaTrafficS > 0.0 && it.durationS > 0.0 && !TripKind.isLikelyNonDrive(it) }
         .map { ((it.googleEtaTrafficS - it.durationS) / 60.0).toFloat() }
     // Accelerometer-fusion trends.
     val roughRoad = trips.map { (it.roughRoadPct * 100.0).toFloat() }
@@ -417,7 +417,7 @@ private fun driveTrendText(scores: List<Int>): String {
 
 @Composable
 private fun GoogleVsYouHero(trips: List<TripEntity>) {
-    val withEta = trips.filter { it.googleEtaTrafficS > 0 && it.durationS > 0 }
+    val withEta = trips.filter { it.googleEtaTrafficS > 0 && it.durationS > 0 && !TripKind.isLikelyNonDrive(it) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

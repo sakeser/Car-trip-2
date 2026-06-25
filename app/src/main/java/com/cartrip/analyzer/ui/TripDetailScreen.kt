@@ -1016,40 +1016,6 @@ private fun SafetyFactorsCard(
     }
 }
 
-/** Quiet factor bar: muted when the value is low/safe, accented only when notable (≥1% of time). */
-@Composable
-private fun FactorBar(label: String, fraction: Double, accent: Color, sensorEvents: Int = 0) {
-    val hasSensorEvents = sensorEvents > 0
-    val notable = fraction >= 0.01 || hasSensorEvents
-    val barFrac = if (fraction > 0.0) {
-        (fraction / 0.06).coerceIn(0.015, 1.0).toFloat()
-    } else {
-        0.015f
-    }
-    val color = if (notable) accent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-    val valueText = buildString {
-        append("%.1f".format(fraction * 100))
-        append("%")
-        if (hasSensorEvents) append(" · $sensorEvents sensor")
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(54.dp))
-        Box(
-            modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f))
-        ) {
-            Box(modifier = Modifier.fillMaxWidth(barFrac).height(6.dp).clip(RoundedCornerShape(3.dp)).background(color))
-        }
-        Text(
-            valueText,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(104.dp)
-        )
-    }
-}
-
 private val SPEED_BLUE = Color(0xFF0EA5E9)   // matches the map route polyline
 private val SPEED_YELLOW = Color(0xFFF59E0B)
 private val SPEED_RED = Color(0xFFEF4444)
@@ -1383,81 +1349,6 @@ private fun FuelCell(icon: ImageVector, value: String, unit: String, color: Colo
 }
 
 @Composable
-private fun FactorCell(label: String, fraction: Double, color: Color, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(
-            "${"%.1f".format(fraction * 100)}%",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun TripLinksCard(
-    startEnabled: Boolean,
-    stopEnabled: Boolean,
-    routeEnabled: Boolean,
-    exportEnabled: Boolean,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onRoute: () -> Unit,
-    onExport: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Filled.Route, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Map links", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                ActionButton("Start", Icons.Filled.PlayArrow, Modifier.weight(1f), startEnabled, onStart)
-                ActionButton("Stop", Icons.Filled.StopCircle, Modifier.weight(1f), stopEnabled, onStop)
-                ActionButton("Route", Icons.Filled.Route, Modifier.weight(1f), routeEnabled, onRoute)
-                ActionButton("Excel", Icons.Filled.Share, Modifier.weight(1f), exportEnabled, onExport)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActionButton(
-    label: String,
-    icon: ImageVector,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    val iconColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-    val textColor = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .background(MaterialTheme.colorScheme.surface)
-            .height(66.dp)
-            .padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Icon(icon, contentDescription = label, tint = iconColor, modifier = Modifier.size(22.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
-    }
-}
-
-@Composable
 private fun EtaComparisonCard(
     trip: TripEntity,
     actualS: Double,
@@ -1470,6 +1361,16 @@ private fun EtaComparisonCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (TripKind.isLikelyNonDrive(trip)) {
+                // A walk / non-drive: a driving traffic ETA would be meaningless, so don't offer it.
+                Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "This looks like a walk or non-drive - no traffic comparison.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                return@Column
+            }
             if (!hasEta) {
                 Text("You vs traffic", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
@@ -1675,80 +1576,6 @@ private fun EtaYouRow(fYou: Float, youColor: Color, timeText: String, loaded: Bo
             color = youColor,
             textAlign = TextAlign.End,
             modifier = Modifier.width(62.dp)
-        )
-    }
-}
-
-@Composable
-private fun ScorePanel(scores: TripScores) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        ScoreRing(scores.overall)
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ScoreMeter("Safety", scores.safety)
-            ScoreMeter("Comfort", scores.comfort)
-            ScoreMeter("Speed", scores.speed)
-        }
-    }
-}
-
-@Composable
-private fun ScoreMeter(label: String, value: Int?) {
-    val color = value?.let { TripScores.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.labelLarge)
-            Text(
-                value?.toString() ?: "-",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(7.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth((value ?: 0) / 100f)
-                    .height(7.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(color)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ReplayControls(
-    points: List<TrackPoint>,
-    selectedIndex: Int,
-    onSelectedIndex: (Int) -> Unit
-) {
-    val point = points.getOrNull(selectedIndex) ?: return
-    val firstT = points.firstOrNull()?.tMs ?: point.tMs
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Replay", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Slider(
-            value = selectedIndex.toFloat(),
-            onValueChange = { onSelectedIndex(it.roundToInt()) },
-            valueRange = 0f..(points.size - 1).toFloat()
-        )
-        StatGrid(
-            stats = listOf(
-                Stat("Time", Format.duration((point.tMs - firstT) / 1000.0)),
-                Stat("Speed", Format.speedKmh(point.speedKmh)),
-                Stat("Long accel", Format.accel(point.longAccel)),
-                Stat("Lateral", Format.accel(point.latAccel))
-            ),
-            modifier = Modifier.fillMaxWidth()
         )
     }
 }
