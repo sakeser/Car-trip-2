@@ -81,7 +81,10 @@ data class TripScores(
                 hardPenalty +
                     speedingPct * 0.8 +
                     severeOver * 0.5 +
-                    max(0.0, peakG - 0.55) * 25.0
+                    max(0.0, peakG - 0.55) * 25.0 +
+                    // Braking hard all the way to a stop is a safety signal (late/abrupt stops), not just
+                    // a comfort one — penalize it on both axes (lighter here than the Comfort term).
+                    trip.harshStopCount * 2.5
             val safety = (100.0 - safetyPenalty).coerceIn(0.0, 100.0).roundToInt()
 
             val avgPeakAccel = (trip.maxBrakeMps2 + trip.maxAccelMps2 + trip.maxLateralMps2) / 3.0

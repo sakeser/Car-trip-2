@@ -144,9 +144,13 @@ object MotionFusion {
         }
         val roughRoadPct = if (movingMs > 0) roughMs.toDouble() / movingMs else 0.0
 
+        // Potholes are the only events added so far; capture the count before harsh stops join the list.
+        val potholeCount = events.size
+
         // Harsh stops: a firm braking force in the ~2 s before the car comes to rest (see the constants
         // above for the two bugs this replaces). Smooth the horizontal channel first so a lone accel
-        // spike can't fake a harsh stop; harshness is the peak of that smoothed force.
+        // spike can't fake a harsh stop; harshness is the peak of that smoothed force. Each one is also
+        // emitted as a timestamped event (magnitude = peak decel, m/s^2) so it maps like other events.
         var harshStopCount = 0
         val hSmooth = DoubleArray(acc.size)
         for (i in acc.indices) {
@@ -179,9 +183,12 @@ object MotionFusion {
                 if (t > stopT) break
                 if (hSmooth[i] > peak) peak = hSmooth[i]
             }
-            if (peak >= HARSH_STOP_DECEL) harshStopCount++
+            if (peak >= HARSH_STOP_DECEL) {
+                harshStopCount++
+                events.add(DriveEvent(stopT, EventType.HARSH_STOP, peak, "motion", 1.0))
+            }
         }
 
-        return Result(events, roughRoadPct, events.size, harshStopCount, roughStretchCount, bumpyScore)
+        return Result(events, roughRoadPct, potholeCount, harshStopCount, roughStretchCount, bumpyScore)
     }
 }

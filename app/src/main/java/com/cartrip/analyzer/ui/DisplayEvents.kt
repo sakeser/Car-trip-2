@@ -60,6 +60,9 @@ object DisplayEvents {
 
     private fun chooseRepresentative(cluster: List<DriveEvent>): DriveEvent {
         if (cluster.size == 1) return cluster.first()
+        // A harsh stop subsumes the hard brake that causes it (they fall in the same moment), so it
+        // always represents its cluster — the more specific, more useful "you braked hard to a stop".
+        cluster.firstOrNull { it.type == EventType.HARSH_STOP }?.let { return it }
         val potholes = cluster.filter { it.type == EventType.POTHOLE }
         val driving = cluster.filter { it.type != EventType.POTHOLE }
         val strongDriving = driving.any {
@@ -68,6 +71,7 @@ object DisplayEvents {
                 EventType.CORNER -> 0.35
                 EventType.SWERVE -> 0.30
                 EventType.POTHOLE -> 0.40
+                EventType.HARSH_STOP -> 0.30
             }
         }
         if (potholes.isNotEmpty() && !strongDriving) {
@@ -90,6 +94,8 @@ object DisplayEvents {
             }
             EventType.CORNER, EventType.SWERVE -> turnNotable(g, speedKmh)
             EventType.POTHOLE -> g >= 0.33
+            // The detector already vetted the stop (peak decel >= 3.0 m/s^2 ~ 0.31 g), so always show it.
+            EventType.HARSH_STOP -> true
         }
     }
 
@@ -129,6 +135,7 @@ object DisplayEvents {
             EventType.CORNER -> 0.35
             EventType.SWERVE -> 0.30
             EventType.POTHOLE -> 0.40
+            EventType.HARSH_STOP -> 0.30
         }
         val sourceWeight = when (event.source) {
             "gps" -> 0.08
@@ -139,6 +146,8 @@ object DisplayEvents {
     }
 
     private fun typePriority(type: EventType): Int = when (type) {
+        // A harsh stop outranks the hard brake that causes it, so a brake+stop cluster shows as the stop.
+        EventType.HARSH_STOP -> 6
         EventType.BRAKE -> 5
         EventType.CORNER -> 4
         EventType.POTHOLE -> 3

@@ -37,7 +37,7 @@ object GeoUtils {
     fun angleDiffDeg(a: Double, b: Double): Double = (a - b + 540) % 360 - 180
 }
 
-enum class EventType { ACCEL, BRAKE, CORNER, POTHOLE, SWERVE }
+enum class EventType { ACCEL, BRAKE, CORNER, POTHOLE, SWERVE, HARSH_STOP }
 
 /**
  * A detected driving event. [source] records which detector found it — "gps" (speed/heading

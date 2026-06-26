@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -733,20 +734,14 @@ private fun EventFilterBar(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             Icons.Filled.FilterList,
             contentDescription = "Filter events",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            "Filter",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            modifier = Modifier.size(16.dp)
         )
         EventFilter.values().forEach { filter ->
             val count = events.count { eventFilterFor(it.type) == filter }
@@ -754,8 +749,9 @@ private fun EventFilterBar(
                 FilterChip(
                     selected = filter in selected,
                     onClick = { onToggle(filter) },
+                    modifier = Modifier.height(28.dp),
                     leadingIcon = {
-                        Icon(filterIcon(filter), contentDescription = filter.label, modifier = Modifier.size(15.dp))
+                        Icon(filterIcon(filter), contentDescription = filter.label, modifier = Modifier.size(13.dp))
                     },
                     label = {
                         Text("${filter.label} $count", style = MaterialTheme.typography.labelSmall)
@@ -771,6 +767,7 @@ private fun filterIcon(filter: EventFilter): ImageVector = when (filter) {
     EventFilter.ACCEL -> Icons.Filled.Speed
     EventFilter.TURNS -> Icons.Filled.Route
     EventFilter.BUMPS -> BumpGlyph
+    EventFilter.STOPS -> Icons.Filled.PriorityHigh
 }
 
 @Composable
@@ -1219,6 +1216,7 @@ private fun drivingRefG(type: EventType): Double = when (type) {
     EventType.ACCEL -> 0.55
     EventType.CORNER, EventType.SWERVE -> 0.65
     EventType.POTHOLE -> 0.6
+    EventType.HARSH_STOP -> 0.6
 }
 
 @Composable
@@ -1586,7 +1584,8 @@ private enum class EventFilter(val label: String) {
     BRAKING("Brakes"),
     ACCEL("Accel"),
     TURNS("Turns"),
-    BUMPS("Bumps")
+    BUMPS("Bumps"),
+    STOPS("Stops")
 }
 
 private fun eventFilterFor(type: EventType): EventFilter = when (type) {
@@ -1594,6 +1593,7 @@ private fun eventFilterFor(type: EventType): EventFilter = when (type) {
     EventType.ACCEL -> EventFilter.ACCEL
     EventType.CORNER, EventType.SWERVE -> EventFilter.TURNS
     EventType.POTHOLE -> EventFilter.BUMPS
+    EventType.HARSH_STOP -> EventFilter.STOPS
 }
 
 private class EventStyle(val label: String, val color: Color, val icon: ImageVector)
@@ -1614,6 +1614,10 @@ private fun eventStyle(event: DriveEvent): EventStyle = when (event.type) {
     EventType.POTHOLE ->
         // Yellow hump, matching the map's bump marker (TripMap MarkerGlyph.BUMP, rgb 245,158,11).
         EventStyle("Pothole / big bump", Color(0xFFF59E0B), BumpGlyph)
+    EventType.HARSH_STOP ->
+        // Magenta, matching the map's harsh-stop marker (TripMap rgb 219,39,119).
+        if (event.magnitude >= 4.5) EventStyle("Very harsh stop", Color(0xFFBE123C), Icons.Filled.PriorityHigh)
+        else EventStyle("Harsh stop", Color(0xFFDB2777), Icons.Filled.PriorityHigh)
 }
 
 /** A plain-language explanation of what the magnitude means. */
@@ -1628,6 +1632,8 @@ private fun eventExplanation(event: DriveEvent): String {
         else "Quick cornering with noticeable lean."
         EventType.SWERVE -> "A quick side-to-side direction change."
         EventType.POTHOLE -> "A sharp vertical jolt - pothole, speed bump, or rough patch."
+        EventType.HARSH_STOP -> if (event.magnitude >= 4.5) "Braked hard right to a stop - passengers thrown forward."
+        else "Firm braking all the way to a stop."
     }
     return "$intensity  (${"%.2f".format(g)} g)"
 }
@@ -1738,6 +1744,7 @@ private fun drivingEventSummaries(events: List<DriveEvent>): List<DrivingEventSu
     val brakes = driving.filter { it.type == EventType.BRAKE }
     val accels = driving.filter { it.type == EventType.ACCEL }
     val turns = driving.filter { it.type == EventType.CORNER || it.type == EventType.SWERVE }
+    val harshStops = events.filter { it.type == EventType.HARSH_STOP }
     return listOfNotNull(
         strongest(brakes)?.let {
             DrivingEventSummary("Hard braking", brakes.size, it, Color(0xFFEF4444), Icons.Filled.StopCircle)
@@ -1747,6 +1754,9 @@ private fun drivingEventSummaries(events: List<DriveEvent>): List<DrivingEventSu
         },
         strongest(turns)?.let {
             DrivingEventSummary("Sharp turns", turns.size, it, Color(0xFFF59E0B), Icons.Filled.Route)
+        },
+        strongest(harshStops)?.let {
+            DrivingEventSummary("Harsh stops", harshStops.size, it, Color(0xFFDB2777), Icons.Filled.PriorityHigh)
         }
     )
 }

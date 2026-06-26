@@ -88,6 +88,7 @@ fun TripMap(
     val cornerIcon = remember { markerIcon(MarkerGlyph.TURN, AndroidColor.rgb(234, 179, 8), 67) }
     val swerveIcon = remember { markerIcon(MarkerGlyph.SWERVE, AndroidColor.rgb(147, 51, 234), 67) }
     val potholeIcon = remember { markerIcon(MarkerGlyph.BUMP, AndroidColor.rgb(245, 158, 11), 84) }
+    val harshStopIcon = remember { markerIcon(MarkerGlyph.HARSH_STOP, AndroidColor.rgb(219, 39, 119), 72) }
     // The "you" replay marker glyph is user-selectable (Options -> Your trip icon).
     val youGlyph = remember {
         when (UiPrefs.youIcon(context)) {
@@ -206,6 +207,7 @@ fun TripMap(
                         EventType.CORNER -> cornerIcon
                         EventType.SWERVE -> swerveIcon
                         EventType.POTHOLE -> potholeIcon
+                        EventType.HARSH_STOP -> harshStopIcon
                     },
                     onClick = {
                         onEventClick(event)
@@ -234,6 +236,7 @@ private fun DriveEvent.title(): String =
         EventType.CORNER -> "Hard corner ${"%.2fg".format(magnitude / 9.80665)}"
         EventType.SWERVE -> "Swerve"
         EventType.POTHOLE -> "Pothole ${"%.2fg".format(magnitude / 9.80665)}"
+        EventType.HARSH_STOP -> "Harsh stop ${"%.2fg".format(magnitude / 9.80665)}"
     }
 
 private fun relaxedBounds(bounds: LatLngBounds, visibleRouteFraction: Double = 0.66): LatLngBounds {
@@ -248,7 +251,7 @@ private fun relaxedBounds(bounds: LatLngBounds, visibleRouteFraction: Double = 0
     )
 }
 
-private enum class MarkerGlyph { START, FINISH, BRAKE, ACCEL, TURN, SWERVE, BUMP, CAR, ARROW, PERSON, DOT }
+private enum class MarkerGlyph { START, FINISH, BRAKE, ACCEL, TURN, SWERVE, BUMP, HARSH_STOP, CAR, ARROW, PERSON, DOT }
 
 /**
  * Draws a map marker as a [size]px bitmap: a coloured pin shape (octagon for the stop-sign brake,
@@ -265,7 +268,7 @@ private fun markerIcon(glyph: MarkerGlyph, fill: Int, size: Int = 96): BitmapDes
 
     fun drawShape(dy: Float) {
         when (glyph) {
-            MarkerGlyph.BRAKE -> canvas.drawPath(octagonPath(c, c + dy, r), paint)
+            MarkerGlyph.BRAKE, MarkerGlyph.HARSH_STOP -> canvas.drawPath(octagonPath(c, c + dy, r), paint)
             MarkerGlyph.TURN, MarkerGlyph.SWERVE, MarkerGlyph.BUMP -> canvas.drawPath(diamondPath(c, c + dy, r), paint)
             else -> canvas.drawCircle(c, c + dy, r, paint)
         }
@@ -284,6 +287,7 @@ private fun markerIcon(glyph: MarkerGlyph, fill: Int, size: Int = 96): BitmapDes
         MarkerGlyph.TURN -> drawTurnArrow(canvas, c, r, paint)
         MarkerGlyph.SWERVE -> drawSwerve(canvas, c, r, paint)
         MarkerGlyph.BUMP -> drawBump(canvas, c, r, paint)
+        MarkerGlyph.HARSH_STOP -> drawHarshStop(canvas, c, r, paint)
         MarkerGlyph.CAR -> drawCar(canvas, c, r, paint, fill)
         MarkerGlyph.ARROW -> drawNavArrow(canvas, c, r, paint)
         MarkerGlyph.PERSON -> drawPerson(canvas, c, r, paint)
@@ -299,6 +303,16 @@ private fun drawStopRing(canvas: Canvas, c: Float, r: Float, paint: Paint) {
     paint.strokeWidth = r * 0.16f
     canvas.drawPath(octagonPath(c, c, r * 0.66f), paint)
     paint.style = Paint.Style.FILL
+}
+
+/** White exclamation inside the octagon — an abrupt, hard stop (distinct from the plain brake ring). */
+private fun drawHarshStop(canvas: Canvas, c: Float, r: Float, paint: Paint) {
+    paint.style = Paint.Style.STROKE
+    paint.strokeCap = Paint.Cap.ROUND
+    paint.strokeWidth = r * 0.22f
+    canvas.drawLine(c, c - r * 0.52f, c, c + r * 0.10f, paint)   // the bar
+    paint.style = Paint.Style.FILL
+    canvas.drawCircle(c, c + r * 0.46f, r * 0.13f, paint)        // the dot
 }
 
 /** Start = solid pennant, Finish = checkered flag (its dark squares show the marker [fill] through). */
