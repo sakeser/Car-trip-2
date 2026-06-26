@@ -1,12 +1,15 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-26 · App version **2.81 (build 92)** · Branch `main` (Rev AL–AQ; AP pushed, AQ may not be).
+_Last updated: 2026-06-26 · App version **2.83 (build 94)** · Branch `main` (Rev AL–AS, all pushed).
 **Hands-free auto-record now works** via a persistent "armed" watcher (Rev AO); **Rev AP** fixed the
 charger-trigger (stale-sticky→broadcast-edge); **Rev AQ** fixed a background crash — a `location` FGS started
 from the background on Android 14 needs **`ACCESS_BACKGROUND_LOCATION` ("Allow all the time")**, which the
-app now declares + requests (and the start is try/caught so it can't crash). **Workspace is now the repo root
-`C:\Users\sinan\OneDrive\Desktop\cartrip`** (the `cartrip-main` worktree was removed during consolidation —
-`main` is the only branch). The owner's next real background charge test is the final validation._
+app now declares + requests (and the start is try/caught so it can't crash); **Rev AR** added recording
+haptics + a code-verified failure-mode matrix (§3); **Rev AS** addressed a Codex review (the "Allow all the
+time" CTA now opens Settings on Android 11+, a blocked auto-arm no longer logs a phantom "provisional
+started"). **Workspace is the repo root `C:\Users\sinan\OneDrive\Desktop\cartrip`** (`cartrip-main` worktree
+removed during consolidation — `main` is the only branch). The owner's next real background charge test is
+the final validation._
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -22,10 +25,10 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - **Single workspace = the repo root `C:\Users\sinan\OneDrive\Desktop\cartrip`** on **`main`** (the only
   branch). The `cartrip-main` linked worktree and the stale `ux-redesign-v1` / `rev-g-functional` branches
   were removed on 2026-06-26; the old UX redesign is preserved as tags `archive/ux-redesign-v1-wip` +
-  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at Rev AP (`6ebe32b`, pushed);
-  **Rev AQ is committed locally and may not be pushed** (verify `git log origin/main..main`). Pushing to
-  `main` needs explicit per-turn user authorization.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.81/92** (Rev AQ). Device auto-locks fast; for a
+  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev AS** (pushed); verify
+  with `git log origin/main..main` (should be empty). Pushing to `main` needs explicit per-turn user
+  authorization.
+- Installed on the Samsung **S25 (SM_S931W)** as **2.83/94** (Rev AS). Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
 - **95 unit tests**, all green. Room schema **v19** (unchanged in Rev AP): v18 added the walk/non-drive override

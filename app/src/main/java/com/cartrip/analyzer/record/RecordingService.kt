@@ -174,15 +174,16 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         return START_NOT_STICKY
     }
 
-    private fun startRecording() {
-        if (recording) return
+    /** @return true if recording actually started; false if the foreground start was blocked. */
+    private fun startRecording(): Boolean {
+        if (recording) return true
         resetSessionState()
         if (!startInForeground()) {
             // Couldn't enter the location foreground service. On Android 14 a *background*-initiated
             // auto-arm without "Allow all the time" location throws here — bail without crashing (a
             // crash would crash-loop, since the watcher re-arms on each process restart).
             onForegroundStartBlocked()
-            return
+            return false
         }
         // Tactile cue: a firm buzz when manually recording; a lighter "armed" tick for an auto provisional
         // (it firms up to recordingStarted once motion is confirmed).
@@ -211,6 +212,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             }
             startTicker()
         }
+        return true
     }
 
     private fun stopRecording(trimCutoff: TrimCutoff? = null) {
@@ -238,7 +240,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         }
         stoppingNormally = true
         recording = false
-        Haptics.stopped(this) // two firm buzzes: a real trip ended and is being saved
+        // Two firm buzzes the instant the stop is registered (immediate tactile confirmation is the point).
+        // Finalize/save happens just after; on the rare finalize failure the trip is recovered as PARTIAL.
+        Haptics.stopped(this)
         tickerJob?.cancel()
         try {
             sensorManager.unregisterListener(this)
@@ -328,7 +332,12 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             graceStopJob?.cancel(); graceStopJob = null; return
         }
         autoStarted = true
-        startRecording()
+        if (!startRecording()) {
+            // Foreground start was blocked (e.g. background location not granted) — onForegroundStartBlocked
+            // already logged it + posted the notice + stopped us. Don't log a phantom "provisional started"
+            // or schedule a motion-confirm against a recording that never began.
+            return
+        }
         AutoRecordLog.add(this, "AUTO_ARM: provisional trip started, confirming motion (${AutoRecordPrefs.MOTION_CONFIRM_MS / 1000}s)")
         motionConfirmJob?.cancel()
         motionConfirmJob = scope.launch {

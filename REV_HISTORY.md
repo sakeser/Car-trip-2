@@ -4,6 +4,22 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AS (2026-06-26) — Codex review fixes (bg-location CTA, auto-arm logging)
+
+Addressed a read-only Codex review of `6ebe32b..HEAD`:
+- **P2 — "Allow all the time" CTA now works on Android 11+.** The runtime permission dialog cannot grant
+  `ACCESS_BACKGROUND_LOCATION` on Android 11+ (it must be set in Settings), so the button felt broken.
+  `requestBackgroundLocation()` now routes by API: API 29 → inline dialog; **API 30+ → opens app Settings**
+  (Permissions > Location > "Allow all the time"). Copy updated; the redundant second button removed.
+- **P2 — a blocked background auto-arm no longer logs a phantom "provisional trip started".** `startRecording()`
+  now returns `Boolean`; `autoArm()` returns early when the foreground start was blocked, so it skips the
+  success log and the motion-confirm job (which would have run against a recording that never began). Cleaner
+  field diagnostics.
+- **P3 — stop haptic** kept immediate (that's the point of the tactile cue) but the comment is now honest:
+  it fires when the stop is *registered*; finalize/save follows and a rare failure is recovered as PARTIAL.
+- **P3 — refreshed the stale `HANDOFF.md` header/TL;DR** (was still saying v2.81 / "Rev AQ may not be pushed").
+- v2.82/93 → **v2.83/94**. 95 tests, no schema change.
+
 ## Rev AR (2026-06-26) — recording haptics + code-verified failure-mode matrix
 
 - **Haptic cues** (`record/Haptics.kt`, `VIBRATE` permission) so the driver can *feel* the trip state

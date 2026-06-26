@@ -92,10 +92,15 @@ fun AutoRecordScreen(onBack: () -> Unit) {
         ActivityResultContracts.RequestPermission()
     ) { bgLocationGranted = hasBackgroundLocation(context) }
     fun requestBackgroundLocation() {
-        // Background location can only be granted after fine/coarse. On Android 11+ the one-shot request
-        // routes to system settings ("Allow all the time"); on 10 it shows an inline option.
-        if (Build.VERSION.SDK_INT < 29) { bgLocationGranted = true; return }
-        bgLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        when {
+            // Pre-Android-10: background location isn't a separate permission.
+            Build.VERSION.SDK_INT < 29 -> bgLocationGranted = true
+            // Android 10: the runtime dialog still offers an inline "Allow all the time" option.
+            Build.VERSION.SDK_INT == 29 -> bgLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            // Android 11+: the OS does NOT grant background location from a dialog — it must be set in
+            // system settings. Take the user straight there so the button can't feel broken.
+            else -> openAppSettings(context)
+        }
     }
 
     val pairLauncher = rememberLauncherForActivityResult(
@@ -187,12 +192,12 @@ fun AutoRecordScreen(onBack: () -> Unit) {
                             Text(
                                 "Hands-free start (while the app is closed) needs background location. " +
                                     "Without it, a trip only auto-starts while the app is open - a background " +
-                                    "attempt is safely skipped. Tap below, then choose \"Allow all the time\".",
+                                    "attempt is safely skipped. This opens system settings; choose " +
+                                    "Permissions > Location > \"Allow all the time\".",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Button(onClick = { requestBackgroundLocation() }) { Text("Allow all the time") }
-                            TextButton(onClick = { openAppSettings(context) }) { Text("Open app settings instead") }
                         }
                     }
                 }
