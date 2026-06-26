@@ -35,7 +35,21 @@ object MotionFusion {
     // is one stretch. bumpyScore integrates vertical RMS over rough time (bumpiness x duration).
     private const val STRETCH_WINDOW_MS = 1000L
     private const val MOVING_KMH = 8.0           // only judge road/potholes while actually moving
-    private const val HARSH_STOP_JERK = 3.0      // horizontal jerk (m/s^3) just before a stop → harsh
+    // Harsh stops (recalibrated Rev AH against 27 real trips). Two prior bugs made it fire ~0/trip:
+    //  (1) a stop was only counted when the *immediately preceding* 1 Hz GPS sample was >= MOVING_KMH,
+    //      but a normal decel ramp (10 -> 5 -> 2 km/h) lands an intermediate sample in the 3-8 band, so
+    //      ~90% of real stops were missed (trip 845: 1 detected vs 14 real). A stop is now any crossing
+    //      below STOP_KMH that was preceded by genuine movement within HARSH_STOP_LOOKBACK_MS.
+    //  (2) harshness was sample-to-sample horizontal *jerk*, which on 50 Hz accel is pure noise (5-168
+    //      m/s^3) and cleared the bar on every stop. It is now the smoothed PEAK horizontal braking
+    //      force in the approach to rest — in the data, gentle stops sit < 1.4 m/s^2 and firm stops jump
+    //      to 2.6-5.7 m/s^2, so HARSH_STOP_DECEL = 3.0 m/s^2 (~0.31 g, the established hard-brake line).
+    private const val STOP_KMH = 3.0
+    private const val HARSH_STOP_LOOKBACK_MS = 4000L  // must have been moving (>=MOVING_KMH) this recently
+    private const val HARSH_STOP_DEBOUNCE_MS = 5000L  // one stop per window (don't double-count a crawl)
+    private const val HARSH_STOP_WINDOW_MS = 2000L    // look this far before rest for the braking peak
+    private const val HARSH_STOP_DECEL = 3.0          // m/s^2 peak horizontal braking force -> harsh
+    private const val HARSH_STOP_SMOOTH = 2           // +/- samples for the centered mean (rejects spikes)
 
     data class Result(
         val events: List<DriveEvent>,            // POTHOLE events (timestamped, mappable)
@@ -130,25 +144,42 @@ object MotionFusion {
         }
         val roughRoadPct = if (movingMs > 0) roughMs.toDouble() / movingMs else 0.0
 
-        // Harsh stops: abrupt horizontal jerk in the 2 s before the car comes to rest.
+        // Harsh stops: a firm braking force in the ~2 s before the car comes to rest (see the constants
+        // above for the two bugs this replaces). Smooth the horizontal channel first so a lone accel
+        // spike can't fake a harsh stop; harshness is the peak of that smoothed force.
         var harshStopCount = 0
-        for (k in 1 until points.size) {
-            if (points[k].speedKmh < 3.0 && points[k - 1].speedKmh >= MOVING_KMH) {
-                val stopT = points[k].tMs
-                var maxJerk = 0.0
-                var prev: Acc? = null
-                for (a in acc) {
-                    if (a.t < stopT - 2000) { prev = a; continue }
-                    if (a.t > stopT) break
-                    val p = prev
-                    if (p != null) {
-                        val dt = (a.t - p.t) / 1000.0
-                        if (dt > 0) maxJerk = maxOf(maxJerk, abs(a.horizontal - p.horizontal) / dt)
-                    }
-                    prev = a
-                }
-                if (maxJerk >= HARSH_STOP_JERK) harshStopCount++
+        val hSmooth = DoubleArray(acc.size)
+        for (i in acc.indices) {
+            var s = 0.0; var n = 0
+            for (k in (i - HARSH_STOP_SMOOTH)..(i + HARSH_STOP_SMOOTH)) {
+                if (k in acc.indices) { s += acc[k].horizontal; n++ }
             }
+            hSmooth[i] = if (n > 0) s / n else acc[i].horizontal
+        }
+        var lastStopT = Long.MIN_VALUE
+        for (k in 1 until points.size) {
+            // A crossing INTO stopped: previously at/above STOP_KMH, now below it.
+            if (points[k].speedKmh >= STOP_KMH || points[k - 1].speedKmh < STOP_KMH) continue
+            val stopT = points[k].tMs
+            // Require real movement within the lookback window (so a slow crawl that dips below 3 km/h
+            // without a genuine drive isn't a "stop"), and debounce repeated samples of one stop.
+            var movedRecently = false
+            var j = k - 1
+            while (j >= 0 && points[j].tMs >= stopT - HARSH_STOP_LOOKBACK_MS) {
+                if (points[j].speedKmh >= MOVING_KMH) { movedRecently = true; break }
+                j--
+            }
+            if (!movedRecently) continue
+            if (lastStopT != Long.MIN_VALUE && stopT - lastStopT < HARSH_STOP_DEBOUNCE_MS) continue
+            lastStopT = stopT
+            var peak = 0.0
+            for (i in acc.indices) {
+                val t = acc[i].t
+                if (t < stopT - HARSH_STOP_WINDOW_MS) continue
+                if (t > stopT) break
+                if (hSmooth[i] > peak) peak = hSmooth[i]
+            }
+            if (peak >= HARSH_STOP_DECEL) harshStopCount++
         }
 
         return Result(events, roughRoadPct, events.size, harshStopCount, roughStretchCount, bumpyScore)

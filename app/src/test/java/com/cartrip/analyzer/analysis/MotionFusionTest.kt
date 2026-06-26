@@ -56,4 +56,55 @@ class MotionFusionTest {
         assertTrue("city jolt is a pothole", MotionFusion.analyze(ms, pointsAt(5000, 35.0)).potholeCount >= 1)
         assertEquals("highway buzz is not a pothole", 0, MotionFusion.analyze(ms, pointsAt(5000, 110.0)).potholeCount)
     }
+
+    // --- Harsh stops (Rev AH recalibration) ---
+
+    // 50 Hz; horizontal braking force set via ax (gravity on z, so horizontal accel = |ax|).
+    private fun brakingMotions(durMs: Long, axAt: (Long) -> Double): List<MotionSample> =
+        (0 until (durMs / 20L).toInt()).map { i ->
+            val t = i * 20L
+            MotionSample(
+                tripId = 1, t = t, ax = axAt(t), ay = 0.0, az = 0.0,
+                gx = 0.0, gy = 0.0, gz = 0.0, grx = 0.0, gry = 0.0, grz = 9.8
+            )
+        }
+
+    // A decel ramp to a full stop at t=4000. The sample just before crossing < 3 km/h is 5 km/h (not
+    // >= 8), so the OLD gate ("previous GPS sample >= MOVING") never saw this stop — the core 1 Hz bug.
+    private fun decelToStop() = listOf(
+        TrackPoint(0L, 43.0, -79.0, 20.0, 0.0, 0.0),
+        TrackPoint(1000L, 43.0, -79.0, 15.0, 0.0, 0.0),
+        TrackPoint(2000L, 43.0, -79.0, 8.0, 0.0, 0.0),
+        TrackPoint(3000L, 43.0, -79.0, 5.0, 0.0, 0.0),
+        TrackPoint(4000L, 43.0, -79.0, 2.0, 0.0, 0.0),
+        TrackPoint(5000L, 43.0, -79.0, 0.0, 0.0, 0.0)
+    )
+
+    /** A firm braking force on a ramped stop is harsh — even though no GPS sample jumps straight from
+     *  >= 8 km/h to < 3 km/h (the old detector missed every such stop at 1 Hz). */
+    @Test fun hardBrakingRampToStopIsHarsh() {
+        val ms = brakingMotions(5000) { t -> if (t in 2000..4000) 4.0 else 0.2 }
+        assertEquals(1, MotionFusion.analyze(ms, decelToStop()).harshStopCount)
+    }
+
+    /** The same ramped stop with a gentle braking force is not harsh (peak decel below threshold). */
+    @Test fun gentleRampToStopIsNotHarsh() {
+        val ms = brakingMotions(5000) { t -> if (t in 2000..4000) 1.0 else 0.2 }
+        assertEquals(0, MotionFusion.analyze(ms, decelToStop()).harshStopCount)
+    }
+
+    /** A slow crawl that dips below 3 km/h without ever reaching MOVING speed is not a "stop" at all,
+     *  so even a hard horizontal force there is not counted (guards against parking-lot creep). */
+    @Test fun crawlBelowMovingSpeedIsNotAStop() {
+        val crawl = listOf(
+            TrackPoint(0L, 43.0, -79.0, 5.0, 0.0, 0.0),
+            TrackPoint(1000L, 43.0, -79.0, 4.0, 0.0, 0.0),
+            TrackPoint(2000L, 43.0, -79.0, 3.0, 0.0, 0.0),
+            TrackPoint(3000L, 43.0, -79.0, 2.0, 0.0, 0.0),
+            TrackPoint(4000L, 43.0, -79.0, 1.0, 0.0, 0.0),
+            TrackPoint(5000L, 43.0, -79.0, 0.0, 0.0, 0.0)
+        )
+        val ms = brakingMotions(5000) { _ -> 4.0 }
+        assertEquals(0, MotionFusion.analyze(ms, crawl).harshStopCount)
+    }
 }
