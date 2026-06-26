@@ -33,6 +33,7 @@ object AutoRecordPrefs {
 
     // Service-side tuning (not user-facing).
     const val MIN_SPEED_KMH = 5.0          // a drive must reach this within the confirm window
-    const val MOTION_CONFIRM_MS = 45_000L  // else the provisional trip is discarded (parked charging)
+    const val MOTION_CONFIRM_MS = 90_000L  // longer window so a garage start (slow GPS) still confirms;
+                                           // accelerometer vibration also confirms without GPS
     const val STOP_GRACE_MS = 8_000L       // wait this long after the trigger drops before stopping
 }

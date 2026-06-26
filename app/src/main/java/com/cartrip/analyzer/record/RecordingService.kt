@@ -104,6 +104,13 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private var ax = 0.0; private var ay = 0.0; private var az = 0.0
     private var gx = 0.0; private var gy = 0.0; private var gz = 0.0
     private var grx = 0.0; private var gry = 0.0; private var grz = 0.0
+    // Accelerometer "is the car driving" signal for the auto-record motion-confirm — works WITHOUT GPS
+    // (e.g. starting in an underground garage). The sample-to-sample change cancels the DC gravity
+    // component, so road vibration shows up for either the linear-accel or raw-accel sensor.
+    private var prevAx = 0.0; private var prevAy = 0.0; private var prevAz = 0.0
+    private var haveJerkRef = false
+    private var vibrationEma = 0.0
+    private var maxVibrationEma = 0.0
     private var lastMotionWrite = 0L
     private var motionSensorRegistered = false
     private var sensorRestartAttempts = 0
@@ -312,11 +319,18 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         motionConfirmJob = scope.launch {
             delay(AutoRecordPrefs.MOTION_CONFIRM_MS)
             withContext(Dispatchers.Main) {
-                if (recording && autoStarted && maxSpeedMps * 3.6 < AutoRecordPrefs.MIN_SPEED_KMH) {
-                    AutoRecordLog.add(this@RecordingService, "motion-confirm FAILED (max ${"%.0f".format(maxSpeedMps * 3.6)} km/h) -> discard")
-                    discardRecording()
-                } else if (recording && autoStarted) {
-                    AutoRecordLog.add(this@RecordingService, "motion-confirm OK (max ${"%.0f".format(maxSpeedMps * 3.6)} km/h) -> keeping trip")
+                if (recording && autoStarted) {
+                    // Confirm a real drive by GPS speed OR accelerometer vibration — the latter works
+                    // when the drive starts with no GPS (underground garage).
+                    val gpsOk = maxSpeedMps * 3.6 >= AutoRecordPrefs.MIN_SPEED_KMH
+                    val sensorOk = maxVibrationEma >= SENSOR_MOTION_VIB
+                    val stats = "gps ${"%.0f".format(maxSpeedMps * 3.6)} km/h, vib ${"%.2f".format(maxVibrationEma)}"
+                    if (!gpsOk && !sensorOk) {
+                        AutoRecordLog.add(this@RecordingService, "motion-confirm FAILED ($stats) -> discard")
+                        discardRecording()
+                    } else {
+                        AutoRecordLog.add(this@RecordingService, "motion-confirm OK via ${if (gpsOk) "gps" else "sensor"} ($stats) -> keeping trip")
+                    }
                 }
             }
         }
@@ -393,6 +407,10 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         lastSensorRestartAtWall = 0L
         locationSampleCount = 0
         motionSampleCount = 0
+        prevAx = 0.0; prevAy = 0.0; prevAz = 0.0
+        haveJerkRef = false
+        vibrationEma = 0.0
+        maxVibrationEma = 0.0
         lastLocationAtWall = 0L
         lastMotionAtWall = 0L
         gpsGapCount = 0
@@ -841,6 +859,15 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 ax = event.values[0].toDouble()
                 ay = event.values[1].toDouble()
                 az = event.values[2].toDouble()
+                // Vibration signal for the GPS-free motion-confirm: the sample-to-sample delta cancels
+                // gravity, so a smoothed magnitude separates a driving car (road buzz) from a parked one.
+                if (haveJerkRef) {
+                    val dx = ax - prevAx; val dy = ay - prevAy; val dz = az - prevAz
+                    val jerk = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+                    vibrationEma = 0.94 * vibrationEma + 0.06 * jerk
+                    if (vibrationEma > maxVibrationEma) maxVibrationEma = vibrationEma
+                }
+                prevAx = ax; prevAy = ay; prevAz = az; haveJerkRef = true
                 // Monotonic clock, matching the location time base so motion can be time-aligned
                 // with GPS for fusion and event-location mapping.
                 val now = SystemClock.elapsedRealtime()
@@ -985,5 +1012,8 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         // when the idle timer fires and we look back for the rest moment.
         private const val STOP_TRACK_WINDOW_MS = 8L * 60L * 1000L
         private const val AUTO_STOP_END_GRACE_MS = 3L * 1000L
+        // Smoothed sample-to-sample accel delta (m/s^2) above this during the confirm window means the
+        // car is driving even without GPS. Conservative start; tune from the logged "vib" values.
+        private const val SENSOR_MOTION_VIB = 0.30
     }
 }
