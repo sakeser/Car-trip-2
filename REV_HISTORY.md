@@ -4,6 +4,34 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AP (2026-06-26) — fix the charger trigger (P1), harden the watcher, GNSS cleanup
+
+Post-Rev-AO review (`CLAUDE_REVIEW_HANDOFF_V2_79.md`) + live device validation. The Rev AO watcher's
+runtime receiver was confirmed to fire reliably on **every real** charge event, but the decision itself
+was broken — fixed here.
+
+- **P1 (critical): the charging trigger read inverted/stale.** `AutoRecordController.reevaluate()` decided
+  arm/stop from the sticky `ACTION_BATTERY_CHANGED` intent, which **lags** the `POWER_CONNECTED/DISCONNECTED`
+  broadcast. The on-device log proved it on real plug events: `charger-on -> no-op [chg=false]` (missed the
+  real trigger) and `charger-off -> ARM [chg=true]` (armed on the wrong edge). Fix: the watcher now passes
+  the broadcast **edge** (`chargingEdge = true/false`) and the controller trusts it over the sticky read
+  (`AutoRecordPolicy.effectiveCharging`, +3 tests). A lagging sticky is tagged `(sticky lagged)` in the log.
+  For `requireWireless`, a delayed settle re-read resolves the plug *type* (which the sticky may not have
+  caught up to at a connect edge). **Note:** `dumpsys battery unplug/reset` does NOT broadcast power events
+  on this S25 — only a real cable plug/unplug exercises this path, so it must be confirmed on the next drive.
+- **Bluetooth receiver split + exported.** The single combined `RECEIVER_NOT_EXPORTED` receiver became two:
+  power stays not-exported; Bluetooth ACL is now `RECEIVER_EXPORTED` (privileged framework broadcasts can be
+  dropped for not-exported receivers on some OEM builds — the suspected "BT never fired" cause). Still filters
+  by the saved car MAC. Registration mode is logged.
+- **Better arm() failure logging.** `FGS start BLOCKED` now logs the exception **message**, not just the class.
+- **Raw-GNSS cleanup gaps (storage).** `gnss_measurements` rows were orphaned by trip delete and auto-stop
+  trim. Added `deleteGnssMeasurementsAfter` + a central `@Transaction deleteTripWithData(id)` that removes
+  every raw + derived table atomically; routed trip-delete and discard through it; added the measurements
+  trim to the auto-stop path. Single source of truth so a future raw table can't be forgotten.
+- **Cleanup:** deleted the dead `PowerConnectionReceiver`/`CarBluetoothReceiver` (unregistered since Rev AO);
+  refreshed the Auto-record screen copy (it wrongly said background start needs the app open).
+- v2.79/90 → **v2.80/91**. 92 → **95 tests**, 0 failures. No schema change (still v19). Installed on S25.
+
 ## Rev AL–AO (2026-06-26) — walk toggle, lane-data capture, working hands-free auto-record
 
 - **Rev AL (v2.76): manual walk/non-drive toggle.** Schema v17→v18: nullable `trips.userIsDrive`

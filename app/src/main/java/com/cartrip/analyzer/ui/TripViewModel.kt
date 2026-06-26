@@ -201,12 +201,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteTrip(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            dao.deleteLocations(id)
-            dao.deleteMotions(id)
-            dao.deleteGnssSamples(id)
-            dao.deleteAnalysisPoints(id)
-            dao.deleteDriveEvents(id)
-            dao.deleteTrip(id)
+            dao.deleteTripWithData(id)
         }
     }
 

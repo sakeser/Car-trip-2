@@ -203,10 +203,11 @@ fun AutoRecordScreen(onBack: () -> Unit) {
 
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Text(
-                        "Without hands-free pairing, charging and car-Bluetooth can only auto-start while the " +
-                            "app is open - Android blocks background starts from those signals. If a background " +
-                            "start is ever blocked you'll get a \"Drive detected - tap to start\" notification " +
-                            "instead. Manual Start/Stop always works.",
+                        "While auto-record is on, a small \"Auto-record on\" notification keeps a background " +
+                            "watcher running so charging (and car Bluetooth, if enabled) can start a trip even " +
+                            "when the app is closed. Car pairing above is an optional secondary path. If a " +
+                            "background start is ever blocked you'll get a \"Drive detected - tap to start\" " +
+                            "notification instead. Manual Start/Stop always works.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(12.dp)

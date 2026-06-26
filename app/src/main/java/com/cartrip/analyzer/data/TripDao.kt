@@ -69,6 +69,9 @@ interface TripDao {
     @Query("DELETE FROM gnss_measurements WHERE tripId = :id")
     suspend fun deleteGnssMeasurements(id: Long)
 
+    @Query("DELETE FROM gnss_measurements WHERE tripId = :id AND t > :after")
+    suspend fun deleteGnssMeasurementsAfter(id: Long, after: Long)
+
     @Insert
     suspend fun insertAnalysisPoints(items: List<AnalysisPointEntity>)
 
@@ -183,6 +186,22 @@ interface TripDao {
 
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun deleteTrip(id: Long)
+
+    /**
+     * Delete a trip and every row it owns — raw (locations/motions/GNSS samples + measurements) and
+     * derived (analysis points/events) — atomically. Single source of truth so a new raw table can't be
+     * forgotten by one caller and leak orphaned rows (raw GNSS measurements are high-volume).
+     */
+    @Transaction
+    suspend fun deleteTripWithData(id: Long) {
+        deleteLocations(id)
+        deleteMotions(id)
+        deleteGnssSamples(id)
+        deleteGnssMeasurements(id)
+        deleteAnalysisPoints(id)
+        deleteDriveEvents(id)
+        deleteTrip(id)
+    }
 
     @Query("DELETE FROM locations WHERE tripId = :id")
     suspend fun deleteLocations(id: Long)

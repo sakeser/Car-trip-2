@@ -54,4 +54,26 @@ class AutoRecordPolicyTest {
         assertFalse(AutoRecordPolicy.triggerPresent(cfg, charging = false, wireless = false, carBtConnected = true))
         assertTrue(AutoRecordPolicy.triggerPresent(cfg, charging = true, wireless = false, carBtConnected = true))
     }
+
+    @Test fun broadcastEdgeOverridesStaleSticky() {
+        // Field-observed P1 bug: the sticky ACTION_BATTERY_CHANGED read lags the power broadcast and
+        // reports inverted, so a real plug-in logged "charger-on -> chg=false" and did nothing.
+        // The connect edge must win over a stale "not charging" sticky...
+        assertTrue(AutoRecordPolicy.effectiveCharging(broadcastEdge = true, stickyCharging = false))
+        // ...and the disconnect edge must win over a stale "charging" sticky.
+        assertFalse(AutoRecordPolicy.effectiveCharging(broadcastEdge = false, stickyCharging = true))
+    }
+
+    @Test fun noEdgeFallsBackToSticky() {
+        // CDM presence / watcher-start paths have no power edge; they trust the sticky read.
+        assertTrue(AutoRecordPolicy.effectiveCharging(broadcastEdge = null, stickyCharging = true))
+        assertFalse(AutoRecordPolicy.effectiveCharging(broadcastEdge = null, stickyCharging = false))
+    }
+
+    @Test fun connectEdgeArmsEvenWhenStickyIsStale() {
+        // End-to-end at the policy layer: a connect edge → charging=true → arms, regardless of the
+        // momentarily-stale sticky that previously caused the missed trigger.
+        val charging = AutoRecordPolicy.effectiveCharging(broadcastEdge = true, stickyCharging = false)
+        assertTrue(AutoRecordPolicy.shouldArm(on, recording = false, charging = charging, wireless = false, carBtConnected = false))
+    }
 }

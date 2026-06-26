@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -31,6 +33,12 @@ object AutoRecordController {
 
     private const val FALLBACK_NOTIF_ID = 4242
 
+    // Lazy so loading this object in a plain JUnit test never touches the Android main Looper.
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+    // At a connect edge the sticky battery intent may not have settled the *plug type* yet, so a
+    // requireWireless user could miss a real wireless mount. Re-read once after this delay to settle it.
+    private const val WIRELESS_SETTLE_MS = 1500L
+
     /** (charging, wireless) from the sticky battery intent. */
     private fun chargeState(context: Context): Pair<Boolean, Boolean> {
         val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -41,14 +49,23 @@ object AutoRecordController {
         return charging to (plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS)
     }
 
-    /** Re-evaluate after any in-car signal (charging or Bluetooth) changes. [source] tags the log. */
-    fun reevaluate(context: Context, source: String = "?") {
+    /**
+     * Re-evaluate after any in-car signal (charging or Bluetooth) changes. [source] tags the log.
+     * [chargingEdge] is the authoritative charging value from a power broadcast (`true` on
+     * `ACTION_POWER_CONNECTED`, `false` on `ACTION_POWER_DISCONNECTED`); `null` for non-power callers
+     * (CDM presence, watcher start) which trust the sticky read. See [AutoRecordPolicy.effectiveCharging].
+     */
+    fun reevaluate(context: Context, source: String = "?", chargingEdge: Boolean? = null) {
         val cfg = AutoRecordPrefs.config(context)
         if (!cfg.enabled) { AutoRecordLog.add(context, "$source: ignored (auto-record off)"); return }
-        val (charging, wireless) = chargeState(context)
+        val (stickyCharging, stickyWireless) = chargeState(context)
+        val charging = AutoRecordPolicy.effectiveCharging(chargingEdge, stickyCharging)
+        // Wireless only meaningful while charging; never claim wireless when the edge says not charging.
+        val wireless = charging && stickyWireless
         val bt = carBtConnected
         val recording = RecordingState.state.value.recording
-        val state = "chg=$charging wl=$wireless bt=$bt rec=$recording"
+        val lagged = chargingEdge != null && chargingEdge != stickyCharging
+        val state = "chg=$charging wl=$wireless bt=$bt rec=$recording" + if (lagged) " (sticky lagged)" else ""
         when {
             AutoRecordPolicy.shouldArm(cfg, recording, charging, wireless, bt) -> {
                 AutoRecordLog.add(context, "$source -> ARM [$state]"); arm(context)
@@ -62,6 +79,13 @@ object AutoRecordController {
                 send(context, RecordingService.ACTION_CHARGING_RESUMED)
             }
             else -> AutoRecordLog.add(context, "$source -> no-op [$state]")
+        }
+        // requireWireless needs the plug *type*, which the sticky may not have caught up to at a connect
+        // edge. If we just started charging but it doesn't yet look wireless, re-read shortly so a real
+        // wireless mount isn't missed. The follow-up read has no edge, so it sees the settled sticky.
+        if (chargingEdge == true && cfg.requireWireless && !wireless && !recording) {
+            val app = context.applicationContext
+            mainHandler.postDelayed({ reevaluate(app, "$source-settle") }, WIRELESS_SETTLE_MS)
         }
     }
 
@@ -98,7 +122,7 @@ object AutoRecordController {
         } catch (e: Exception) {
             // Android 12+ blocks a background FGS start — this is the suspected cause of "auto-start
             // didn't work". Log which exception so the field test confirms it, then fall back.
-            AutoRecordLog.add(context, "  FGS start BLOCKED (${e.javaClass.simpleName}) -> tap-to-start notif")
+            AutoRecordLog.add(context, "  FGS start BLOCKED (${e.javaClass.simpleName}: ${e.message}) -> tap-to-start notif")
             postStartFallback(context)
         }
     }

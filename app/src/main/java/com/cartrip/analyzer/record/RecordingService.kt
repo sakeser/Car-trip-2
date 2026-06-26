@@ -251,6 +251,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 dao.deleteLocationsAfter(finishedId, trimCutoff.locationT)
                 dao.deleteMotionsAfter(finishedId, trimCutoff.motionT)
                 dao.deleteGnssSamplesAfter(finishedId, trimCutoff.motionT)
+                dao.deleteGnssMeasurementsAfter(finishedId, trimCutoff.motionT)
             }
             val finalized = TripFinalizer.finalizeTrip(
                 dao = dao,
@@ -375,11 +376,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         val discardId = tripId
         scope.launch {
             val dao = db.tripDao()
-            runCatching {
-                dao.deleteDriveEvents(discardId); dao.deleteAnalysisPoints(discardId)
-                dao.deleteMotions(discardId); dao.deleteLocations(discardId)
-                dao.deleteGnssSamples(discardId); dao.deleteGnssMeasurements(discardId); dao.deleteTrip(discardId)
-            }
+            runCatching { dao.deleteTripWithData(discardId) }
             withContext(Dispatchers.Main) {
                 RecordingState.reset()
                 stopForegroundCompat()

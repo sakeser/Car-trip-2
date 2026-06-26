@@ -1,8 +1,10 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-26 · App version **2.79 (build 90)** · Branch `main` (Rev AL–AO shipped + pushed).
-**Hands-free auto-record now works** via a persistent "armed" watcher service (Rev AO) — validated
-on-device end-to-end; the owner's narrated drives remain the real-world validation._
+_Last updated: 2026-06-26 · App version **2.80 (build 91)** · Branch `main` (Rev AL–AP shipped).
+**Hands-free auto-record now works** via a persistent "armed" watcher service (Rev AO), and **Rev AP
+fixed the critical charger-trigger bug** (the decision read a stale/inverted sticky battery state instead
+of the broadcast edge). The watcher's receiver fires reliably on every real charge event; the owner's next
+narrated drive (real cable plug/unplug — `dumpsys` can't simulate it on this S25) is the final validation._
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -15,15 +17,16 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - Android app (Kotlin, Jetpack Compose, Room, Google Maps) that records trips from phone GPS +
   motion sensors, analyzes them offline, and enriches with Google traffic ETAs, OSM speed limits,
   and Google Sheets sync. Package `com.cartrip.analyzer`.
-- **Branch `main` = `origin/main`** at `ada46a7` (Rev AO, v2.79) — fully pushed. Work happens on `main`.
+- **Branch `main`** at Rev AP (v2.80) — Rev AL–AO pushed (`f93a7e2`); **Rev AP is committed locally and
+  may not be pushed yet** (verify with `git log origin/main..main`). Work happens on `main`.
   (Pushing to `main` needs explicit per-turn user authorization — the owner has authorized the ongoing
   ship-and-push workflow for this project.) `rev-g-functional` is a vestigial mirror ref; it has NOT
   been fast-forwarded since `ea2fa88` (the auto-classifier blocks force-moving/pushing it) — ignore it
   or sync it manually if wanted.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.79/90** (Rev AO). Device auto-locks fast; for a
+- Installed on the Samsung **S25 (SM_S931W)** as **2.80/91** (Rev AP). Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
-- **92 unit tests**, all green. Room schema **v19**: v18 added the walk/non-drive override
+- **95 unit tests**, all green. Room schema **v19** (unchanged in Rev AP): v18 added the walk/non-drive override
   (`trips.userIsDrive`, nullable); v19 added per-fix GPS accuracy estimates (`locations.bearing/speed/
   verticalAccuracy`) + a raw **`gnss_measurements`** table (carrier phase + Doppler, toggle-gated) for
   the lane-detection R&D.
@@ -160,8 +163,20 @@ is *permitted* to start `RecordingService` from the background. Started from the
 `TripApp.onCreate` + `BootReceiver` (reboot). Real-drive flow:
 `charger-on/bt-connect → ARM → FGS start OK → AUTO_ARM (provisional) → motion-confirm OK (gps ≥ 5 km/h OR
 vibration ≥ 0.30) → … → unplug → AUTO_STOP_GRACE (trim to rest)`. **Every step is logged to `AutoRecordLog`
-(Diagnostics → "Auto-record log"); read it after any drive — it is the debugging tool.** Validated
-end-to-end on-device via a simulated `dumpsys battery` charge cycle (ARM → FGS OK → discard for a non-drive).
+(Diagnostics → "Auto-record log"); read it after any drive — it is the debugging tool.**
+
+**Rev AP — the charger decision was reading a stale battery state (CRITICAL fix).** The watcher's runtime
+receiver was confirmed to fire on *every real* charge event, but `AutoRecordController.reevaluate()` then
+decided from the **sticky `ACTION_BATTERY_CHANGED`** intent, which lags the `POWER_CONNECTED/DISCONNECTED`
+broadcast. The on-device log proved the inversion on real plug events: `charger-on → no-op [chg=false]`
+(missed the trigger) and `charger-off → ARM [chg=true]` (armed on unplug). Fix: the watcher passes the
+broadcast **edge** (`chargingEdge=true/false`); the controller trusts it over the sticky read
+(`AutoRecordPolicy.effectiveCharging`); a lagging sticky shows as `(sticky lagged)` in the log. For
+`requireWireless`, a 1.5 s delayed settle re-read resolves the plug *type*. ⚠️ **`dumpsys battery
+unplug/reset` does NOT broadcast power events on this S25** — only a *real* cable plug/unplug exercises this
+path, so the fix's real-world confirmation is the owner's next drive (the unit tests lock the logic).
+Rev AP also split the BT ACL receiver to `RECEIVER_EXPORTED` (privileged framework broadcasts can be dropped
+for not-exported receivers on some OEM builds) while still filtering by the saved car MAC.
 
 **Known limitations / TODO:** (a) no re-arm if you wait > 90 s after the trigger before driving
 (provisional discards, no restart until a new trigger event — a re-arm-on-motion fix is wanted); (b)

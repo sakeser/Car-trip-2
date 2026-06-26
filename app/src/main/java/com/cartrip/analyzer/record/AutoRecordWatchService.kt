@@ -33,7 +33,7 @@ import com.cartrip.analyzer.R
  */
 class AutoRecordWatchService : Service() {
 
-    private var receiver: BroadcastReceiver? = null
+    private val receivers = mutableListOf<BroadcastReceiver>()
 
     override fun onCreate() {
         super.onCreate()
@@ -48,38 +48,55 @@ class AutoRecordWatchService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     private fun registerReceivers() {
-        val r = object : BroadcastReceiver() {
+        // Power: pass the broadcast *edge* as the authoritative charging value — the sticky battery
+        // intent can lag the POWER_CONNECTED/DISCONNECTED broadcast and read inverted (field-observed).
+        val power = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 val app = applicationContext
                 when (intent.action) {
-                    Intent.ACTION_POWER_CONNECTED -> AutoRecordController.reevaluate(app, "charger-on")
-                    Intent.ACTION_POWER_DISCONNECTED -> AutoRecordController.reevaluate(app, "charger-off")
-                    BluetoothDevice.ACTION_ACL_CONNECTED, BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                        if (!AutoRecordPrefs.useBluetooth(app)) return
-                        val car = AutoRecordPrefs.carBtAddress(app) ?: return
-                        @Suppress("DEPRECATION")
-                        val dev: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                        if (dev?.address != car) return
-                        val connected = intent.action == BluetoothDevice.ACTION_ACL_CONNECTED
-                        AutoRecordController.setCarBtConnected(connected)
-                        AutoRecordController.reevaluate(app, if (connected) "bt-connect" else "bt-disconnect")
-                    }
+                    Intent.ACTION_POWER_CONNECTED -> AutoRecordController.reevaluate(app, "charger-on", chargingEdge = true)
+                    Intent.ACTION_POWER_DISCONNECTED -> AutoRecordController.reevaluate(app, "charger-off", chargingEdge = false)
                 }
             }
         }
-        val filter = IntentFilter().apply {
+        register(power, IntentFilter().apply {
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }, exported = false)
+
+        // Bluetooth ACL: registered EXPORTED. These privileged framework broadcasts can be dropped for a
+        // not-exported runtime receiver on some OEM builds (suspected cause of "BT never fired"); they're
+        // protected (system-only sender) so exported is safe, and we still filter by the saved car MAC.
+        val bt = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val app = applicationContext
+                if (!AutoRecordPrefs.useBluetooth(app)) return
+                val car = AutoRecordPrefs.carBtAddress(app) ?: return
+                @Suppress("DEPRECATION")
+                val dev: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                if (dev?.address != car) return
+                val connected = intent.action == BluetoothDevice.ACTION_ACL_CONNECTED
+                AutoRecordController.setCarBtConnected(connected)
+                AutoRecordController.reevaluate(app, if (connected) "bt-connect" else "bt-disconnect")
+            }
+        }
+        register(bt, IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
-        }
-        ContextCompat.registerReceiver(this, r, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        receiver = r
+        }, exported = true)
+
+        AutoRecordLog.add(this, "receivers registered (power=not-exported, bt=exported)")
+    }
+
+    private fun register(r: BroadcastReceiver, filter: IntentFilter, exported: Boolean) {
+        val flag = if (exported) ContextCompat.RECEIVER_EXPORTED else ContextCompat.RECEIVER_NOT_EXPORTED
+        ContextCompat.registerReceiver(this, r, filter, flag)
+        receivers.add(r)
     }
 
     override fun onDestroy() {
-        receiver?.let { runCatching { unregisterReceiver(it) } }
-        receiver = null
+        receivers.forEach { runCatching { unregisterReceiver(it) } }
+        receivers.clear()
         AutoRecordLog.add(this, "watch service stopped")
         super.onDestroy()
     }

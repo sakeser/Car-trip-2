@@ -18,6 +18,16 @@ object AutoRecordPolicy {
         val useBluetooth: Boolean = false,
     )
 
+    /**
+     * The charging value to act on. The sticky `ACTION_BATTERY_CHANGED` intent can momentarily lag a
+     * `ACTION_POWER_CONNECTED` / `ACTION_POWER_DISCONNECTED` broadcast and report an *inverted* value
+     * (field-observed: a real plug-in logged "charger-on -> chg=false", a real unplug "charger-off ->
+     * chg=true"). When the caller has the broadcast edge, that edge is authoritative; otherwise (CDM /
+     * startup re-check) fall back to the sticky read.
+     */
+    fun effectiveCharging(broadcastEdge: Boolean?, stickyCharging: Boolean): Boolean =
+        broadcastEdge ?: stickyCharging
+
     /** Is an in-car trigger currently present, given the user's config? */
     fun triggerPresent(cfg: Config, charging: Boolean, wireless: Boolean, carBtConnected: Boolean): Boolean {
         if (!cfg.enabled) return false
