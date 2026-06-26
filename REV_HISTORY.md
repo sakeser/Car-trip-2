@@ -4,6 +4,18 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AU (2026-06-26) — Trip-detail polish (date eyebrow, short-trip fuel chip)
+
+Aesthetic batch on the Trip-detail screen (verified on-device):
+- **Date eyebrow in the hero.** The hero showed time-only ("3:24pm – 3:38pm") and the screen title is
+  also time-only, so a past trip's *day* was invisible. Added a small muted `relativeDay` line
+  ("Today" / "Yesterday" / "3 Jun 2026") tightly grouped above the time range.
+- **Suppress the misleading economy chip on very short trips.** `FuelCostCard` showed an alarming red
+  "212% more fuel vs rated" for a 664 m errand, where cold-start + idle make L/100km meaninglessly high.
+  The vs-rated chip is now gated to trips ≥ 3 km (the litres/cost/L/100km stats still show); real drives
+  are unaffected.
+- v2.84/95 → **v2.85/96**. 95 tests, no schema change.
+
 ## Rev AT (2026-06-26) — Past Trips multi-select (batch delete)
 
 - Long-pressing a trip now enters a **multi-select mode** instead of a single-trip popup. The top app bar

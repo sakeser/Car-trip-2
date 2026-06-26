@@ -472,11 +472,21 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                "${Format.timeOfDay(trip.startTime)} – ${Format.timeOfDay(endMs)}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            // Date (eyebrow) + time range, grouped tightly — the screen title is time-only, so this is
+            // the only place the day a past trip happened is shown.
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    Format.relativeDay(trip.startTime),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "${Format.timeOfDay(trip.startTime)} – ${Format.timeOfDay(endMs)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -1256,7 +1266,9 @@ private fun FuelCostCard(trip: TripEntity) {
                 FuelCell(Icons.Filled.Speed, String.format(loc, "%.1f", l100), "L/100km", Color(0xFF8B5CF6), Modifier.weight(1f))
             }
             // Highlighted economy rating for this drive vs the vehicle's (effective) combined rating.
-            if (ratedCombined > 0.0) {
+            // Skip it on very short trips: cold-start + idle make L/100km meaninglessly high (a 600 m
+            // errand isn't "212% worse than rated"), so the red chip would only mislead.
+            if (ratedCombined > 0.0 && distanceKm >= 3.0) {
                 val deltaFrac = (l100 - ratedCombined) / ratedCombined
                 val better = deltaFrac <= 0.0
                 val pct = (abs(deltaFrac) * 100).roundToInt()
