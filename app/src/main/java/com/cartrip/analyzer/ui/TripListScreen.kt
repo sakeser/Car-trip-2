@@ -1,5 +1,6 @@
 package com.cartrip.analyzer.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,12 +21,15 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,6 +70,13 @@ fun TripListScreen(
     val collapsedBuckets = remember { mutableStateListOf<TripBuckets.Bucket>() }
     // First tap selects (preview route on the frozen map); second tap on the same trip opens it.
     var selectedTripId by remember { mutableStateOf<Long?>(null) }
+    // Multi-select: a long-press enters selection mode; the top bar becomes a contextual action bar.
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val selectionMode = selectedIds.isNotEmpty()
+    var showMultiDeleteDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    // System back exits selection mode before leaving the screen.
+    BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
     val heatPoints by produceState(initialValue = emptyList<AnalysisPointEntity>(), trips) {
         value = viewModel.loadHeatmapPoints(30)
     }
@@ -78,22 +89,47 @@ fun TripListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Past trips") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (trips.any { it.isSample }) {
-                        TextButton(onClick = { showClearAllDialog = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = null)
-                            Text("Clear samples")
+            if (selectionMode) {
+                // Contextual action bar: Rename (only when exactly one is picked) + Delete (any count).
+                TopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    title = { Text("${selectedIds.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { selectedIds = emptySet() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Cancel selection")
+                        }
+                    },
+                    actions = {
+                        if (selectedIds.size == 1) {
+                            IconButton(onClick = { showRenameDialog = true }) {
+                                Icon(Icons.Filled.Edit, contentDescription = "Rename")
+                            }
+                        }
+                        IconButton(onClick = { showMultiDeleteDialog = true }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
                         }
                     }
-                }
-            )
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("Past trips") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        if (trips.any { it.isSample }) {
+                            TextButton(onClick = { showClearAllDialog = true }) {
+                                Icon(Icons.Filled.Delete, contentDescription = null)
+                                Text("Clear samples")
+                            }
+                        }
+                    }
+                )
+            }
         }
     ) { padding ->
         if (trips.isEmpty()) {
@@ -174,16 +210,22 @@ fun TripListScreen(
                                 TripRow(
                                     number = startNumber + index + 1,
                                     trip = trip,
-                                    label = tripLabels[trip.id] ?: "Trip",
                                     shownName = shownNames[trip.id] ?: trip.name.ifBlank { tripLabels[trip.id] ?: "Trip" },
                                     maxDurationS = maxDurationS,
-                                    selected = selectedTripId == trip.id,
+                                    selected = selectedTripId == trip.id && !selectionMode,
+                                    selectionMode = selectionMode,
+                                    checked = trip.id in selectedIds,
                                     onClick = {
-                                        if (selectedTripId == trip.id) onOpen(trip.id)
-                                        else selectedTripId = trip.id
+                                        if (selectionMode) {
+                                            selectedIds = if (trip.id in selectedIds) selectedIds - trip.id
+                                            else selectedIds + trip.id
+                                        } else if (selectedTripId == trip.id) {
+                                            onOpen(trip.id)
+                                        } else {
+                                            selectedTripId = trip.id
+                                        }
                                     },
-                                    onRename = { newName -> viewModel.renameTrip(trip.id, newName) },
-                                    onDelete = { viewModel.deleteTrip(trip.id) }
+                                    onLongClick = { selectedIds = selectedIds + trip.id }
                                 )
                             }
                         }
@@ -197,7 +239,7 @@ fun TripListScreen(
         AlertDialog(
             onDismissRequest = { showClearAllDialog = false },
             title = { Text("Clear sample trips?") },
-            text = { Text("Removes only the demo trips marked SAMPLE. Your real recorded trips are kept. (Delete a real trip by long-pressing it.)") },
+            text = { Text("Removes only the demo trips marked SAMPLE. Your real recorded trips are kept. (Delete real trips by long-pressing to select one or more, then tapping Delete.)") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -215,6 +257,64 @@ fun TripListScreen(
             }
         )
     }
+
+    if (showMultiDeleteDialog) {
+        val n = selectedIds.size
+        AlertDialog(
+            onDismissRequest = { showMultiDeleteDialog = false },
+            title = { Text(if (n == 1) "Delete this trip?" else "Delete $n trips?") },
+            text = {
+                Text(
+                    if (n == 1) "This permanently deletes the trip and its data."
+                    else "This permanently deletes $n trips and their data."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMultiDeleteDialog = false
+                    viewModel.deleteTrips(selectedIds)
+                    if (selectedTripId in selectedIds) selectedTripId = null
+                    selectedIds = emptySet()
+                }) { Text("Delete", color = Color(0xFFEF4444)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMultiDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showRenameDialog) {
+        val target = trips.firstOrNull { it.id in selectedIds }
+        if (target == null) {
+            showRenameDialog = false
+        } else {
+            var draft by remember(target.id) {
+                mutableStateOf(target.name.ifBlank { tripLabels[target.id] ?: "Trip" })
+            }
+            AlertDialog(
+                onDismissRequest = { showRenameDialog = false },
+                title = { Text("Rename trip") },
+                text = {
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        label = { Text("Trip name") }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showRenameDialog = false
+                        viewModel.renameTrip(target.id, draft)
+                        selectedIds = emptySet()
+                    }) { Text("Save") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
+                }
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -222,31 +322,28 @@ fun TripListScreen(
 private fun TripRow(
     number: Int,
     trip: TripEntity,
-    label: String,
     shownName: String,
     maxDurationS: Double,
     selected: Boolean,
+    selectionMode: Boolean,
+    checked: Boolean,
     onClick: () -> Unit,
-    onRename: (String) -> Unit,
-    onDelete: () -> Unit
+    onLongClick: () -> Unit
 ) {
-    var showActionMenu by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showRenameDialog by remember { mutableStateOf(false) }
     val finished = trip.endTime != 0L
     val scores = if (finished) TripScores.from(trip) else null
     val partial = trip.isPartialRecording()
-    val displayName = trip.name.ifBlank { label }
+    val highlighted = selected || checked
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = { showActionMenu = true }),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+            containerColor = if (highlighted) MaterialTheme.colorScheme.primaryContainer
             else MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 4.dp else 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (highlighted) 4.dp else 1.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
@@ -258,13 +355,18 @@ private fun TripRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "$number",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(22.dp)
-                )
+                if (selectionMode) {
+                    // Display-only: taps fall through to the card's onClick, which toggles selection.
+                    Checkbox(checked = checked, onCheckedChange = null)
+                } else {
+                    Text(
+                        text = "$number",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(22.dp)
+                    )
+                }
                 Text(
                     text = shownName,
                     style = MaterialTheme.typography.titleSmall,
@@ -330,60 +432,6 @@ private fun TripRow(
                 )
             }
         }
-    }
-
-    if (showActionMenu) {
-        AlertDialog(
-            onDismissRequest = { showActionMenu = false },
-            title = { Text(displayName) },
-            text = { Text(Format.dateTime(trip.startTime)) },
-            confirmButton = {
-                TextButton(onClick = { showActionMenu = false; showRenameDialog = true }) { Text("Rename") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showActionMenu = false; showDeleteDialog = true }) {
-                    Text("Delete", color = Color(0xFFEF4444))
-                }
-            }
-        )
-    }
-
-    if (showRenameDialog) {
-        var draft by remember { mutableStateOf(trip.name.ifBlank { label }) }
-        AlertDialog(
-            onDismissRequest = { showRenameDialog = false },
-            title = { Text("Rename trip") },
-            text = {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    singleLine = true,
-                    label = { Text("Trip name") }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showRenameDialog = false; onRename(draft) }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete this trip?") },
-            text = { Text("$displayName - ${Format.dateTime(trip.startTime)}") },
-            confirmButton = {
-                TextButton(onClick = { showDeleteDialog = false; onDelete() }) {
-                    Text("Delete", color = Color(0xFFEF4444))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
-            }
-        )
     }
 }
 

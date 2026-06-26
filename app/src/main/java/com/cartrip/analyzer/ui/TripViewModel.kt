@@ -205,6 +205,14 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Delete several trips (multi-select on the Past Trips screen), each with all its raw + derived rows. */
+    fun deleteTrips(ids: Collection<Long>) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            ids.forEach { dao.deleteTripWithData(it) }
+        }
+    }
+
     /** Clears only sample/demo trips — real recorded trips are never touched. */
     fun clearSampleTrips() {
         viewModelScope.launch(Dispatchers.IO) {

@@ -4,6 +4,15 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AT (2026-06-26) — Past Trips multi-select (batch delete)
+
+- Long-pressing a trip now enters a **multi-select mode** instead of a single-trip popup. The top app bar
+  becomes a **contextual action bar** (count + Rename + Delete) above the map: tap trips to toggle a
+  checkbox, **Delete** removes all selected at once (confirm dialog), **Rename** shows only when exactly one
+  is selected. System Back / the X cancels selection. `TripViewModel.deleteTrips(ids)` deletes each via the
+  atomic `deleteTripWithData`. Single tap still previews the route; a second tap opens the trip.
+- v2.83/94 → **v2.84/95**. 95 tests, no schema change.
+
 ## Rev AS (2026-06-26) — Codex review fixes (bg-location CTA, auto-arm logging)
 
 Addressed a read-only Codex review of `6ebe32b..HEAD`:

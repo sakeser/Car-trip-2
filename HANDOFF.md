@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-26 · App version **2.83 (build 94)** · Branch `main` (Rev AL–AS, all pushed).
+_Last updated: 2026-06-26 · App version **2.84 (build 95)** · Branch `main` (Rev AL–AT, all pushed).
 **Hands-free auto-record now works** via a persistent "armed" watcher (Rev AO); **Rev AP** fixed the
 charger-trigger (stale-sticky→broadcast-edge); **Rev AQ** fixed a background crash — a `location` FGS started
 from the background on Android 14 needs **`ACCESS_BACKGROUND_LOCATION` ("Allow all the time")**, which the
@@ -25,10 +25,10 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - **Single workspace = the repo root `C:\Users\sinan\OneDrive\Desktop\cartrip`** on **`main`** (the only
   branch). The `cartrip-main` linked worktree and the stale `ux-redesign-v1` / `rev-g-functional` branches
   were removed on 2026-06-26; the old UX redesign is preserved as tags `archive/ux-redesign-v1-wip` +
-  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev AS** (pushed); verify
+  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev AT** (pushed); verify
   with `git log origin/main..main` (should be empty). Pushing to `main` needs explicit per-turn user
   authorization.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.83/94** (Rev AS). Device auto-locks fast; for a
+- Installed on the Samsung **S25 (SM_S931W)** as **2.84/95** (Rev AT). Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
 - **95 unit tests**, all green. Room schema **v19** (unchanged in Rev AP): v18 added the walk/non-drive override
