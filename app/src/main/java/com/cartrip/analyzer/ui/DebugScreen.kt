@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -38,6 +39,7 @@ import com.cartrip.analyzer.cloud.RoutesClient
 import com.cartrip.analyzer.cloud.RoutesConfig
 import com.cartrip.analyzer.cloud.SpeedLimits
 import com.cartrip.analyzer.record.AutoRecordLog
+import com.cartrip.analyzer.record.GnssLoggingPrefs
 import com.cartrip.analyzer.record.RecordingState
 
 /**
@@ -142,6 +144,20 @@ fun DebugScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            DebugCard("High-precision GNSS (lane calibration)") {
+                val gctx = LocalContext.current
+                var raw by remember { mutableStateOf(GnssLoggingPrefs.rawEnabled(gctx)) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Switch(checked = raw, onCheckedChange = { raw = it; GnssLoggingPrefs.setRawEnabled(gctx, it) })
+                    Text(
+                        "Log raw per-satellite carrier phase + Doppler on the next drives (lane-detection R&D). " +
+                            "Voluminous — leave OFF for normal use; turn on only for a narrated 401 calibration run.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             DebugCard("Auto-record log") {

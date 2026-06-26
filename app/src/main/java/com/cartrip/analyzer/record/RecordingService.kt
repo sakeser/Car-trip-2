@@ -37,6 +37,7 @@ import com.cartrip.analyzer.cloud.SpeedLimits
 import com.cartrip.analyzer.cloud.TripSync
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.data.AppDatabase
+import com.cartrip.analyzer.data.GnssMeasurementSample
 import com.cartrip.analyzer.data.GnssSample
 import com.cartrip.analyzer.data.LocationSample
 import com.cartrip.analyzer.data.MotionSample
@@ -86,6 +87,8 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private val locBuffer = ArrayList<LocationSample>()
     private val motionBuffer = ArrayList<MotionSample>()
     private val gnssBuffer = ArrayList<GnssSample>()
+    private val gnssMeasBuffer = ArrayList<GnssMeasurementSample>()
+    private var gnssMeasCallback: android.location.GnssMeasurementsEvent.Callback? = null
 
     // live metric state (touched on main thread only)
     private var lastLoc: LocationSample? = null
@@ -375,7 +378,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             runCatching {
                 dao.deleteDriveEvents(discardId); dao.deleteAnalysisPoints(discardId)
                 dao.deleteMotions(discardId); dao.deleteLocations(discardId)
-                dao.deleteGnssSamples(discardId); dao.deleteTrip(discardId)
+                dao.deleteGnssSamples(discardId); dao.deleteGnssMeasurements(discardId); dao.deleteTrip(discardId)
             }
             withContext(Dispatchers.Main) {
                 RecordingState.reset()
@@ -428,7 +431,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         gnssLastTopCn0 = 0.0
         gnssLastL5 = false
         gnssHasSnapshot = false
-        synchronized(bufferLock) { gnssBuffer.clear() }
+        synchronized(bufferLock) { gnssBuffer.clear(); gnssMeasBuffer.clear() }
     }
 
     /**
@@ -459,6 +462,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         dao.deleteRawLocationsForCompletedTripsBefore(cutoff)
         dao.deleteRawMotionsForCompletedTripsBefore(cutoff)
         dao.deleteRawGnssForCompletedTripsBefore(cutoff)
+        dao.deleteRawGnssMeasurementsForCompletedTripsBefore(cutoff)
     }
 
     private fun Throwable.userMessage(): String =
@@ -545,11 +549,48 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             gnssCallback = cb
         } catch (_: SecurityException) {
         }
+        // Raw per-satellite measurements (carrier phase + Doppler) — only when high-precision logging is
+        // on (it's voluminous), for the lane-detection R&D. Failure here never affects normal recording.
+        if (GnssLoggingPrefs.rawEnabled(this)) registerGnssMeasurements()
+    }
+
+    private fun registerGnssMeasurements() {
+        val cb = object : android.location.GnssMeasurementsEvent.Callback() {
+            override fun onGnssMeasurementsReceived(event: android.location.GnssMeasurementsEvent) {
+                if (!recording) return
+                val t = SystemClock.elapsedRealtime()
+                val out = ArrayList<GnssMeasurementSample>(event.measurements.size)
+                for (m in event.measurements) {
+                    out.add(
+                        GnssMeasurementSample(
+                            tripId = tripId, t = t,
+                            svid = m.svid,
+                            constellation = m.constellationType,
+                            cn0 = m.cn0DbHz,
+                            carrierFreqHz = if (m.hasCarrierFrequencyHz()) m.carrierFrequencyHz.toDouble() else 0.0,
+                            pseudorangeRateMps = m.pseudorangeRateMetersPerSecond,
+                            pseudorangeRateUncMps = m.pseudorangeRateUncertaintyMetersPerSecond,
+                            adrMeters = m.accumulatedDeltaRangeMeters,
+                            adrState = m.accumulatedDeltaRangeState,
+                            adrUncMeters = m.accumulatedDeltaRangeUncertaintyMeters
+                        )
+                    )
+                }
+                synchronized(bufferLock) { gnssMeasBuffer.addAll(out) }
+            }
+        }
+        try {
+            locationManager.registerGnssMeasurementsCallback(cb, Handler(Looper.getMainLooper()))
+            gnssMeasCallback = cb
+        } catch (_: SecurityException) {
+        }
     }
 
     private fun unregisterGnss() {
         gnssCallback?.let { runCatching { locationManager.unregisterGnssStatusCallback(it) } }
         gnssCallback = null
+        gnssMeasCallback?.let { runCatching { locationManager.unregisterGnssMeasurementsCallback(it) } }
+        gnssMeasCallback = null
     }
 
     private fun accumulateGnss(status: GnssStatus) {
@@ -677,15 +718,18 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         val locs: List<LocationSample>
         val motions: List<MotionSample>
         val gnss: List<GnssSample>
+        val gnssMeas: List<GnssMeasurementSample>
         synchronized(bufferLock) {
             locs = ArrayList(locBuffer); locBuffer.clear()
             motions = ArrayList(motionBuffer); motionBuffer.clear()
             gnss = ArrayList(gnssBuffer); gnssBuffer.clear()
+            gnssMeas = ArrayList(gnssMeasBuffer); gnssMeasBuffer.clear()
         }
         if (locs.isNotEmpty()) db.tripDao().insertLocations(locs)
         if (motions.isNotEmpty()) db.tripDao().insertMotions(motions)
         // GNSS is diagnostic — never let a bad batch abort the core location/motion flush.
         if (gnss.isNotEmpty()) runCatching { db.tripDao().insertGnssSamples(gnss) }
+        if (gnssMeas.isNotEmpty()) runCatching { db.tripDao().insertGnssMeasurements(gnssMeas) }
         if (writeCheckpoint && tripId > 0L) {
             writeCheckpoint()
         }
@@ -741,7 +785,10 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             lon = loc.longitude,
             speed = gpsSpeed,
             bearing = if (loc.hasBearing()) loc.bearing.toDouble() else -1.0,
-            accuracy = if (loc.hasAccuracy()) loc.accuracy.toDouble() else 0.0
+            accuracy = if (loc.hasAccuracy()) loc.accuracy.toDouble() else 0.0,
+            bearingAccuracy = if (loc.hasBearingAccuracy()) loc.bearingAccuracyDegrees.toDouble() else 0.0,
+            speedAccuracy = if (loc.hasSpeedAccuracy()) loc.speedAccuracyMetersPerSecond.toDouble() else 0.0,
+            verticalAccuracy = if (loc.hasVerticalAccuracy()) loc.verticalAccuracyMeters.toDouble() else 0.0
         )
         synchronized(bufferLock) { locBuffer.add(sample) }
         locationSampleCount++

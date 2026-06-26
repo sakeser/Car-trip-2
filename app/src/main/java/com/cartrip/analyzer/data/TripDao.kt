@@ -61,6 +61,15 @@ interface TripDao {
     suspend fun deleteGnssSamplesAfter(id: Long, after: Long)
 
     @Insert
+    suspend fun insertGnssMeasurements(items: List<GnssMeasurementSample>)
+
+    @Query("SELECT * FROM gnss_measurements WHERE tripId = :id ORDER BY t ASC")
+    suspend fun getGnssMeasurements(id: Long): List<GnssMeasurementSample>
+
+    @Query("DELETE FROM gnss_measurements WHERE tripId = :id")
+    suspend fun deleteGnssMeasurements(id: Long)
+
+    @Insert
     suspend fun insertAnalysisPoints(items: List<AnalysisPointEntity>)
 
     @Insert
@@ -257,6 +266,9 @@ interface TripDao {
 
     @Query("DELETE FROM gnss_samples WHERE tripId IN (SELECT id FROM trips WHERE endTime > 0 AND endTime < :cutoff)")
     suspend fun deleteRawGnssForCompletedTripsBefore(cutoff: Long)
+
+    @Query("DELETE FROM gnss_measurements WHERE tripId IN (SELECT id FROM trips WHERE endTime > 0 AND endTime < :cutoff)")
+    suspend fun deleteRawGnssMeasurementsForCompletedTripsBefore(cutoff: Long)
 
     @Query("SELECT COUNT(*) FROM trips")
     suspend fun tripCount(): Int

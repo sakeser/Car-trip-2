@@ -93,7 +93,32 @@ data class LocationSample(
     val lon: Double,
     val speed: Double,
     val bearing: Double,
-    val accuracy: Double
+    val accuracy: Double,
+    // Per-fix accuracy estimates (API 26+), for the lateral-offset / lane confidence model. 0 = unknown.
+    val bearingAccuracy: Double = 0.0,    // degrees (68%)
+    val speedAccuracy: Double = 0.0,      // m/s (68%)
+    val verticalAccuracy: Double = 0.0    // metres (68%)
+)
+
+/**
+ * Raw per-satellite GNSS measurements (carrier phase + Doppler), captured only when high-precision
+ * logging is on (it's voluminous). The lever for sub-lane positioning: accumulated-delta-range (carrier
+ * phase) and pseudorange-rate let an offline pass estimate lateral motion far better than 1 Hz fixes.
+ */
+@Entity(tableName = "gnss_measurements", indices = [Index("tripId")])
+data class GnssMeasurementSample(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val tripId: Long,
+    val t: Long,                       // elapsedRealtime of the measurement epoch (ms)
+    val svid: Int,
+    val constellation: Int,            // GnssStatus.CONSTELLATION_*
+    val cn0: Double,                   // dB-Hz
+    val carrierFreqHz: Double,         // ~1575.42e6 = L1, ~1176.45e6 = L5
+    val pseudorangeRateMps: Double,    // Doppler-derived range rate
+    val pseudorangeRateUncMps: Double,
+    val adrMeters: Double,             // accumulated delta range = carrier phase
+    val adrState: Int,                 // ADR validity / cycle-slip flags
+    val adrUncMeters: Double
 )
 
 @Entity(tableName = "motions", indices = [Index("tripId")])

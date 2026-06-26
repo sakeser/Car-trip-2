@@ -16,9 +16,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DriveEventEntity::class,
         CachedWayEntity::class,
         CachedTileEntity::class,
-        GnssSample::class
+        GnssSample::class,
+        GnssMeasurementSample::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,7 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
                         MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
-                        MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18
+                        MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19
                     )
                     .build()
                     .also { INSTANCE = it }
@@ -267,6 +268,34 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_17_18 = object : Migration(17, 18) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE `trips` ADD COLUMN `userIsDrive` INTEGER DEFAULT NULL")
+            }
+        }
+
+        // v19: per-fix GPS accuracy estimates + a raw GNSS measurements table (lane-detection R&D).
+        private val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE `locations` ADD COLUMN `bearingAccuracy` REAL NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE `locations` ADD COLUMN `speedAccuracy` REAL NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE `locations` ADD COLUMN `verticalAccuracy` REAL NOT NULL DEFAULT 0")
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `gnss_measurements` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `tripId` INTEGER NOT NULL,
+                        `t` INTEGER NOT NULL,
+                        `svid` INTEGER NOT NULL,
+                        `constellation` INTEGER NOT NULL,
+                        `cn0` REAL NOT NULL,
+                        `carrierFreqHz` REAL NOT NULL,
+                        `pseudorangeRateMps` REAL NOT NULL,
+                        `pseudorangeRateUncMps` REAL NOT NULL,
+                        `adrMeters` REAL NOT NULL,
+                        `adrState` INTEGER NOT NULL,
+                        `adrUncMeters` REAL NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_gnss_measurements_tripId` ON `gnss_measurements` (`tripId`)")
             }
         }
     }
