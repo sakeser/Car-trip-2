@@ -24,6 +24,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.cartrip.analyzer.MainActivity
 import com.cartrip.analyzer.R
 import com.cartrip.analyzer.analysis.GeoUtils
@@ -176,7 +177,13 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private fun startRecording() {
         if (recording) return
         resetSessionState()
-        startInForeground()
+        if (!startInForeground()) {
+            // Couldn't enter the location foreground service. On Android 14 a *background*-initiated
+            // auto-arm without "Allow all the time" location throws here — bail without crashing (a
+            // crash would crash-loop, since the watcher re-arms on each process restart).
+            onForegroundStartBlocked()
+            return
+        }
         acquireWakeLock()
         scope.launch {
             val startWall = System.currentTimeMillis()
@@ -944,13 +951,60 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
 
     // ---- Foreground / notification ----
 
-    private fun startInForeground() {
+    /** @return true if the location foreground service started; false if the platform blocked it. */
+    private fun startInForeground(): Boolean {
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(NOTIF_ID, notification)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIF_ID, notification)
+            }
+            true
+        } catch (e: Exception) {
+            // Android 14: starting a `location`-typed FGS from the background requires the app to
+            // currently have location access — i.e. ACCESS_BACKGROUND_LOCATION ("Allow all the time").
+            // With only while-in-use this throws SecurityException. Catch it so a hands-free arm can't
+            // crash (and crash-loop) the app.
+            AutoRecordLog.add(this, "startForeground(location) FAILED: ${e.javaClass.simpleName}: ${e.message}")
+            false
         }
+    }
+
+    /**
+     * The location foreground service couldn't start (almost always a background auto-arm on Android 14
+     * without "Allow all the time" location). No trip row exists yet, so there's nothing to clean up —
+     * notify the user how to enable hands-free, then stop. Never crashes.
+     */
+    private fun onForegroundStartBlocked() {
+        if (autoStarted) {
+            AutoRecordLog.add(this, "auto-arm aborted: location FGS blocked (grant 'Allow all the time' for hands-free)")
+            postHandsFreeBlockedNotice()
+        }
+        autoStarted = false
+        runCatching { stopForegroundCompat() }
+        stopSelf()
+    }
+
+    private fun postHandsFreeBlockedNotice() {
+        val open = PendingIntent.getActivity(
+            this, 2,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val n = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Couldn't auto-start your trip")
+            .setContentText("Allow location \"All the time\" for hands-free recording. Tap to open.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(
+                "Hands-free recording needs location set to \"Allow all the time\". Tap to open the app, " +
+                    "go to Auto-record, and grant it. Recording from inside the app still works."
+            ))
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        runCatching { NotificationManagerCompat.from(this).notify(NOTICE_ID, n) }
     }
 
     private fun stopForegroundCompat() {
@@ -1040,6 +1094,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         const val ACTION_CHARGING_RESUMED = "com.cartrip.analyzer.CHARGING_RESUMED"
         const val CHANNEL_ID = "trip_recording"
         private const val NOTIF_ID = 42
+        private const val NOTICE_ID = 44 // hands-free-blocked notice (distinct from the recording notif)
         private const val MAX_SPEED = 75.0 // m/s (~270 km/h) plausibility cap
         private const val LOCATION_INTERVAL_MS = 500L
         private const val LOCATION_FASTEST_INTERVAL_MS = 250L

@@ -7,8 +7,11 @@ import android.bluetooth.BluetoothManager
 import android.companion.AssociationInfo
 import android.companion.CompanionDeviceManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,9 +48,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.cartrip.analyzer.record.AutoRecordPrefs
 import com.cartrip.analyzer.record.AutoRecordWatchService
 import com.cartrip.analyzer.record.CompanionCarManager
@@ -69,6 +76,27 @@ fun AutoRecordScreen(onBack: () -> Unit) {
     val cdmSupported = remember { CompanionCarManager.supported(context) }
     var companionAssociated by remember { mutableStateOf(CompanionCarManager.hasAssociation(context)) }
     var companionMsg by remember { mutableStateOf<String?>(null) }
+
+    // Background location ("Allow all the time") is required to start the location FGS from the background
+    // (hands-free start while the app is closed). Re-check on resume so the warning clears after granting.
+    var bgLocationGranted by remember { mutableStateOf(hasBackgroundLocation(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) bgLocationGranted = hasBackgroundLocation(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val bgLocationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { bgLocationGranted = hasBackgroundLocation(context) }
+    fun requestBackgroundLocation() {
+        // Background location can only be granted after fine/coarse. On Android 11+ the one-shot request
+        // routes to system settings ("Allow all the time"); on 10 it shows an inline option.
+        if (Build.VERSION.SDK_INT < 29) { bgLocationGranted = true; return }
+        bgLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
 
     val pairLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -147,6 +175,27 @@ fun AutoRecordScreen(onBack: () -> Unit) {
             }
 
             if (enabled) {
+                if (!bgLocationGranted) {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Action needed: allow location \"All the time\"",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                "Hands-free start (while the app is closed) needs background location. " +
+                                    "Without it, a trip only auto-starts while the app is open - a background " +
+                                    "attempt is safely skipped. Tap below, then choose \"Allow all the time\".",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Button(onClick = { requestBackgroundLocation() }) { Text("Allow all the time") }
+                            TextButton(onClick = { openAppSettings(context) }) { Text("Open app settings instead") }
+                        }
+                    }
+                }
                 if (cdmSupported) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -255,6 +304,22 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChang
             Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/** Background location ("Allow all the time"); always true below API 29 where it doesn't exist. */
+private fun hasBackgroundLocation(context: Context): Boolean =
+    Build.VERSION.SDK_INT < 29 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
+
+/** Open this app's system settings page (so the user can set location to "Allow all the time"). */
+private fun openAppSettings(context: Context) {
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 }
 
