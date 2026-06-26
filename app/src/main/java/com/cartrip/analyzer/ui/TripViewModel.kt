@@ -194,6 +194,11 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { dao.renameTrip(id, name.trim()) }
     }
 
+    /** Manual drive/non-drive override: true = drive, false = walk/non-drive, null = back to auto. */
+    suspend fun setTripIsDrive(id: Long, isDrive: Boolean?) = withContext(Dispatchers.IO) {
+        dao.setUserIsDrive(id, isDrive)
+    }
+
     fun deleteTrip(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             dao.deleteLocations(id)

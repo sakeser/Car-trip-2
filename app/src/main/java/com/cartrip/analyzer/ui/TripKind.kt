@@ -18,6 +18,18 @@ object TripKind {
     fun isLikelyNonDrive(maxSpeedKmh: Double): Boolean =
         maxSpeedKmh in 0.1..DRIVE_MIN_TOP_KMH
 
+    /**
+     * A manual override wins over the auto heuristic: [userIsDrive] true -> drive, false -> non-drive,
+     * null -> fall back to the top-speed guess. Lets the owner fix a mislabeled trip (a walk recorded as
+     * a drive, or a slow crawl that was really a drive).
+     */
+    fun isLikelyNonDrive(maxSpeedKmh: Double, userIsDrive: Boolean?): Boolean =
+        when (userIsDrive) {
+            true -> false
+            false -> true
+            null -> isLikelyNonDrive(maxSpeedKmh)
+        }
+
     fun isLikelyNonDrive(trip: TripEntity): Boolean =
-        isLikelyNonDrive(trip.maxSpeedMps * 3.6)
+        isLikelyNonDrive(trip.maxSpeedMps * 3.6, trip.userIsDrive)
 }

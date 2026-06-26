@@ -169,6 +169,9 @@ interface TripDao {
     @Query("UPDATE trips SET name = :name WHERE id = :id")
     suspend fun renameTrip(id: Long, name: String)
 
+    @Query("UPDATE trips SET userIsDrive = :isDrive WHERE id = :id")
+    suspend fun setUserIsDrive(id: Long, isDrive: Boolean?)
+
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun deleteTrip(id: Long)
 

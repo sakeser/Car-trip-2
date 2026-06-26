@@ -78,7 +78,10 @@ data class TripEntity(
     val gnssAvgCn0: Double = 0.0,
     val gnssTopCn0: Double = 0.0,
     val gnssL5Seen: Boolean = false,
-    val gnssSampleCount: Int = 0
+    val gnssSampleCount: Int = 0,
+    // Manual "is this a drive?" override (null = auto-detect by top speed, true = drive, false = walk/
+    // non-drive). Lets the owner correct a mislabeled trip; respected by TripKind everywhere.
+    val userIsDrive: Boolean? = null
 )
 
 @Entity(tableName = "locations", indices = [Index("tripId")])

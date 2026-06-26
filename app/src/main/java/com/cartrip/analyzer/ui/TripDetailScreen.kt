@@ -28,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CrisisAlert
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -175,6 +177,29 @@ fun TripDetailScreen(
                                 }
                             }
                         )
+                        trip?.let { t ->
+                            val nonDrive = TripKind.isLikelyNonDrive(t)
+                            DropdownMenuItem(
+                                text = { Text(if (nonDrive) "Mark as a drive" else "Mark as walk / not a drive") },
+                                leadingIcon = {
+                                    Icon(
+                                        if (nonDrive) Icons.Filled.DirectionsCar else Icons.Filled.DirectionsWalk,
+                                        contentDescription = null
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    actionScope.launch {
+                                        // Flip the effective kind: if it reads as a non-drive now, force drive, and vice versa.
+                                        viewModel.setTripIsDrive(tripId, nonDrive)
+                                        etaRefresh++
+                                        CloudState.set {
+                                            it.copy(lastMessage = if (nonDrive) "Marked as a drive." else "Marked as a walk / non-drive.")
+                                        }
+                                    }
+                                }
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Delete trip") },
                             leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
