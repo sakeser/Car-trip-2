@@ -4,6 +4,29 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AQ (2026-06-26) — fix the background auto-record crash (background location)
+
+Field test (real drives) surfaced a hard crash + crash-loop: plugging in with the app **closed** crashed
+it, while with the app **open** it auto-started fine. The on-device crash buffer was unambiguous:
+
+    java.lang.SecurityException: Starting FGS with type location ... targetSDK=34 requires
+    [ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION] and the app must be in the eligible state/exemptions
+      at RecordingService.startInForeground(RecordingService.kt:950)  <- startForeground(..., TYPE_LOCATION)
+
+- **Root cause:** on Android 14, starting a `location`-typed FGS from the **background** requires the app to
+  currently have location access — i.e. **`ACCESS_BACKGROUND_LOCATION` ("Allow all the time")**. The app only
+  ever requested while-in-use location, so the watcher-triggered background arm threw at `startForeground`,
+  the exception escaped `onStartCommand`, and the process crashed; the persistent watcher then re-armed on
+  restart and re-fired `AUTO_ARM` → **crash loop**. (The same logs confirm the Rev AP charging-edge fix works:
+  `watch-start -> ARM [chg=true wl=true]`.)
+- **Fix 1 (crash safety):** `startInForeground()` returns `Boolean` and try/catches the location FGS start.
+  On failure `startRecording()` bails via `onForegroundStartBlocked()` — logs it, posts a "tap to enable
+  hands-free" notice, `stopSelf()`. No crash, no loop. Manual/foreground start is unaffected.
+- **Fix 2 (make it work):** declared `ACCESS_BACKGROUND_LOCATION`; added an Auto-record card that requests
+  "Allow all the time" (with an app-settings fallback) when auto-record is on but background location isn't
+  granted (clears on resume once granted).
+- v2.80/91 → **v2.81/92**. 95 tests, no schema change. Installed on S25; background location granted.
+
 ## Rev AP (2026-06-26) — fix the charger trigger (P1), harden the watcher, GNSS cleanup
 
 Post-Rev-AO review (`CLAUDE_REVIEW_HANDOFF_V2_79.md`) + live device validation. The Rev AO watcher's

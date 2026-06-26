@@ -1,10 +1,12 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-26 · App version **2.80 (build 91)** · Branch `main` (Rev AL–AP shipped).
-**Hands-free auto-record now works** via a persistent "armed" watcher service (Rev AO), and **Rev AP
-fixed the critical charger-trigger bug** (the decision read a stale/inverted sticky battery state instead
-of the broadcast edge). The watcher's receiver fires reliably on every real charge event; the owner's next
-narrated drive (real cable plug/unplug — `dumpsys` can't simulate it on this S25) is the final validation._
+_Last updated: 2026-06-26 · App version **2.81 (build 92)** · Branch `main` (Rev AL–AQ; AP pushed, AQ may not be).
+**Hands-free auto-record now works** via a persistent "armed" watcher (Rev AO); **Rev AP** fixed the
+charger-trigger (stale-sticky→broadcast-edge); **Rev AQ** fixed a background crash — a `location` FGS started
+from the background on Android 14 needs **`ACCESS_BACKGROUND_LOCATION` ("Allow all the time")**, which the
+app now declares + requests (and the start is try/caught so it can't crash). **Workspace is now the repo root
+`C:\Users\sinan\OneDrive\Desktop\cartrip`** (the `cartrip-main` worktree was removed during consolidation —
+`main` is the only branch). The owner's next real background charge test is the final validation._
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -17,13 +19,13 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - Android app (Kotlin, Jetpack Compose, Room, Google Maps) that records trips from phone GPS +
   motion sensors, analyzes them offline, and enriches with Google traffic ETAs, OSM speed limits,
   and Google Sheets sync. Package `com.cartrip.analyzer`.
-- **Branch `main`** at Rev AP (v2.80) — Rev AL–AO pushed (`f93a7e2`); **Rev AP is committed locally and
-  may not be pushed yet** (verify with `git log origin/main..main`). Work happens on `main`.
-  (Pushing to `main` needs explicit per-turn user authorization — the owner has authorized the ongoing
-  ship-and-push workflow for this project.) `rev-g-functional` is a vestigial mirror ref; it has NOT
-  been fast-forwarded since `ea2fa88` (the auto-classifier blocks force-moving/pushing it) — ignore it
-  or sync it manually if wanted.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.80/91** (Rev AP). Device auto-locks fast; for a
+- **Single workspace = the repo root `C:\Users\sinan\OneDrive\Desktop\cartrip`** on **`main`** (the only
+  branch). The `cartrip-main` linked worktree and the stale `ux-redesign-v1` / `rev-g-functional` branches
+  were removed on 2026-06-26; the old UX redesign is preserved as tags `archive/ux-redesign-v1-wip` +
+  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at Rev AP (`6ebe32b`, pushed);
+  **Rev AQ is committed locally and may not be pushed** (verify `git log origin/main..main`). Pushing to
+  `main` needs explicit per-turn user authorization.
+- Installed on the Samsung **S25 (SM_S931W)** as **2.81/92** (Rev AQ). Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
 - **95 unit tests**, all green. Room schema **v19** (unchanged in Rev AP): v18 added the walk/non-drive override
@@ -177,6 +179,17 @@ unplug/reset` does NOT broadcast power events on this S25** — only a *real* ca
 path, so the fix's real-world confirmation is the owner's next drive (the unit tests lock the logic).
 Rev AP also split the BT ACL receiver to `RECEIVER_EXPORTED` (privileged framework broadcasts can be dropped
 for not-exported receivers on some OEM builds) while still filtering by the saved car MAC.
+
+**Rev AQ — background location is REQUIRED, and the FGS start must not crash.** The first real field test
+crashed the app when plugging in with the app **closed** (foreground worked). Cause: on Android 14, starting
+a `location`-typed FGS from the **background** requires the app to currently hold location access —
+`ACCESS_BACKGROUND_LOCATION` ("Allow all the time"). The watcher start succeeds (CDM exemption) but
+`RecordingService.startInForeground()` → `startForeground(…, TYPE_LOCATION)` threw `SecurityException`,
+which escaped `onStartCommand` and crash-looped (the watcher re-armed each restart). Fix: `startInForeground()`
+is now try/caught (returns `Boolean`; on failure `onForegroundStartBlocked()` logs + posts a "tap to enable
+hands-free" notice + `stopSelf()` — never crashes), and the app declares `ACCESS_BACKGROUND_LOCATION` with an
+Auto-record card that requests "Allow all the time". **So hands-free background start needs the owner to grant
+"Allow all the time" location** (done on the S25 via `pm grant`; the in-app card covers a fresh install).
 
 **Known limitations / TODO:** (a) no re-arm if you wait > 90 s after the trigger before driving
 (provisional discards, no restart until a new trigger event — a re-arm-on-motion fix is wanted); (b)
