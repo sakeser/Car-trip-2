@@ -6,7 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -266,21 +270,7 @@ fun TripDetailScreen(
                 }
             }
 
-            // --- Data quality (capture health) ---
-            trip?.takeIf { !it.isSample }?.let { t ->
-                val q = TripDataQuality.from(t)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(q.color()))
-                    Text("Data quality: ${q.level.label}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = q.color())
-                    Text(q.detail(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            // --- You vs traffic (moved up, reframed) ---
+            // --- You vs traffic ---
             trip?.let { t ->
                 EtaComparisonCard(
                     trip = t,
@@ -395,8 +385,8 @@ fun TripDetailScreen(
             // No fuel/cost card for non-drives (a walk burns no fuel).
             trip?.let { t -> if (!TripKind.isLikelyNonDrive(t)) FuelCostCard(t) }
 
-            // --- Advanced (collapsed): charts, raw metrics, detector comparison ---
-            AdvancedSection(trip = trip, metrics = m, fusedEvents = a.fusedEvents, points = a.points)
+            // --- More stats (collapsed) ---
+            AdvancedSection(metrics = m)
 
             // --- Sync footer ---
             trip?.let { t ->
@@ -780,7 +770,6 @@ private fun EventDetailCard(
     val style = eventStyle(event)
     val point = points.getOrNull(nearestPointIndex(points, event.tMs))
     val firstT = points.firstOrNull()?.tMs ?: event.tMs
-    val rawSignals = remember(event, rawEvents) { rawSignalsForEvent(event, rawEvents) }
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -808,32 +797,16 @@ private fun EventDetailCard(
             StatGrid(
                 stats = listOf(
                     Stat("G-force", "%.2fg".format(event.magnitude / 9.80665), style.color),
-                    Stat("Speed", point?.let { Format.speedKmh(it.speedKmh) } ?: "-"),
-                    Stat("Source", sourceLabel(event))
+                    Stat("Speed", point?.let { Format.speedKmh(it.speedKmh) } ?: "-")
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
-            // Only worth showing when several raw detector signals were grouped into this moment.
-            if (rawSignals.size > 1) {
-                Text(
-                    "${rawSignals.size} grouped signals",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                rawSignals.take(4).forEach { raw ->
-                    Text(
-                        rawSignalLine(raw, firstT),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (raw.source == "fused") Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
     }
 }
 
 @Composable
-private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, fusedEvents: List<DriveEvent>, points: List<TrackPoint>) {
+private fun AdvancedSection(metrics: DriveMetrics) {
     var expanded by remember { mutableStateOf(false) }
     val m = metrics
     Card(
@@ -846,7 +819,7 @@ private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, fusedEvent
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Advanced & charts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("More stats", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Icon(
                     if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
@@ -869,51 +842,6 @@ private fun AdvancedSection(trip: TripEntity?, metrics: DriveMetrics, fusedEvent
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text(
-                        "Used ${m.usedFixes} of ${m.rawFixes} GPS fixes after filtering.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (trip != null && (fusedEvents.isNotEmpty() || trip.motionTurnCount > 0 ||
-                            trip.motionBrakeCount > 0 || trip.motionAccelCount > 0)) {
-                        Text("Detector comparison (beta)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text(
-                            "GPS:  ${trip.hardBrakeCount} brake · ${trip.hardAccelCount} accel · ${trip.hardCornerCount} turn",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            "Sensors:  ${trip.motionBrakeCount} brake · ${trip.motionAccelCount} accel · ${trip.motionTurnCount} turn",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF8B5CF6)
-                        )
-                        if (metrics.maxHorizGForce > 0.0) {
-                            Text(
-                                "Peak horizontal ${"%.2fg".format(metrics.maxHorizGForce)} · sustained ${"%.2fg".format(metrics.peakGForce)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        // fusedConfidence (forward-axis inference) is empirically noise (~0.06 even on the
-                        // best trip) and never gates trust — not worth surfacing. See HANDOFF O2.
-                        // Timestamped fused events (magnitude-first detector). conf shows GPS-sign certainty.
-                        val firstT = points.firstOrNull()?.tMs ?: 0L
-                        fusedEvents.sortedBy { it.tMs }.take(12).forEach { e ->
-                            val rel = ((e.tMs - firstT) / 1000).coerceAtLeast(0)
-                            Text(
-                                "  %d:%02d  %-7s %.2fg  ·  %.0f%% conf".format(
-                                    rel / 60, rel % 60, e.type.name.lowercase(), e.magnitude / 9.80665, e.confidence * 100
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF8B5CF6)
-                            )
-                        }
-                        Text(
-                            "Magnitude-first sensor detector · brake/accel classified from GPS speed · review-grade counts",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
             }
         }
@@ -998,13 +926,6 @@ private fun SafetyFactorsCard(
                     )
                 }
                 if (listExpanded) {
-                    if (rawEventCount > listEvents.size) {
-                        Text(
-                            "Cleaned from $rawEventCount raw detector signals · tap one to find it on the map.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     listEvents.sortedBy { it.tMs }.forEach { event ->
                         EventRow(event, points, firstT, onClick = { onEventJump(event) })
                     }
@@ -1424,7 +1345,8 @@ private fun EtaComparisonCard(
 private val ETA_GREEN = Color(0xFF22C55E)
 private val ETA_AMBER = Color(0xFFF59E0B)
 private val ETA_RED = Color(0xFFEF4444)
-private val ETA_TYPICAL = Color(0xFF64748B)  // Google estimate — neutral slate
+private val ETA_TYPICAL = Color(0xFF64748B)  // "no traffic" portion of the estimate — neutral slate
+private val ETA_TRAFFIC = Color(0xFFB91C1C)  // "traffic delay" portion of the estimate — red
 private val ETA_MAPS = Color(0xFFEA4335)     // approximated Google Maps pin tint
 
 // Built from code points so the source stays ASCII (see GeoNamer.ARROW / the Cp1252 encoding note).
@@ -1446,137 +1368,84 @@ private fun etaAnimalEmoji(deltaFrac: Double): String = when {
 }
 
 /**
- * Two thin rows on a shared time axis. Google's best-case..typical estimate is a single RANGE band;
- * "You" is a bar whose right end lands on the same axis so it reads directly against the band
- * (left of it = faster, past it = slower). Rows are ordered shortest-first; You is coloured by its
- * deficit vs Google and carries a pulsing highlight. The band/bar animate in on load.
+ * One to-scale time axis (0..max). The outlined box is Google's estimate: a light "no traffic" portion
+ * up to the free-flow time, then a red "traffic delay" portion out to the typical/with-traffic time.
+ * "You" is a marker that can land anywhere on the axis — left of the box = beat free-flow, inside the
+ * red = beat the traffic, past the box = slower than Google expected. The box wipes in and the marker
+ * slides to place on load.
  */
 @Composable
 private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, youColor: Color) {
-    val lo0 = minOf(freeFlowS, typicalS, actualS)
-    val hi0 = maxOf(freeFlowS, typicalS, actualS)
-    val pad = ((hi0 - lo0) * 0.12).coerceAtLeast(20.0)
-    val lo = lo0 - pad
-    val span = ((hi0 + pad) - lo).coerceAtLeast(1.0)
-    fun frac(v: Double): Float = ((v - lo) / span).toFloat().coerceIn(0f, 1f)
+    val hasFree = freeFlowS >= 1.0 && freeFlowS < typicalS
+    val maxV = maxOf(typicalS, actualS, freeFlowS) * 1.06
+    val fFree = (freeFlowS / maxV).toFloat().coerceIn(0f, 1f)
+    val fTyp = (typicalS / maxV).toFloat().coerceIn(0f, 1f)
+    val fYou = (actualS / maxV).toFloat().coerceIn(0f, 1f)
 
     var loaded by remember(freeFlowS, typicalS, actualS) { mutableStateOf(false) }
     LaunchedEffect(freeFlowS, typicalS, actualS) { loaded = true }
+    val p by animateFloatAsState(if (loaded) 1f else 0f, animationSpec = tween(800), label = "etaWipe")
 
-    val bMin = (freeFlowS / 60.0).roundToInt()
-    val tMin = (typicalS / 60.0).roundToInt()
-    val googleTime = if (bMin == tMin) "$tMin min" else "$bMin-$tMin min"
+    val freeMin = (freeFlowS / 60.0).roundToInt()
+    val typMin = (typicalS / 60.0).roundToInt()
+    val youMin = (actualS / 60.0).roundToInt()
+    val axis = MaterialTheme.colorScheme.onSurfaceVariant
+    val markerColor = Color(0xFF2563EB)
 
-    val you: @Composable () -> Unit = { EtaYouRow(frac(actualS), youColor, Format.tripMinutes(actualS), loaded) }
-    val google: @Composable () -> Unit = { EtaGoogleRow(frac(freeFlowS), frac(typicalS), googleTime) }
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        if (actualS <= typicalS) { you(); google() } else { google(); you() }
-    }
-}
-
-/**
- * Google's estimate as a fill-from-left bar on the shared axis — the same encoding as the "Your trip"
- * bar so the two lengths read directly against each other. The best-case..typical spread shows as a
- * lighter tail past the solid best-case portion.
- */
-@Composable
-private fun EtaGoogleRow(fBest: Float, fTyp: Float, timeText: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.width(70.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(Icons.Filled.Place, contentDescription = null, tint = ETA_MAPS, modifier = Modifier.size(12.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // "you" callout, sitting above the marker.
+        Box(modifier = Modifier.fillMaxWidth().height(15.dp)) {
             Text(
-                "Google",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
-        BoxWithConstraints(modifier = Modifier.weight(1f).height(9.dp)) {
-            val w = maxWidth
-            Box(
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
-            )
-            // Lighter full bar to the typical estimate...
-            Box(
-                modifier = Modifier.width((w * fTyp).coerceAtLeast(3.dp)).fillMaxHeight()
-                    .clip(RoundedCornerShape(4.dp)).background(ETA_TYPICAL.copy(alpha = 0.4f))
-            )
-            // ...with the solid portion up to the best-case time.
-            Box(
-                modifier = Modifier.width((w * fBest).coerceAtLeast(3.dp)).fillMaxHeight()
-                    .clip(RoundedCornerShape(4.dp)).background(ETA_TYPICAL)
-            )
-        }
-        Text(
-            timeText,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(62.dp)
-        )
-    }
-}
-
-/** Your time as a bar whose right end lands on the shared axis, coloured by deficit, with a pulse. */
-@Composable
-private fun EtaYouRow(fYou: Float, youColor: Color, timeText: String, loaded: Boolean) {
-    val grow by animateFloatAsState(if (loaded) fYou else 0f, animationSpec = tween(700), label = "etaYouBar")
-    val youIcon = UiPrefs.vector(UiPrefs.youIcon(LocalContext.current))
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.width(70.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(youIcon, contentDescription = null, tint = youColor, modifier = Modifier.size(13.dp))
-            Text(
-                "Your trip",
+                "you  $youMin min",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = markerColor,
                 maxLines = 1,
-                softWrap = false
+                softWrap = false,
+                modifier = Modifier.align(BiasAlignment(2f * fYou - 1f, 0f)).alpha(p)
             )
         }
-        BoxWithConstraints(modifier = Modifier.weight(1f).height(9.dp)) {
+        // Time axis + estimate box + "you" marker.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(24.dp)) {
             val w = maxWidth
             Box(
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth().height(2.dp)
+                    .background(axis.copy(alpha = 0.18f))
+            )
+            Row(
+                modifier = Modifier.align(Alignment.CenterStart).height(22.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .border(1.5.dp, axis.copy(alpha = 0.65f), RoundedCornerShape(5.dp))
+            ) {
+                Box(modifier = Modifier.width(w * fFree * p).fillMaxHeight().background(ETA_TYPICAL))
+                Box(modifier = Modifier.width(w * (fTyp - fFree).coerceAtLeast(0f) * p).fillMaxHeight().background(ETA_TRAFFIC))
+            }
+            // The marker: a youColor bar in a white casing so it reads on top of the red band.
+            Box(
+                modifier = Modifier.align(Alignment.CenterStart).offset(x = w * fYou * p - 3.dp)
+                    .width(6.dp).fillMaxHeight().background(Color.White)
             )
             Box(
-                modifier = Modifier.width((w * grow).coerceAtLeast(3.dp)).fillMaxHeight()
-                    .clip(RoundedCornerShape(4.dp)).background(youColor),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                val infinite = rememberInfiniteTransition(label = "etaYouPulse")
-                val a by infinite.animateFloat(
-                    initialValue = 0.3f,
-                    targetValue = 1f,
-                    animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
-                    label = "etaYouPulseA"
-                )
-                Box(
-                    modifier = Modifier.padding(end = 2.dp).size(7.dp).clip(RoundedCornerShape(4.dp))
-                        .background(Color.White.copy(alpha = a))
-                )
-            }
+                modifier = Modifier.align(Alignment.CenterStart).offset(x = w * fYou * p - 1.5.dp)
+                    .width(3.dp).fillMaxHeight().background(youColor)
+            )
         }
-        Text(
-            timeText,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = youColor,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(62.dp)
-        )
+        // Scale labels under the axis.
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (hasFree) EtaScaleLabel("no traffic", "$freeMin min", BiasAlignment(2f * fFree - 1f, 0f))
+            EtaScaleLabel(if (hasFree) "with traffic" else "Google", "$typMin min", BiasAlignment(2f * fTyp - 1f, 0f), end = true)
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.EtaScaleLabel(title: String, value: String, align: BiasAlignment, end: Boolean = false) {
+    Column(
+        modifier = Modifier.align(align),
+        horizontalAlignment = if (end) Alignment.End else Alignment.CenterHorizontally
+    ) {
+        Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
+        Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
     }
 }
 
@@ -1637,30 +1506,6 @@ private fun eventExplanation(event: DriveEvent): String {
     }
     return "$intensity  (${"%.2f".format(g)} g)"
 }
-
-private fun sourceLabel(event: DriveEvent): String = when (event.source) {
-    "summary" -> "Grouped"
-    "fused" -> "Sensor"
-    "motion" -> "Motion"
-    "gps" -> "GPS"
-    else -> event.source.ifBlank { "-" }
-}
-
-private fun rawSignalLine(event: DriveEvent, firstT: Long): String {
-    val relS = (event.tMs - firstT).coerceAtLeast(0) / 1000.0
-    val conf = if (event.source == "fused") " | ${"%.0f".format(event.confidence * 100)}% conf" else ""
-    return "${Format.duration(relS)} | ${event.source} ${event.type.name.lowercase()} | " +
-        "${"%.2fg".format(event.magnitude / 9.80665)}$conf"
-}
-
-private fun rawSignalsForEvent(
-    event: DriveEvent,
-    rawEvents: List<DriveEvent>
-): List<DriveEvent> =
-    // Strictly time-windowed: only signals that are part of the same moment (no spatial chaining,
-    // which merged distinct slow-drive events seconds-to-tens-of-seconds apart).
-    rawEvents.filter { abs(it.tMs - event.tMs) <= 6_000L }.sortedBy { it.tMs }
-
 
 @Composable
 private fun EventRow(event: DriveEvent, points: List<TrackPoint>, firstT: Long, onClick: () -> Unit) {
