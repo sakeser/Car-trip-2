@@ -2,13 +2,38 @@
 
 This file is the working handoff for the main branch. The UX redesign worktree was intentionally not used for the June 23, 2026 field-test fixes.
 
-For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `CLAUDE_CODE_HANDOFF.md`.
+For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
+
+## Rev AG–AK (2026-06-25) — auto-record root-cause fix, harsh-stop, you-vs-traffic redesign
+
+- **Rev AG (v2.71): CompanionDeviceManager hands-free auto-start.** Field test confirmed manifest
+  broadcast receivers (charger `ACTION_POWER_CONNECTED`, classic-BT `ACL_CONNECTED`) never fire while the
+  app is backgrounded on the S25 (the decision log held a single foreground entry across multiple
+  background test drives). Fix: associate the car once via `CompanionDeviceManager` (system dialog from
+  the Auto-record screen), then `startObservingDevicePresence` → the OS calls `record/CarPresenceService`
+  directly on connect and grants a background FGS start (API 34+). New: `CompanionCarManager.kt`,
+  `CarPresenceService.kt`; `AutoRecordController.onCompanionPresence` arms the existing provisional trip +
+  90 s motion-confirm. **NEEDS the owner's real drive to verify** (the `cdm-observe → onDeviceAppeared →
+  ARM → FGS start OK` chain can't be exercised over USB).
+- **Rev AH (v2.72): harsh-stop detector recalibrated from 27 real trips.** It fired on 0/27. Pulled the
+  live DB, replayed the detector in Python: (1) the stop-gate required the *previous* 1 Hz GPS sample
+  ≥ 8 km/h, missing ~90% of stops on a normal decel ramp; (2) sample-to-sample "jerk" on 50 Hz accel was
+  noise. Now a stop = crossing < 3 km/h preceded by real movement within 4 s; harshness = smoothed peak
+  horizontal decel ≥ 3.0 m/s² (~0.31 g). 7 harsh stops across the 27 trips. +3 tests.
+- **Rev AI (v2.73): harsh stops as first-class events.** `EventType.HARSH_STOP` (timestamped); map marker
+  (magenta octagon + exclamation), toggleable "Stops" filter chip, penalized in Safety (×2.5) + Comfort
+  (×3.0). Compact event filter bar.
+- **Rev AJ (v2.74): you-vs-traffic redesign + trip-screen cleanup.** One to-scale time axis (slate
+  no-traffic + red traffic-delay box, a "you" marker anywhere, animated). Removed the Data-quality row,
+  the detector-comparison, and event raw-signal dumps; "Advanced & charts" → "More stats".
+- **Rev AK (v2.75): timeline + title polish.** Fixed the timeline's overlapping scale labels (fixed
+  left/right legend) and tightened the scale; trip-title disambiguation is now time-only (no date).
 
 ## Current phone build
 
 - Package: `com.cartrip.analyzer`
-- Installed on S25: `versionName=2.58`, `versionCode=69` (Rev U **v2.59/70 built but NOT yet installed** —
-  owner installs/tests within the hour; no device was connected during Rev U).
+- Installed on S25: `versionName=2.75`, `versionCode=86` (Rev AK). All revisions through **AK** are pushed
+  to `origin/main` (`c236b89`).
 - Build artifact (relocated, see note): `C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`
 - Maps key: now present in `cartrip-main\local.properties` (gitignored), copied from the original worktree; do not commit or print it.
 

@@ -1,7 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-24 · App version **2.64 (build 75)** · Branch `main` (Rev V–Y shipped + pushed;
-only the Rev U auto-recording trigger still needs the owner's on-device drive test)_
+_Last updated: 2026-06-25 · App version **2.75 (build 86)** · Branch `main` (Rev AG–AK shipped + pushed;
+the **CompanionDeviceManager hands-free auto-start (Rev AG)** still needs the owner's on-device drive test)_
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -14,15 +14,15 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - Android app (Kotlin, Jetpack Compose, Room, Google Maps) that records trips from phone GPS +
   motion sensors, analyzes them offline, and enriches with Google traffic ETAs, OSM speed limits,
   and Google Sheets sync. Package `com.cartrip.analyzer`.
-- **Branch `main` = `origin/main`** at `189a273` (Rev Y, v2.64) — fully pushed. Work happens on `main`.
+- **Branch `main` = `origin/main`** at `c236b89` (Rev AK, v2.75) — fully pushed. Work happens on `main`.
   (Pushing to `main` needs explicit per-turn user authorization — the owner has authorized the ongoing
   ship-and-push workflow for this project.) `rev-g-functional` is a vestigial mirror ref; it has NOT
   been fast-forwarded since `ea2fa88` (the auto-classifier blocks force-moving/pushing it) — ignore it
   or sync it manually if wanted.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.64/75** (Rev Y). Device auto-locks fast; for a
+- Installed on the Samsung **S25 (SM_S931W)** as **2.75/86** (Rev AK). Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
-- **82 unit tests**, all green. Room schema **v17** (no schema change Rev G→Y; all recent work is
+- **89 unit tests**, all green. Room schema **v17** (no schema change Rev G→AK; recent work is
   detector/scoring, computed features, and UI).
 - **Recent arc:** Rev K–M = field-test calibration; **Rev N** = fuel/cost; **Rev O** = geocoded names;
   **Rev P–T** = trip-detail/past-trips **UI overhaul** + polish + hybrid fuel; **Rev U** =
@@ -33,7 +33,17 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
   bar chart); **Rev W** = **non-drive/walk guard** (`TripKind`) + privacy (`allowBackup=false`, O3) +
   dead-code removal (O5); **Rev X** = "When you drive" daypart insights + speeding-peak run-length
   guard (O8) + fuel suppressed for non-drives; **Rev Y** = Insights polish (robust diverging-bar
-  scale; Score-trends re-imagined as per-score icon+bar+trend rows). The owner drives a hybrid 2023
+  scale; Score-trends re-imagined as per-score icon+bar+trend rows); **Rev Z–AE** = Insights/UI cleanup,
+  trip-detail UI batch, auto-record decision log + pre-field-test hardening; **Rev AF** = GPS-free
+  motion-confirm for garage auto-starts; **Rev AG** = **CompanionDeviceManager hands-free auto-start**
+  (field-confirmed the manifest charger/BT receivers never fire backgrounded on the S25, so CDM observes
+  the car's presence and is granted a background FGS start — **needs the owner's drive test**); **Rev AH**
+  = harsh-stop detector recalibrated from 27 real trips (was firing 0/27 — fixed the 1 Hz stop-gate +
+  replaced noisy jerk with peak decel ≥ 3.0 m/s²); **Rev AI** = harsh stops as mappable/filterable map
+  events + Safety/Comfort penalty; **Rev AJ** = you-vs-traffic redesigned as one **to-scale timeline**
+  (no-traffic + traffic-delay box, "you" marker anywhere, animated) + trip-screen diagnostic cleanup
+  (removed Data-quality row, detector-comparison, raw-signal dumps); **Rev AK** = timeline label-overlap
+  fix (fixed left/right legend) + **time-only trip titles** (no date). The owner drives a hybrid 2023
   Tucson, phone wireless-charging on a mount.
 - The separate UX-redesign worktree (`C:\Users\sinan\OneDrive\Desktop\cartrip`, branch
   `ux-redesign-v1`) is **untouched and unrelated** — do not merge it in.
@@ -363,7 +373,28 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
-1. **Auto-recording trigger (Rev U) — FIRST CUT BUILT (v2.59), VERIFY ON DEVICE.** Hands-free start/stop
+> **Status update (Rev AG–AK, 2026-06-25):**
+> - **Auto-record (item 1) — root-caused + redesigned.** Field test (v2.70) confirmed manifest broadcast
+>   receivers (charger `ACTION_POWER_CONNECTED`, classic-BT `ACL_CONNECTED`) **never fire while the app is
+>   backgrounded** on the S25 — the auto-record decision log stayed at one foreground entry across multiple
+>   background test drives. **Rev AG** adds the real fix: **`CompanionDeviceManager`** — associate the car
+>   once (system dialog in the Auto-record screen → "Pair car for hands-free start"), then
+>   `startObservingDevicePresence` makes the OS call `record/CarPresenceService` directly on connect (even
+>   backgrounded) and, on API 34+, grants a background FGS start. New files `CompanionCarManager.kt` +
+>   `CarPresenceService.kt`; `AutoRecordController.onCompanionPresence` arms via the existing provisional +
+>   90 s motion-confirm. **STILL NEEDS the owner's real drive** to confirm the `cdm-observe → onDeviceAppeared
+>   → ARM → FGS start OK` log chain (can't be exercised over USB). See memory `autostart-background-receiver-dead-finding`.
+> - **Harsh-stop detector (was §6/§8 weak spot) — DONE (Rev AH/AI).** Recalibrated against 27 real trips
+>   (pulled DB + Python replay): fixed the 1 Hz stop-gate and replaced noisy jerk with smoothed peak
+>   horizontal decel ≥ 3.0 m/s². Now emitted as `EventType.HARSH_STOP` map events (filterable "Stops"
+>   chip) and penalized in Safety + Comfort. See memory `harsh-stop-recalibration`.
+> - **You-vs-traffic redesign — DONE (Rev AJ/AK).** Single to-scale timeline; trip screen de-cluttered
+>   (Data-quality row, detector-comparison, raw-signal dumps removed); titles are time-only.
+> - **Still TODO:** severe-corner count (item 2, schema v18), Insights depth (item 4), rough-stretch
+>   mapping (item 5), START-side auto-trip trim (mirror of the shipped end-trim), walk/non-drive manual
+>   toggle. The original item 1 text below describes the **superseded** Rev U receiver design (kept for history).
+
+1. **Auto-recording trigger (Rev U) — SUPERSEDED by Rev AG CompanionDeviceManager (see status box above).** Hands-free start/stop
    so the owner never taps Start. Context: the phone is **always wireless-charging on a mount in the
    owner's 2023 Tucson** and pairs to the car over Bluetooth/Android Auto. Shipped architecture:
    - **`record/AutoRecordPrefs.kt`** (SharedPreferences `cartrip_autorecord`): `enabled` (default off),
