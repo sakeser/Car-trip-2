@@ -184,6 +184,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             onForegroundStartBlocked()
             return
         }
+        // Tactile cue: a firm buzz when manually recording; a lighter "armed" tick for an auto provisional
+        // (it firms up to recordingStarted once motion is confirmed).
+        if (autoStarted) Haptics.armed(this) else Haptics.recordingStarted(this)
         acquireWakeLock()
         scope.launch {
             val startWall = System.currentTimeMillis()
@@ -235,6 +238,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         }
         stoppingNormally = true
         recording = false
+        Haptics.stopped(this) // two firm buzzes: a real trip ended and is being saved
         tickerJob?.cancel()
         try {
             sensorManager.unregisterListener(this)
@@ -341,6 +345,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                         discardRecording()
                     } else {
                         AutoRecordLog.add(this@RecordingService, "motion-confirm OK via ${if (gpsOk) "gps" else "sensor"} ($stats) -> keeping trip")
+                        Haptics.recordingStarted(this@RecordingService) // armed → confirmed real trip
                     }
                 }
             }
@@ -372,6 +377,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     /** Tear down a provisional recording that never moved — delete it silently (no saved trip). */
     private fun discardRecording() {
         if (!recording) return
+        Haptics.disarmed(this) // soft tick: armed but gave up (not a drive)
         recording = false
         autoStarted = false
         tickerJob?.cancel()

@@ -17,6 +17,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Haptic cues on recording start/stop/arm so the driver can feel the trip state. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Auto-recording (Rev U): read paired car device for the Bluetooth trigger / picker. -->

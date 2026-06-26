@@ -4,6 +4,23 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AR (2026-06-26) — recording haptics + code-verified failure-mode matrix
+
+- **Haptic cues** (`record/Haptics.kt`, `VIBRATE` permission) so the driver can *feel* the trip state
+  without looking — directly to make field tests easier:
+  - light double-tick = auto-record **armed** (provisional started, motion not yet confirmed)
+  - one firm buzz = **recording** (manual start, or a provisional that just motion-confirmed)
+  - two firm buzzes = **stopped/saved** (a real trip ended)
+  - soft tick = **discarded** (a provisional that never moved)
+  Wired into `startRecording` (armed vs recording by `autoStarted`), the motion-confirm-OK branch,
+  `discardRecording`, and `stopRecording`. Amplitude-controlled where supported, pattern-only otherwise;
+  no-op without a vibrator. Always-on (a user toggle is a noted follow-up).
+- **Failure-mode / degraded-mode matrix** added to `HANDOFF.md` §3 — ~24 scenarios reviewed by reading the
+  code paths (auto-record lifecycle, GPS loss, sensor stall, service-kill recovery, permission revocation,
+  GNSS, etc.), each marked Code✓ / Device✓ / KNOWN GAP. Conclusion: only background hands-free start, reboot
+  re-arm, and the haptic feel still need a real drive.
+- v2.81/92 → **v2.82/93**. 95 tests, no schema change.
+
 ## Rev AQ (2026-06-26) — fix the background auto-record crash (background location)
 
 Field test (real drives) surfaced a hard crash + crash-loop: plugging in with the app **closed** crashed

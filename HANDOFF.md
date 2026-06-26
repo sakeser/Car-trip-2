@@ -198,6 +198,41 @@ start-side trip trim not done (the parked seconds before pulling away aren't tri
 (d) with `requireWireless=false`, charging *anywhere* arms-then-discards a 90 s provisional. **Cost:** a
 permanent silent "Auto-record on" notification (the accepted tradeoff).
 
+### Degraded-mode & failure-mode matrix (code-verified 2026-06-26, Rev AQ)
+
+Reviewed by reading the code paths, not by driving — so the owner can field-test the few rows marked
+**DRIVE** instead of everything. "Code ✓" = the path exists and is exercised/guarded in source; "Device ✓"
+= also reproduced on the S25 this session.
+
+| Scenario | Behavior | Status |
+|---|---|---|
+| Plug in, **app open** | foreground arm → records | Device ✓ (owner saw it) |
+| Plug in, **app closed**, bg-location granted | watcher arms → records hands-free | Code ✓ · **DRIVE** |
+| Plug in, **app closed**, bg-location **missing** | log + "tap to enable hands-free" notice, `stopSelf`, no crash (Rev AQ) | Code ✓ |
+| FGS start blocked (A12+ bg, no CDM exemption) | `arm()` try/catch → tap-to-start notification | Code ✓ |
+| Unplug **during** a trip | 8 s grace → trim back to rest → save as AUTO_STOP | Code ✓ |
+| Unplug then **replug within 8 s** | `CHARGING_RESUMED` cancels grace → keeps recording | Code ✓ |
+| Plug in but **never drive** (≤90 s) | motion-confirm fails → silent discard, no junk trip | Device ✓ |
+| Plug in, **wait > 90 s**, then drive | provisional already discarded → **no recording** until a new trigger | **KNOWN GAP** (re-arm-on-motion = roadmap) |
+| Charger event **while already recording** | "trigger still present, cancel grace" (idempotent) | Code ✓ |
+| `requireWireless` ON + **wired** charging | no arm (after 1.5 s settle re-read of plug type) | Code ✓ |
+| Watcher process killed (low memory) | `START_STICKY` restart → re-arms | Code ✓ |
+| Watcher **force-stopped** by user | stays dead until app opened / reboot | **KNOWN LIMIT** |
+| **Reboot** | `BootReceiver` re-arms the watcher | Code ✓ · **DRIVE** |
+| `dumpsys battery` simulate charge | does NOT broadcast power events on this S25 → can't simulate | Documented (real cable only) |
+| **No GPS** at start (garage) | motion-confirm via accelerometer vibration (≥ 0.30) | Code ✓ |
+| GPS lost mid-trip (≥ 2 min) | gap counted (`gpsGapCount`), track continues, no crash | Code ✓ |
+| Motion sensor stalls (≥ 15 s) | auto-restart sensors, capped at 6 attempts | Code ✓ |
+| Service killed mid-trip (OS/crash) | next start finalizes the orphan as **PARTIAL** (`APP_RECOVERY`) | Code ✓ |
+| Location permission **revoked** mid-trip | `SecurityException` caught; location stops, trip keeps what it has | Code ✓ |
+| Raw GNSS enabled | per-sat rows captured + cleaned on delete/trim/discard (Rev AP) | Device ✓ |
+| GNSS callback failure | wrapped — never aborts the core location/motion flush | Code ✓ |
+| `POST_NOTIFICATIONS` denied (A13+) | recording still runs; fallback notices fail silently | Minor degraded |
+| CDM duplicate/wrong association fires | arms → motion-confirm discards the non-drive | Low harm · open cleanup |
+
+**Only three things genuinely need a real drive** (everything else is settled in code): (1) background
+hands-free start end-to-end with bg-location granted; (2) reboot re-arm; (3) the new haptic timing *feel*.
+
 ---
 
 ## 4. What's been done (Rev G → T)
@@ -443,6 +478,17 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
+> **Status update (Rev AP–AR, 2026-06-26):**
+> - **Auto-record charger trigger fixed (Rev AP)** — the decision read a stale/inverted sticky battery
+>   state; now trusts the broadcast edge (`AutoRecordPolicy.effectiveCharging`). **Background crash fixed
+>   (Rev AQ)** — a background-started `location` FGS needs `ACCESS_BACKGROUND_LOCATION` ("Allow all the
+>   time"); the app now declares + requests it, and the FGS start is try/caught so it can't crash.
+> - **Recording haptics — DONE (Rev AR).** Distinct vibration cues: light double-tick = auto *armed*,
+>   firm buzz = *recording* (manual start or motion-confirmed), two firm buzzes = *stopped/saved*, soft
+>   tick = *discarded* (provisional that didn't move). Always-on; a user toggle is a possible follow-up.
+> - **Failure-mode matrix** added in §3 (code-verified) — most degraded scenarios are settled in code;
+>   only background hands-free start, reboot re-arm, and the haptic feel still want a real drive.
+>
 > **Status update (Rev AL–AO, 2026-06-26):**
 > - **Auto-record (item 1) — DONE & validated on-device (Rev AO).** The hands-free trigger now works via a
 >   **persistent `AutoRecordWatchService`** (see §3 "Auto-record architecture (Rev AO)"). The earlier CDM
@@ -460,9 +506,10 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 > - **Harsh-stop detector — DONE (Rev AH/AI).** Recalibrated from 27 trips; `EventType.HARSH_STOP` map
 >   events + Safety/Comfort penalty. See memory `harsh-stop-recalibration`.
 > - **You-vs-traffic redesign — DONE (Rev AJ/AK).** Single to-scale timeline; trip screen de-cluttered.
-> - **Still TODO:** auto-record **re-arm-on-motion** + **START-side trip trim** (see §3 limitations);
->   severe-corner count (item 2); Insights depth (item 4); rough-stretch mapping (item 5); lane-detection
->   offline algorithm. The Rev U receiver design below is **superseded** (kept for history).
+> - **Still TODO:** auto-record **re-arm-on-motion** (the >90 s-then-drive gap in the matrix) + **START-side
+>   trip trim** (see §3 limitations); a **haptic on/off toggle** + optionally a CDM "remove pairing" /
+>   dedupe button; severe-corner count (item 2); Insights depth (item 4); rough-stretch mapping (item 5);
+>   lane-detection offline algorithm. The Rev U receiver design below is **superseded** (kept for history).
 
 1. **Auto-recording trigger (Rev U) — SUPERSEDED by Rev AG CompanionDeviceManager (see status box above).** Hands-free start/stop
    so the owner never taps Start. Context: the phone is **always wireless-charging on a mount in the
