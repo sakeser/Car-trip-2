@@ -4,6 +4,32 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AL–AO (2026-06-26) — walk toggle, lane-data capture, working hands-free auto-record
+
+- **Rev AL (v2.76): manual walk/non-drive toggle.** Schema v17→v18: nullable `trips.userIsDrive`
+  (null = auto, true = drive, false = walk). `TripKind` respects it everywhere, so a toggled walk is
+  excluded from You-vs-traffic, Pace, and fuel. Trip-detail ⋮ menu "Mark as walk / not a drive" ↔
+  "Mark as a drive".
+- **Rev AM (v2.77): fix crash on "Pair car".** `CompanionDeviceManager.associate()` threw a system
+  `RemoteException` (`enforceUsesCompanionDeviceFeature`) because the manifest lacked
+  `<uses-feature android:name="android.software.companion_device_setup">`. Added it + wrapped `associate()`
+  in try/catch (surfaces as a log line + in-app error instead of crashing).
+- **Rev AN (v2.78): lane-detection data enabler.** Schema v18→v19: per-fix accuracy estimates on
+  `locations` (bearing/speed/vertical) + a raw `gnss_measurements` table (per-satellite carrier phase =
+  `accumulatedDeltaRange` + Doppler = `pseudorangeRate`, C/N0, L1/L5 carrier frequency), captured via
+  `GnssMeasurementsEvent.Callback` behind a Diagnostics "High-precision GNSS" toggle (off by default —
+  voluminous). Validated: one drive captured 3,224 rows / 23 sats / 888 L5-band.
+- **Rev AO (v2.79): persistent "armed" watcher — hands-free auto-start that works.** Field test proved
+  CompanionDeviceManager can't pair/observe a classic-Bluetooth car (its chooser only lists *discoverable*
+  devices; the Tucson never appears) and a manifest `ACTION_POWER_CONNECTED` receiver never fires
+  backgrounded. New `AutoRecordWatchService`: a persistent low-importance FGS that, while auto-record is
+  enabled, runtime-registers the charger/BT broadcasts (these DO fire while a service runs) and — being a
+  running FGS — lets `AutoRecordController.arm()` start `RecordingService` from the background. Started from
+  the settings toggle + `TripApp.onCreate` + `BootReceiver`; removed the dead manifest receivers; permissions
+  `FOREGROUND_SERVICE_SPECIAL_USE` + `RECEIVE_BOOT_COMPLETED`. Validated end-to-end on-device via a simulated
+  `dumpsys battery` charge cycle (`ARM → FGS start OK → AUTO_ARM → motion-confirm FAILED → discard`). Cost: a
+  permanent silent "Auto-record on" notification.
+
 ## Rev AG–AK (2026-06-25) — auto-record root-cause fix, harsh-stop, you-vs-traffic redesign
 
 - **Rev AG (v2.71): CompanionDeviceManager hands-free auto-start.** Field test confirmed manifest

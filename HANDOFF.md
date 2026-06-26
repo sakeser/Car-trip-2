@@ -1,7 +1,8 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-25 · App version **2.75 (build 86)** · Branch `main` (Rev AG–AK shipped + pushed;
-the **CompanionDeviceManager hands-free auto-start (Rev AG)** still needs the owner's on-device drive test)_
+_Last updated: 2026-06-26 · App version **2.79 (build 90)** · Branch `main` (Rev AL–AO shipped + pushed).
+**Hands-free auto-record now works** via a persistent "armed" watcher service (Rev AO) — validated
+on-device end-to-end; the owner's narrated drives remain the real-world validation._
 
 This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HANDOFF.md`
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
@@ -14,16 +15,18 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - Android app (Kotlin, Jetpack Compose, Room, Google Maps) that records trips from phone GPS +
   motion sensors, analyzes them offline, and enriches with Google traffic ETAs, OSM speed limits,
   and Google Sheets sync. Package `com.cartrip.analyzer`.
-- **Branch `main` = `origin/main`** at `c236b89` (Rev AK, v2.75) — fully pushed. Work happens on `main`.
+- **Branch `main` = `origin/main`** at `ada46a7` (Rev AO, v2.79) — fully pushed. Work happens on `main`.
   (Pushing to `main` needs explicit per-turn user authorization — the owner has authorized the ongoing
   ship-and-push workflow for this project.) `rev-g-functional` is a vestigial mirror ref; it has NOT
   been fast-forwarded since `ea2fa88` (the auto-classifier blocks force-moving/pushing it) — ignore it
   or sync it manually if wanted.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.75/86** (Rev AK). Device auto-locks fast; for a
+- Installed on the Samsung **S25 (SM_S931W)** as **2.79/90** (Rev AO). Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
-- **89 unit tests**, all green. Room schema **v17** (no schema change Rev G→AK; recent work is
-  detector/scoring, computed features, and UI).
+- **92 unit tests**, all green. Room schema **v19**: v18 added the walk/non-drive override
+  (`trips.userIsDrive`, nullable); v19 added per-fix GPS accuracy estimates (`locations.bearing/speed/
+  verticalAccuracy`) + a raw **`gnss_measurements`** table (carrier phase + Doppler, toggle-gated) for
+  the lane-detection R&D.
 - **Recent arc:** Rev K–M = field-test calibration; **Rev N** = fuel/cost; **Rev O** = geocoded names;
   **Rev P–T** = trip-detail/past-trips **UI overhaul** + polish + hybrid fuel; **Rev U** =
   **auto-recording trigger first cut** (charging/Bluetooth → provisional record + motion-confirm +
@@ -43,8 +46,17 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
   events + Safety/Comfort penalty; **Rev AJ** = you-vs-traffic redesigned as one **to-scale timeline**
   (no-traffic + traffic-delay box, "you" marker anywhere, animated) + trip-screen diagnostic cleanup
   (removed Data-quality row, detector-comparison, raw-signal dumps); **Rev AK** = timeline label-overlap
-  fix (fixed left/right legend) + **time-only trip titles** (no date). The owner drives a hybrid 2023
-  Tucson, phone wireless-charging on a mount.
+  fix (fixed left/right legend) + **time-only trip titles** (no date); **Rev AL** = manual
+  **walk/non-drive toggle** (schema v18 `userIsDrive`, excluded from all drive metrics); **Rev AM** =
+  fixed a crash on "Pair car" (missing `android.software.companion_device_setup` uses-feature);
+  **Rev AN** = **lane-detection data enabler** (per-fix accuracy estimates + raw GNSS carrier-phase/
+  Doppler capture behind a Diagnostics toggle, schema v19); **Rev AO** = **persistent "armed" watcher
+  service — the hands-free auto-start that finally works.** Field-proven that (a) `CompanionDeviceManager`
+  can't pair/observe a classic-Bluetooth car (the chooser only shows discoverable devices; the Tucson
+  never appears) and (b) a manifest `ACTION_POWER_CONNECTED` receiver never fires backgrounded. The
+  watcher runtime-registers the charger/BT broadcasts AND, being a running FGS, lets the recording
+  service start from the background — validated end-to-end on-device via a simulated charge cycle. The
+  owner drives a hybrid 2023 Tucson, phone wireless-charging on a mount.
 - The separate UX-redesign worktree (`C:\Users\sinan\OneDrive\Desktop\cartrip`, branch
   `ux-redesign-v1`) is **untouched and unrelated** — do not merge it in.
 - ⚠️ **Source-encoding trap:** this Windows build mojibakes non-ASCII **string literals** in BOM-less
@@ -120,15 +132,43 @@ Pipeline: **record → analyze (offline) → persist → enrich → present.**
 
 | Area | Key files |
 |---|---|
-| Recording | `record/RecordingService.kt` (FG service, GPS+sensors+GNSS), `record/RecordingState.kt` (live state), `record/AutoStop.kt` (retrospective end-time, pure) |
+| Recording | `record/RecordingService.kt` (FG service, GPS+sensors+GNSS+raw-GNSS; `ACTION_AUTO_ARM` = provisional record + 90 s motion-confirm by GPS **or** accelerometer vibration + discard; `ACTION_AUTO_STOP_GRACE` = retrospective-trim stop), `record/RecordingState.kt` (live state), `record/AutoStop.kt` (retrospective end-time, pure) |
+| Auto-record | **`record/AutoRecordWatchService.kt`** = persistent "armed" FGS, the reliable hands-free trigger (see note below); `record/AutoRecordController.kt` (decision dispatch → arm/stop), `record/AutoRecordPolicy.kt` (pure trigger logic, unit-tested), `record/AutoRecordPrefs.kt`, `record/AutoRecordLog.kt` (Diagnostics decision log), `record/BootReceiver.kt` (re-arm after reboot), `record/CompanionCarManager.kt` + `record/CarPresenceService.kt` (CompanionDeviceManager — secondary/unreliable for classic-BT cars), `record/GnssLoggingPrefs.kt` (raw-GNSS toggle). Dead: `record/PowerConnectionReceiver.kt` / `record/CarBluetoothReceiver.kt` (manifest registration removed in Rev AO) |
 | Analysis | `analysis/TripAnalyzer.kt` (Kalman/RTS speed+accel, events, metrics), `analysis/MotionFusion.kt` (potholes/rough-road/harsh-stops), `analysis/FusedEventDetector.kt` (magnitude-first sensor detector), `analysis/FuelEstimator.kt` (pure fuel/cost model), `analysis/GnssQuality.kt`, `analysis/SpeedTier.kt` |
-| Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema v17 + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
+| Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema **v19** + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
 | Cloud | `cloud/SpeedLimits.kt` (OSM/Overpass + tile cache), `cloud/Tiles.kt`, `cloud/RoutesClient.kt` (Google Routes ETA), `cloud/TripSync.kt`/`SheetsClient.kt`/`GoogleAuth.kt` (Sheets) |
 | UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/TripKind.kt` (walk/non-drive guard), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref), `ui/Components.kt` (shared bits + Options sheet) |
 
 Speed/accel are estimated with a **constant-acceleration Kalman filter + RTS smoother** (offline,
 zero-lag) with ZUPT at stops. The GPS detector drives scoring; the sensor-fused detector is
 "review-grade" (counts compared, peak-G used when motion rate is high enough).
+
+### Auto-record architecture (Rev AO — IMPORTANT, hard-won)
+
+Hands-free auto-start was field-broken for three platform reasons, all now solved:
+1. A **manifest `ACTION_POWER_CONNECTED` receiver never fires when the app is backgrounded** (it's not on
+   the implicit-broadcast exemption list), so the charger trigger was dead. (`ACL_CONNECTED` *is* exempt.)
+2. Even a background receiver **can't start a `location` FGS** on Android 12+ (`ForegroundServiceStartNotAllowedException`).
+3. **`CompanionDeviceManager` can't pair/observe a classic-Bluetooth car** — its chooser does a
+   *discoverable* scan, so a bonded-but-not-discoverable car stereo never appears (the owner only saw
+   random MACs and accidentally paired the wrong device `3C:E0:…`).
+
+**The fix — `AutoRecordWatchService`:** while auto-record is enabled, a persistent low-importance FGS
+runs. It (a) **runtime-registers** the charger/BT broadcasts (runtime receivers DO fire while a service
+is alive), and (b) being a running FGS, puts the app in a foreground state so `AutoRecordController.arm()`
+is *permitted* to start `RecordingService` from the background. Started from the settings toggle +
+`TripApp.onCreate` + `BootReceiver` (reboot). Real-drive flow:
+`charger-on/bt-connect → ARM → FGS start OK → AUTO_ARM (provisional) → motion-confirm OK (gps ≥ 5 km/h OR
+vibration ≥ 0.30) → … → unplug → AUTO_STOP_GRACE (trim to rest)`. **Every step is logged to `AutoRecordLog`
+(Diagnostics → "Auto-record log"); read it after any drive — it is the debugging tool.** Validated
+end-to-end on-device via a simulated `dumpsys battery` charge cycle (ARM → FGS OK → discard for a non-drive).
+
+**Known limitations / TODO:** (a) no re-arm if you wait > 90 s after the trigger before driving
+(provisional discards, no restart until a new trigger event — a re-arm-on-motion fix is wanted); (b)
+start-side trip trim not done (the parked seconds before pulling away aren't trimmed — the *stop* side is);
+(c) CDM kept as a secondary path; the wrong association could be cleaned up with a "remove pairing" button;
+(d) with `requireWireless=false`, charging *anywhere* arms-then-discards a 90 s provisional. **Cost:** a
+permanent silent "Auto-record on" notification (the accepted tradeoff).
 
 ---
 
@@ -215,14 +255,16 @@ Full detail in `REV_HISTORY.md`. Condensed:
 
 ---
 
-## 5. Data model & schema (Room v17)
+## 5. Data model & schema (Room v19)
 
 Tables: `trips`, `locations`, `motions`, `analysis_points`, `drive_events`, `cached_ways`,
-`cached_tiles`, `gnss_samples`. Migrations `1→17` are all present in `AppDatabase.kt` and
-verified on-device.
+`cached_tiles`, `gnss_samples`, **`gnss_measurements`** (raw per-satellite GNSS, lane R&D). Migrations
+`1→19` are all present in `AppDatabase.kt` and verified on-device. **v18** = `trips.userIsDrive`
+(nullable walk/non-drive override); **v19** = `locations.bearingAccuracy/speedAccuracy/verticalAccuracy`
++ the `gnss_measurements` table.
 
-- **Raw retention:** `locations`/`motions`/`gnss_samples` for completed trips are purged after
-  **30 days** (`RAW_SENSOR_RETENTION_MS`). Re-analysis only works while raw data survives.
+- **Raw retention:** `locations`/`motions`/`gnss_samples`/`gnss_measurements` for completed trips are
+  purged after **30 days** (`RAW_SENSOR_RETENTION_MS`). Re-analysis only works while raw data survives.
 - **Speed-limit cache:** ways keyed by stable OSM way id; tiles (~2.2 km, `TILE_DEG=0.02`) mark
   fetched areas; 30-day TTL; OSM/ODbL permits caching with attribution (source+timestamp stored).
 - **GNSS:** per-trip summary columns on `trips` (`gnssAvgSatsUsed`, `gnssAvgCn0`, `gnssTopCn0`,
@@ -373,26 +415,26 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
-> **Status update (Rev AG–AK, 2026-06-25):**
-> - **Auto-record (item 1) — root-caused + redesigned.** Field test (v2.70) confirmed manifest broadcast
->   receivers (charger `ACTION_POWER_CONNECTED`, classic-BT `ACL_CONNECTED`) **never fire while the app is
->   backgrounded** on the S25 — the auto-record decision log stayed at one foreground entry across multiple
->   background test drives. **Rev AG** adds the real fix: **`CompanionDeviceManager`** — associate the car
->   once (system dialog in the Auto-record screen → "Pair car for hands-free start"), then
->   `startObservingDevicePresence` makes the OS call `record/CarPresenceService` directly on connect (even
->   backgrounded) and, on API 34+, grants a background FGS start. New files `CompanionCarManager.kt` +
->   `CarPresenceService.kt`; `AutoRecordController.onCompanionPresence` arms via the existing provisional +
->   90 s motion-confirm. **STILL NEEDS the owner's real drive** to confirm the `cdm-observe → onDeviceAppeared
->   → ARM → FGS start OK` log chain (can't be exercised over USB). See memory `autostart-background-receiver-dead-finding`.
-> - **Harsh-stop detector (was §6/§8 weak spot) — DONE (Rev AH/AI).** Recalibrated against 27 real trips
->   (pulled DB + Python replay): fixed the 1 Hz stop-gate and replaced noisy jerk with smoothed peak
->   horizontal decel ≥ 3.0 m/s². Now emitted as `EventType.HARSH_STOP` map events (filterable "Stops"
->   chip) and penalized in Safety + Comfort. See memory `harsh-stop-recalibration`.
-> - **You-vs-traffic redesign — DONE (Rev AJ/AK).** Single to-scale timeline; trip screen de-cluttered
->   (Data-quality row, detector-comparison, raw-signal dumps removed); titles are time-only.
-> - **Still TODO:** severe-corner count (item 2, schema v18), Insights depth (item 4), rough-stretch
->   mapping (item 5), START-side auto-trip trim (mirror of the shipped end-trim), walk/non-drive manual
->   toggle. The original item 1 text below describes the **superseded** Rev U receiver design (kept for history).
+> **Status update (Rev AL–AO, 2026-06-26):**
+> - **Auto-record (item 1) — DONE & validated on-device (Rev AO).** The hands-free trigger now works via a
+>   **persistent `AutoRecordWatchService`** (see §3 "Auto-record architecture (Rev AO)"). The earlier CDM
+>   approach (Rev AG) was field-debugged and **couldn't pair the classic-Bluetooth Tucson** (its chooser
+>   only lists *discoverable* devices; the owner accidentally paired a random device) — kept as a secondary
+>   path. The watcher chain `charger-on → ARM → FGS start OK → AUTO_ARM → motion-confirm → discard` was
+>   validated via a simulated `dumpsys battery` charge cycle; the owner's narrated drive is the final
+>   real-world confirmation. See memory `autostart-background-receiver-dead-finding`.
+> - **Walk/non-drive toggle — DONE (Rev AL).** Manual `trips.userIsDrive` override (schema v18); a toggled
+>   walk is excluded from You-vs-traffic, Pace, and fuel everywhere via `TripKind`.
+> - **Lane-detection data capture — DONE (Rev AN).** Per-fix accuracy estimates + raw GNSS (carrier phase +
+>   Doppler) behind a Diagnostics toggle; validated capturing (3.2k rows / 888 L5-band on one drive). The
+>   offline lane algorithm (lateral offset → lane-change detector → anchored absolute lane + confidence) is
+>   the next R&D step, gated on a narrated 401 calibration drive.
+> - **Harsh-stop detector — DONE (Rev AH/AI).** Recalibrated from 27 trips; `EventType.HARSH_STOP` map
+>   events + Safety/Comfort penalty. See memory `harsh-stop-recalibration`.
+> - **You-vs-traffic redesign — DONE (Rev AJ/AK).** Single to-scale timeline; trip screen de-cluttered.
+> - **Still TODO:** auto-record **re-arm-on-motion** + **START-side trip trim** (see §3 limitations);
+>   severe-corner count (item 2); Insights depth (item 4); rough-stretch mapping (item 5); lane-detection
+>   offline algorithm. The Rev U receiver design below is **superseded** (kept for history).
 
 1. **Auto-recording trigger (Rev U) — SUPERSEDED by Rev AG CompanionDeviceManager (see status box above).** Hands-free start/stop
    so the owner never taps Start. Context: the phone is **always wireless-charging on a mount in the
