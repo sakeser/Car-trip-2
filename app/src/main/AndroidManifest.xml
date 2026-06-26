@@ -13,6 +13,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Auto-recording (Rev U): read paired car device for the Bluetooth trigger / picker. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Auto-recording (Rev AG): CompanionDeviceManager hands-free start. Observing the car's presence
+         calls our CompanionDeviceService directly (bypasses the manifest receivers that never fire in the
+         background) and, on API 34+, grants a background foreground-service start so the trip starts
+         silently. -->
+    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
@@ -79,6 +87,17 @@
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
             </intent-filter>
         </receiver>
+
+        <!-- Auto-recording (Rev AG): the OS binds this and calls onDeviceAppeared when the associated car
+             comes into range, even with the app backgrounded. This is the reliable hands-free trigger. -->
+        <service
+            android:name=".record.CarPresenceService"
+            android:exported="true"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService" />
+            </intent-filter>
+        </service>
 
     </application>
 </manifest>

@@ -1,12 +1,16 @@
 package com.cartrip.analyzer.ui
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.companion.AssociationInfo
+import android.companion.CompanionDeviceManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.cartrip.analyzer.record.AutoRecordPrefs
+import com.cartrip.analyzer.record.CompanionCarManager
 
 /**
  * Auto-record settings (Rev U). Off by default. Charging (the phone wireless-charges on the car mount)
@@ -58,6 +64,38 @@ fun AutoRecordScreen(onBack: () -> Unit) {
     var useBluetooth by remember { mutableStateOf(AutoRecordPrefs.useBluetooth(context)) }
     var carBtName by remember { mutableStateOf(AutoRecordPrefs.carBtName(context)) }
     var showPicker by remember { mutableStateOf(false) }
+
+    val cdmSupported = remember { CompanionCarManager.supported(context) }
+    var companionAssociated by remember { mutableStateOf(CompanionCarManager.hasAssociation(context)) }
+    var companionMsg by remember { mutableStateOf<String?>(null) }
+
+    val pairLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && Build.VERSION.SDK_INT >= 33) {
+            val info: AssociationInfo? =
+                result.data?.getParcelableExtra(CompanionDeviceManager.EXTRA_ASSOCIATION, AssociationInfo::class.java)
+            val mac = info?.deviceMacAddress?.toString()?.uppercase()
+            val nm = info?.displayName?.toString()
+            AutoRecordPrefs.setCompanionAssociated(context, true)
+            if (mac != null) AutoRecordPrefs.setCarBt(context, mac, nm ?: carBtName)
+            companionAssociated = true
+            if (nm != null) carBtName = nm
+            val n = CompanionCarManager.startObserving(context)
+            companionMsg = "Paired${nm?.let { " with $it" } ?: ""}. Now watching for your car ($n device${if (n == 1) "" else "s"})."
+        } else {
+            companionMsg = "Pairing cancelled."
+        }
+    }
+
+    fun pairCar() {
+        companionMsg = null
+        CompanionCarManager.requestAssociation(
+            context,
+            onChooser = { sender -> pairLauncher.launch(IntentSenderRequest.Builder(sender).build()) },
+            onError = { msg -> companionMsg = "Couldn't start pairing: $msg" }
+        )
+    }
 
     val btPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -106,6 +144,38 @@ fun AutoRecordScreen(onBack: () -> Unit) {
             }
 
             if (enabled) {
+                if (cdmSupported) {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Hands-free background start (recommended)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                "Pair your car once below. Android then wakes the app the moment your car connects " +
+                                    "- even when it's closed - so a trip can start silently in the background. This is " +
+                                    "the only reliable way to auto-start without opening the app first.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                if (companionAssociated) "Status: car paired" else "Status: not paired yet",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Button(onClick = { pairCar() }) {
+                                Text(if (companionAssociated) "Re-pair car" else "Pair car for hands-free start")
+                            }
+                            companionMsg?.let {
+                                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                    }
+                }
+
                 ToggleRow("Require wireless charging", "Ignore wired charging (e.g. at home)", requireWireless) {
                     requireWireless = it; AutoRecordPrefs.setRequireWireless(context, it)
                 }
@@ -130,9 +200,10 @@ fun AutoRecordScreen(onBack: () -> Unit) {
 
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Text(
-                        "Note: Android may not let the app auto-start fully in the background. If so, you'll " +
-                            "get a \"Drive detected — tap to start\" notification instead of a silent start. " +
-                            "Manual Start/Stop always works.",
+                        "Without hands-free pairing, charging and car-Bluetooth can only auto-start while the " +
+                            "app is open - Android blocks background starts from those signals. If a background " +
+                            "start is ever blocked you'll get a \"Drive detected - tap to start\" notification " +
+                            "instead. Manual Start/Stop always works.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(12.dp)

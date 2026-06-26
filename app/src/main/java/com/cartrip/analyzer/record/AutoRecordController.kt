@@ -65,6 +65,31 @@ object AutoRecordController {
         }
     }
 
+    /**
+     * Hands-free trigger from [CarPresenceService] (CompanionDeviceManager). The car coming into range IS
+     * the in-car signal here, so -- unlike [reevaluate] -- this does not consult the charger/Bluetooth
+     * policy; the service's motion-confirm still discards a non-drive, so a stray connect never keeps a
+     * trip. Charging state is logged for diagnostics only.
+     */
+    fun onCompanionPresence(context: Context, present: Boolean) {
+        if (!AutoRecordPrefs.enabled(context)) {
+            AutoRecordLog.add(context, "cdm-${if (present) "appeared" else "disappeared"}: ignored (auto-record off)")
+            return
+        }
+        val (charging, wireless) = chargeState(context)
+        val recording = RecordingState.state.value.recording
+        val state = "chg=$charging wl=$wireless rec=$recording"
+        when {
+            present -> { AutoRecordLog.add(context, "cdm-appeared -> ARM [$state]"); arm(context) }
+            recording -> {
+                AutoRecordLog.add(context, "cdm-disappeared -> STOP-grace [$state]")
+                send(context, RecordingService.ACTION_AUTO_STOP_GRACE)
+            }
+            // Car left while nothing is recording: don't spin up the service for a no-op stop.
+            else -> AutoRecordLog.add(context, "cdm-disappeared -> no-op (not recording) [$state]")
+        }
+    }
+
     private fun arm(context: Context) {
         val intent = Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_AUTO_ARM)
         try {

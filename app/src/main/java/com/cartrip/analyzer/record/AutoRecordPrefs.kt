@@ -25,6 +25,12 @@ object AutoRecordPrefs {
     fun setCarBt(c: Context, address: String?, name: String?) =
         p(c).edit().putString("carBtAddress", address).putString("carBtName", name).apply()
 
+    // Hands-free pairing via CompanionDeviceManager (Rev AG). Set once the user associates their car;
+    // the live source of truth is CompanionDeviceManager.myAssociations, this just drives the UI label
+    // and whether app-start re-arms presence observation.
+    fun companionAssociated(c: Context) = p(c).getBoolean("companionAssociated", false)
+    fun setCompanionAssociated(c: Context, v: Boolean) = p(c).edit().putBoolean("companionAssociated", v).apply()
+
     fun config(c: Context) = AutoRecordPolicy.Config(
         enabled = enabled(c),
         requireWireless = requireWireless(c),
