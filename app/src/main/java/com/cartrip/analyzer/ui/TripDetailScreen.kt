@@ -923,7 +923,7 @@ private fun SafetyFactorsCard(
             if (hasLimits) {
                 // Speed limits auto-fetch on open and cache by OSM way id, so no manual "refresh" button.
                 val notable = speedingSummary != null && speedingSummary.speedingDurationS >= 1.0
-                SpeedingSummaryRow(speedingSummary = if (notable) speedingSummary else null, points = points)
+                SpeedingSummaryRow(if (notable) speedingSummary else null)
             } else {
                 if (needsMapRefresh) {
                     Text(
@@ -970,136 +970,95 @@ private fun SafetyFactorsCard(
 }
 
 private val SPEED_BLUE = Color(0xFF0EA5E9)   // matches the map route polyline
-private val SPEED_YELLOW = Color(0xFFF59E0B)
 private val SPEED_RED = Color(0xFFEF4444)
 
 @Composable
-private fun SpeedingSummaryRow(speedingSummary: SpeedingSummary?, points: List<TrackPoint>) {
+private fun SpeedingSummaryRow(speedingSummary: SpeedingSummary?) {
     val color = if (speedingSummary != null) SPEED_RED else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(
-                    modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp))
-                        .background(color.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Speed, contentDescription = null, tint = color)
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Speeding", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
-                    if (speedingSummary == null) {
-                        Text(
-                            "No notable speeding on covered roads.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        // Headline lives here (full row width) so "+11 km/h over the limit" reads on
-                        // one line instead of wrapping inside the narrow side gauge.
-                        val over = (speedingSummary.peakSpeedKmh - speedingSummary.peakLimitKmh)
-                            .roundToInt().coerceAtLeast(1)
-                        Text(
-                            "+$over km/h over the limit",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = SPEED_RED,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Text(
-                            "for ${Format.durationFloorMin(speedingSummary.speedingDurationS)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            // The trip as a blue line, turning yellow (0-10 over) / red (10+ over) where you sped.
-            SpeedTierSparkline(points)
-        }
-        // Peak vs limit as a vertical speed-gauge on the side.
-        if (speedingSummary != null) {
-            PeakSpeedGauge(speedingSummary.peakSpeedKmh, speedingSummary.peakLimitKmh)
-        }
-    }
-}
-
-/** Thin strip spanning the whole trip, coloured by per-point over-limit tier. */
-@Composable
-private fun SpeedTierSparkline(points: List<TrackPoint>) {
-    val tiers = remember(points) { points.map { SpeedTier.of(it.speedKmh, it.speedLimitKmh) } }
-    Canvas(modifier = Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp))) {
-        val w = size.width; val h = size.height
-        val n = tiers.size
-        if (n < 2) { drawRect(SPEED_BLUE, size = size); return@Canvas }
-        for (i in 0 until n - 1) {
-            val tier = SpeedTier.worse(tiers[i], tiers[i + 1])
-            val col = when (tier) {
-                SpeedTier.Tier.RED -> SPEED_RED
-                SpeedTier.Tier.YELLOW -> SPEED_YELLOW
-                SpeedTier.Tier.NONE -> SPEED_BLUE
-            }
-            val x0 = w * i / (n - 1)
-            val x1 = w * (i + 1) / (n - 1)
-            drawRect(col, topLeft = Offset(x0, 0f), size = Size(x1 - x0 + 1f, h))
-        }
-    }
-}
-
-/**
- * Compact vertical gauge for the side of the speeding row: peak speed filled bottom-up — blue up to
- * the limit, red for the overage — with a limit tick. Pure visual: the "+X km/h over" headline now
- * lives in the full-width text column, so here we just label the peak value and the limit.
- */
-@Composable
-private fun PeakSpeedGauge(peakKmh: Double, limitKmh: Double) {
-    val overKmh = peakKmh - limitKmh
-    val over = overKmh > 0.5
-    val maxV = (maxOf(peakKmh, limitKmh) * 1.12).coerceAtLeast(1.0)
-    val peakFrac = (peakKmh / maxV).toFloat().coerceIn(0.04f, 1f)
-    val limitFrac = (limitKmh / maxV).toFloat().coerceIn(0.02f, 0.99f)
-    val barH = 54.dp
     Column(
-        modifier = Modifier.width(46.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            "${peakKmh.roundToInt()}",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = if (over) SPEED_RED else SPEED_BLUE,
-            maxLines = 1
-        )
-        Box(
-            modifier = Modifier.width(14.dp).height(barH).clip(RoundedCornerShape(7.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            // Full peak fill (red when over the limit, else blue)...
-            Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(peakFrac).background(if (over) SPEED_RED else SPEED_BLUE))
-            // ...then re-cover the part below the limit in blue so only the overage stays red.
-            if (over) {
-                Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(minOf(peakFrac, limitFrac)).background(SPEED_BLUE))
-            }
-            // Limit tick.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp)
-                    .offset(y = -(barH * limitFrac))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                modifier = Modifier.size(34.dp).clip(RoundedCornerShape(17.dp))
+                    .background(color.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Speed, contentDescription = null, tint = color)
+            }
+            Text(
+                "Speeding",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                modifier = Modifier.weight(1f)
             )
         }
-        Text(
-            "limit ${limitKmh.roundToInt()}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
+        if (speedingSummary == null) {
+            Text(
+                "No notable speeding on covered roads.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            // 1) Share of moving time spent over the limit. 2) Top speed vs the limit, overage in red.
+            SpeedingShareBar(speedingSummary)
+            PeakLimitBar(speedingSummary.peakSpeedKmh, speedingSummary.peakLimitKmh)
+        }
+    }
+}
+
+/** Horizontal bar: red fill = fraction of covered moving time spent over the limit. */
+@Composable
+private fun SpeedingShareBar(s: SpeedingSummary) {
+    val frac = if (s.coveredMovingDurationS > 0.0) {
+        (s.speedingDurationS / s.coveredMovingDurationS).toFloat().coerceIn(0f, 1f)
+    } else 0f
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Over the limit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${s.percentText()} of moving time", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SPEED_RED)
+        }
+        Box(
+            modifier = Modifier.fillMaxWidth().height(11.dp).clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f))
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(frac.coerceAtLeast(0.015f)).fillMaxHeight()
+                    .clip(RoundedCornerShape(6.dp)).background(SPEED_RED)
+            )
+        }
+    }
+}
+
+/** Horizontal speed bar: blue up to the limit, red for the overage. Labels for limit, peak, and over. */
+@Composable
+private fun PeakLimitBar(peakKmh: Double, limitKmh: Double) {
+    val over = (peakKmh - limitKmh).coerceAtLeast(0.0)
+    val maxV = (peakKmh * 1.15).coerceAtLeast(1.0)
+    val limitW = limitKmh.toFloat().coerceAtLeast(0.001f)
+    val overW = over.toFloat().coerceAtLeast(0.001f)
+    val restW = (maxV - peakKmh).toFloat().coerceAtLeast(0.001f)
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Top speed vs limit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${peakKmh.roundToInt()} km/h", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SPEED_RED)
+        }
+        Box(
+            modifier = Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f))
+        ) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(limitW).fillMaxHeight().background(SPEED_BLUE))
+                Box(modifier = Modifier.weight(overW).fillMaxHeight().background(SPEED_RED))
+                Box(modifier = Modifier.weight(restW))   // empty headroom shows the track
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Limit ${limitKmh.roundToInt()} km/h", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("+${over.roundToInt().coerceAtLeast(1)} over", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SPEED_RED)
+        }
     }
 }
 

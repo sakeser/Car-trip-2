@@ -4,6 +4,20 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AW (2026-06-26) — re-imagined Speeding visual (Trip detail)
+
+The Driving card's Speeding block was visually sloppy (a full-trip color sparkline crammed under the
+label, plus a narrow vertical peak gauge on the side). Replaced with two clean, well-proportioned
+**horizontal bars**:
+- **Share bar** — "Over the limit — X% of moving time" with a red fill = fraction of covered moving time
+  spent over the limit (uses the existing `SpeedingSummary.coveredMovingDurationS`).
+- **Top-speed-vs-limit bar** — a horizontal bar that's blue up to the limit and red for the overage, with
+  "Top speed N km/h" + "Limit M km/h" + "+over" labels.
+Removed `SpeedTierSparkline` and `PeakSpeedGauge` (+ the now-unused `SPEED_YELLOW`). Verified on-device on
+a highway trip (2% of moving time, limit 50 / peak 71 / +21 over). The event-summary rows already used
+horizontal intensity bars, so the whole Driving card now reads consistently.
+- v2.86/97 → **v2.87/98**. 95 tests, no schema change.
+
 ## Rev AV (2026-06-26) — discard trivially short trips + alert
 
 - **A trip under 5 m total distance OR under 10 s total duration is no longer saved.** After
