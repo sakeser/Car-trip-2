@@ -1,11 +1,18 @@
 package com.cartrip.analyzer.ui
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -31,6 +38,25 @@ object UiPrefs {
 
     fun youIcon(ctx: Context): YouIcon =
         YouIcon.fromKey(prefs(ctx).getString(KEY_YOU_ICON, null))
+
+    /**
+     * Observe the selected "you" icon as Compose state. Reads fresh on each composition AND updates
+     * live when the Options picker changes it, so the map replay marker always matches the choice
+     * (a plain `remember { youIcon() }` would cache the value and ignore later changes).
+     */
+    @Composable
+    fun rememberYouIcon(ctx: Context): YouIcon {
+        val p = remember(ctx) { prefs(ctx) }
+        var icon by remember { mutableStateOf(youIcon(ctx)) }
+        DisposableEffect(p) {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+                if (key == null || key == KEY_YOU_ICON) icon = YouIcon.fromKey(sp.getString(KEY_YOU_ICON, null))
+            }
+            p.registerOnSharedPreferenceChangeListener(listener)
+            onDispose { p.unregisterOnSharedPreferenceChangeListener(listener) }
+        }
+        return icon
+    }
 
     fun setYouIcon(ctx: Context, icon: YouIcon) {
         prefs(ctx).edit().putString(KEY_YOU_ICON, icon.key).apply()

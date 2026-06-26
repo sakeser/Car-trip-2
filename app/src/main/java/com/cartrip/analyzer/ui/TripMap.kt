@@ -89,14 +89,13 @@ fun TripMap(
     val swerveIcon = remember { markerIcon(MarkerGlyph.SWERVE, AndroidColor.rgb(147, 51, 234), 67) }
     val potholeIcon = remember { markerIcon(MarkerGlyph.BUMP, AndroidColor.rgb(245, 158, 11), 84) }
     val harshStopIcon = remember { markerIcon(MarkerGlyph.HARSH_STOP, AndroidColor.rgb(219, 39, 119), 72) }
-    // The "you" replay marker glyph is user-selectable (Options -> Your trip icon).
-    val youGlyph = remember {
-        when (UiPrefs.youIcon(context)) {
-            UiPrefs.YouIcon.CAR -> MarkerGlyph.CAR
-            UiPrefs.YouIcon.ARROW -> MarkerGlyph.ARROW
-            UiPrefs.YouIcon.PERSON -> MarkerGlyph.PERSON
-            UiPrefs.YouIcon.DOT -> MarkerGlyph.DOT
-        }
+    // The "you" replay marker glyph is user-selectable (Options -> Your trip icon). Read it reactively
+    // so changing the pref actually updates the marker (a no-key remember would cache the first value).
+    val youGlyph = when (UiPrefs.rememberYouIcon(context)) {
+        UiPrefs.YouIcon.CAR -> MarkerGlyph.CAR
+        UiPrefs.YouIcon.ARROW -> MarkerGlyph.ARROW
+        UiPrefs.YouIcon.PERSON -> MarkerGlyph.PERSON
+        UiPrefs.YouIcon.DOT -> MarkerGlyph.DOT
     }
     val replayIcon = remember(youGlyph) { markerIcon(youGlyph, AndroidColor.rgb(14, 165, 233), 92) }
     // Start/end markers act like the bottom-left chips: first tap shows the label, a second tap opens

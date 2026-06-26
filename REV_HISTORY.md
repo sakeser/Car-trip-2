@@ -4,6 +4,15 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AX (2026-06-26) — fix "Your trip icon" not affecting the map marker
+
+The Options -> "Your trip icon" picker (Car/Arrow/Person/Dot) saved correctly but the map replay marker
+never changed: `TripMap` read the glyph via a **no-key `remember { }`** that cached the first value and
+ignored later changes. Added `UiPrefs.rememberYouIcon()` (observes the pref via an
+`OnSharedPreferenceChangeListener`) and used it in `TripMap`, so the replay marker now reflects the choice
+live and on every trip open. Verified on-device: switching to Dot makes the moving marker a blue dot.
+- v2.87/98 → **v2.88/99**. 95 tests, no schema change.
+
 ## Rev AW (2026-06-26) — re-imagined Speeding visual (Trip detail)
 
 The Driving card's Speeding block was visually sloppy (a full-trip color sparkline crammed under the
