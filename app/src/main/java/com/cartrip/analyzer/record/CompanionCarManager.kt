@@ -57,16 +57,23 @@ object CompanionCarManager {
             .setSingleDevice(false)
             .build()
         AutoRecordLog.add(context, "cdm-associate: requesting (chooser)")
-        manager.associate(request, object : CompanionDeviceManager.Callback() {
-            override fun onAssociationPending(intentSender: IntentSender) = onChooser(intentSender)
-            override fun onAssociationCreated(associationInfo: AssociationInfo) {
-                // Also delivered via the activity result; nothing to do here.
-            }
-            override fun onFailure(error: CharSequence?) {
-                AutoRecordLog.add(context, "cdm-associate FAILED: ${error ?: "unknown"}")
-                onError(error?.toString() ?: "association failed")
-            }
-        }, Handler(Looper.getMainLooper()))
+        // associate() can throw synchronously (e.g. the platform check for the companion_device_setup
+        // feature) — catch it so the settings screen shows an error instead of crashing the app.
+        try {
+            manager.associate(request, object : CompanionDeviceManager.Callback() {
+                override fun onAssociationPending(intentSender: IntentSender) = onChooser(intentSender)
+                override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                    // Also delivered via the activity result; nothing to do here.
+                }
+                override fun onFailure(error: CharSequence?) {
+                    AutoRecordLog.add(context, "cdm-associate FAILED: ${error ?: "unknown"}")
+                    onError(error?.toString() ?: "association failed")
+                }
+            }, Handler(Looper.getMainLooper()))
+        } catch (e: Exception) {
+            AutoRecordLog.add(context, "cdm-associate THREW: ${e.javaClass.simpleName}: ${e.message}")
+            onError(e.message ?: e.javaClass.simpleName)
+        }
     }
 
     /**
