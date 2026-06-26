@@ -4,6 +4,17 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AV (2026-06-26) — discard trivially short trips + alert
+
+- **A trip under 5 m total distance OR under 10 s total duration is no longer saved.** After
+  `finalizeTrip`, `RecordingService.stopRecording` checks the final metrics; if the trip is below
+  `MIN_TRIP_DISTANCE_M` (5.0) **or** `MIN_TRIP_DURATION_S` (10.0) it deletes it via `deleteTripWithData`,
+  returns to idle (no summary opens), and **alerts the user it wasn't recorded** — a "Trip not recorded"
+  notification (works even when backgrounded, e.g. an auto-stop) plus an in-app message. Catches accidental
+  Start→Stop taps and brief moves that never became a real drive. Applies to manual and auto stops.
+  Verified on-device: a 22 s / 0 m manual trip was discarded with no junk trip + the notice fired.
+- v2.85/96 → **v2.86/97**. 95 tests, no schema change.
+
 ## Rev AU (2026-06-26) — Trip-detail polish (date eyebrow, short-trip fuel chip)
 
 Aesthetic batch on the Trip-detail screen (verified on-device):

@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-26 · App version **2.85 (build 96)** · Branch `main` (Rev AL–AU; AT pushed, AU local).
+_Last updated: 2026-06-26 · App version **2.86 (build 97)** · Branch `main` (Rev AL–AV; AU pushed, AV local).
 **Hands-free auto-record now works** via a persistent "armed" watcher (Rev AO); **Rev AP** fixed the
 charger-trigger (stale-sticky→broadcast-edge); **Rev AQ** fixed a background crash — a `location` FGS started
 from the background on Android 14 needs **`ACCESS_BACKGROUND_LOCATION` ("Allow all the time")**, which the
@@ -226,6 +226,7 @@ Reviewed by reading the code paths, not by driving — so the owner can field-te
 | **No GPS** at start (garage) | motion-confirm via accelerometer vibration (≥ 0.30) | Code ✓ |
 | GPS lost mid-trip (≥ 2 min) | gap counted (`gpsGapCount`), track continues, no crash | Code ✓ |
 | Motion sensor stalls (≥ 15 s) | auto-restart sensors, capped at 6 attempts | Code ✓ |
+| Trip ends **< 5 m** or **< 10 s** (accidental Start→Stop) | deleted, not saved → "Trip not recorded" notice + in-app message (Rev AV) | Device ✓ |
 | Service killed mid-trip (OS/crash) | next start finalizes the orphan as **PARTIAL** (`APP_RECOVERY`) | Code ✓ |
 | Location permission **revoked** mid-trip | `SecurityException` caught; location stops, trip keeps what it has | Code ✓ |
 | Raw GNSS enabled | per-sat rows captured + cleaned on delete/trim/discard (Rev AP) | Device ✓ |
@@ -388,6 +389,9 @@ windows), `HARSH_STOP_JERK=3.0 m/s³`.
 ### Recording — `RecordingService.kt`, `AutoStop.kt`
 `LOCATION_INTERVAL_MS=500` / `FASTEST=250` (**see Open Issue O1 — effectively 1 Hz**), motion ~50 Hz
 (`SENSOR_DELAY_GAME`, written ≥20 ms apart), `MAX_SENSOR_RESTARTS=6`, `AUTO_STOP_IDLE_MS=6 min`.
+**Too-short discard (Rev AV):** after finalize, a trip below `MIN_TRIP_DISTANCE_M=5.0` **or**
+`MIN_TRIP_DURATION_S=10.0` is deleted (not saved) and the user gets a "Trip not recorded" notification +
+in-app message (`postNotRecordedNotice`); the service returns to idle without opening a summary.
 Auto-stop end time: last sample >`MOVING_MPS` (4 km/h) → first sample ≤`STATIONARY_MPS` (0.7 m/s).
 
 ### Scoring — `ui/TripScores.kt`

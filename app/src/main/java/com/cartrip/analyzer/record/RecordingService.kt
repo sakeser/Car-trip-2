@@ -276,13 +276,28 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 requestedReason = if (trimCutoff == null) TripEndReason.MANUAL_STOP else TripEndReason.AUTO_STOP
             )
             if (finalized != null) {
+                val updated = finalized.trip
+                val analysis = finalized.analysis
+
+                // Discard a trivially short trip (e.g. an accidental Start→Stop, or a brief move that
+                // never became a real drive): don't save it — delete it and alert the user instead.
+                if (updated.distanceM < MIN_TRIP_DISTANCE_M || updated.durationS < MIN_TRIP_DURATION_S) {
+                    dao.deleteTripWithData(finishedId)
+                    purgeExpiredRawSamples()
+                    postNotRecordedNotice()
+                    CloudState.set { it.copy(lastMessage = "Trip not recorded - it was too short (under 5 m / 10 s).") }
+                    withContext(Dispatchers.Main) {
+                        RecordingState.reset()   // back to idle without opening a (deleted) summary
+                        stopForegroundCompat()
+                        stopSelf()
+                    }
+                    return@launch
+                }
+
                 purgeExpiredRawSamples()
                 // The trip is analyzed and persisted — open the summary NOW. Network enrichment
                 // (traffic ETA, OSM speed limits, Sheets sync) must never block the UI.
                 RecordingState.completeTrip(finishedId)
-
-                val updated = finalized.trip
-                val analysis = finalized.analysis
                 // Best-effort, time-bounded so a slow/hung network can't keep the service alive.
                 withTimeoutOrNull(120_000L) {
                     if (updated.status == TripStatus.COMPLETED) {
@@ -1022,6 +1037,24 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         runCatching { NotificationManagerCompat.from(this).notify(NOTICE_ID, n) }
     }
 
+    /** Alert (works backgrounded too) that a just-stopped trip was too short to keep. */
+    private fun postNotRecordedNotice() {
+        val open = PendingIntent.getActivity(
+            this, 3,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val n = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Trip not recorded")
+            .setContentText("It was too short to save (under 5 m or 10 s).")
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        runCatching { NotificationManagerCompat.from(this).notify(NOT_RECORDED_NOTICE_ID, n) }
+    }
+
     private fun stopForegroundCompat() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -1110,6 +1143,10 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         const val CHANNEL_ID = "trip_recording"
         private const val NOTIF_ID = 42
         private const val NOTICE_ID = 44 // hands-free-blocked notice (distinct from the recording notif)
+        private const val NOT_RECORDED_NOTICE_ID = 45 // "trip too short, not recorded" alert
+        // A trip this short is an accidental/empty recording, not a drive — discard it and tell the user.
+        private const val MIN_TRIP_DISTANCE_M = 5.0
+        private const val MIN_TRIP_DURATION_S = 10.0
         private const val MAX_SPEED = 75.0 // m/s (~270 km/h) plausibility cap
         private const val LOCATION_INTERVAL_MS = 500L
         private const val LOCATION_FASTEST_INTERVAL_MS = 250L
