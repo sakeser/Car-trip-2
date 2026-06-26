@@ -4,8 +4,9 @@ import java.util.Calendar
 
 /**
  * Differentiates trips that resolve to the **same display name** (e.g. two "North York Loop"
- * drives) by appending a compact start-time suffix, so a list of repeats reads as
- * "North York Loop (10:14am)" / "North York Loop (24 Jun, 4:02pm)".
+ * drives) by appending the compact start *time*, so a list of repeats reads as
+ * "North York Loop (10:14am)" / "North York Loop (4:02pm)". The start time is enough to tell repeats
+ * apart at a glance; the date is left off (the list already groups trips by recency).
  *
  * Pure + UI-free so it can be unit-tested. Only the *shown* name is suffixed — the underlying
  * `trip.name` used for rename/edit is left untouched by callers.
@@ -17,8 +18,7 @@ object TripNaming {
 
     /**
      * Returns id -> shown name. A name owned by a single trip is returned unchanged; a name shared
-     * by 2+ trips gets a suffix: just the time when all the clashers fall on one calendar day,
-     * otherwise date + time.
+     * by 2+ trips gets a start-time suffix (time only, never a date).
      */
     fun disambiguate(entries: List<Entry>): Map<Long, String> {
         val byName = entries.groupBy { it.baseName.trim() }
@@ -28,22 +28,14 @@ object TripNaming {
                 group.forEach { out[it.id] = it.baseName }
                 continue
             }
-            val sameDay = group.map { dayKey(it.startTimeMs) }.distinct().size == 1
             for (e in group) {
-                val suffix = if (sameDay) timeLabel(e.startTimeMs)
-                else "${dateLabel(e.startTimeMs)}, ${timeLabel(e.startTimeMs)}"
-                out[e.id] = "${e.baseName} ($suffix)"
+                out[e.id] = "${e.baseName} (${timeLabel(e.startTimeMs)})"
             }
         }
         return out
     }
 
     private fun cal(ms: Long) = Calendar.getInstance().apply { timeInMillis = ms }
-
-    private fun dayKey(ms: Long): Long {
-        val c = cal(ms)
-        return c.get(Calendar.YEAR) * 1000L + c.get(Calendar.DAY_OF_YEAR)
-    }
 
     /** "10:14am" / "4:02pm" — lowercase, no minutes-zero quirks, no dots. */
     private fun timeLabel(ms: Long): String {
@@ -55,16 +47,4 @@ object TripNaming {
         if (h == 0) h = 12
         return "$h:${m.toString().padStart(2, '0')}$ampm"
     }
-
-    /** "24 Jun" — compact day + month. */
-    private fun dateLabel(ms: Long): String {
-        val c = cal(ms)
-        val month = MONTHS[c.get(Calendar.MONTH)]
-        return "${c.get(Calendar.DAY_OF_MONTH)} $month"
-    }
-
-    private val MONTHS = arrayOf(
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-    )
 }

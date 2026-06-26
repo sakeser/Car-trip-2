@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.draw.alpha
@@ -1377,7 +1376,7 @@ private fun etaAnimalEmoji(deltaFrac: Double): String = when {
 @Composable
 private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, youColor: Color) {
     val hasFree = freeFlowS >= 1.0 && freeFlowS < typicalS
-    val maxV = maxOf(typicalS, actualS, freeFlowS) * 1.06
+    val maxV = maxOf(typicalS, actualS, freeFlowS) * 1.03
     val fFree = (freeFlowS / maxV).toFloat().coerceIn(0f, 1f)
     val fTyp = (typicalS / maxV).toFloat().coerceIn(0f, 1f)
     val fYou = (actualS / maxV).toFloat().coerceIn(0f, 1f)
@@ -1430,22 +1429,29 @@ private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, you
                     .width(3.dp).fillMaxHeight().background(youColor)
             )
         }
-        // Scale labels under the axis.
-        Box(modifier = Modifier.fillMaxWidth()) {
-            if (hasFree) EtaScaleLabel("no traffic", "$freeMin min", BiasAlignment(2f * fFree - 1f, 0f))
-            EtaScaleLabel(if (hasFree) "with traffic" else "Google", "$typMin min", BiasAlignment(2f * fTyp - 1f, 0f), end = true)
+        // Scale legend — fixed left/right ends so the labels never overlap, whatever the times are.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                if (hasFree) "no traffic  $freeMin min" else "Google  $typMin min",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
+            )
+            if (hasFree) {
+                Text(
+                    "with traffic  $typMin min",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ETA_TRAFFIC,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
-    }
-}
-
-@Composable
-private fun BoxScope.EtaScaleLabel(title: String, value: String, align: BiasAlignment, end: Boolean = false) {
-    Column(
-        modifier = Modifier.align(align),
-        horizontalAlignment = if (end) Alignment.End else Alignment.CenterHorizontally
-    ) {
-        Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
-        Text(value, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
     }
 }
 

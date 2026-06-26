@@ -45,15 +45,17 @@ class TripNamingTest {
         assertTrue(r[1]!!.contains("am") || r[1]!!.contains("pm"))
     }
 
-    @Test fun crossDayDuplicatesGetDateAndTime() {
+    @Test fun crossDayDuplicatesUseTimeOnlyNoDate() {
         val r = TripNaming.disambiguate(
             listOf(
                 TripNaming.Entry(1, "North York Loop", ts(2026, 5, 24, 10, 14)),
-                TripNaming.Entry(2, "North York Loop", ts(2026, 5, 25, 10, 14))
+                TripNaming.Entry(2, "North York Loop", ts(2026, 5, 25, 16, 2))
             )
         )
-        assertTrue(r[1]!!.contains(","))
-        assertTrue(r[1]!!.contains("Jun")) // month index 5 == June
+        // Time only, even across days — no date, no comma (the owner finds the time adequate).
+        assertFalse(r[1]!!.contains(","))
+        assertFalse(r[1]!!.contains("Jun"))
+        assertTrue(r[1]!!.contains("am") || r[1]!!.contains("pm"))
         assertNotEquals(r[1], r[2])
     }
 }
