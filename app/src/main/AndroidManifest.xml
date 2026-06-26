@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Auto-record watcher: a persistent FGS so the charger/Bluetooth runtime receivers fire AND the
+         recording FGS can be started from the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -72,21 +76,24 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Auto-recording (Rev U): charger is the primary in-car trigger; car Bluetooth is optional. -->
+        <!-- Auto-record (Rev AO): persistent "armed" watcher. It runtime-registers the charger/Bluetooth
+             broadcasts (a manifest ACTION_POWER_CONNECTED receiver never fires in the background) and,
+             being a running FGS, lets the recording service start from the background. Replaces the old
+             manifest PowerConnectionReceiver / CarBluetoothReceiver. -->
+        <service
+            android:name=".record.AutoRecordWatchService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Detects the car (charger/Bluetooth) to auto-start trip recording hands-free." />
+        </service>
         <receiver
-            android:name=".record.PowerConnectionReceiver"
-            android:exported="false">
+            android:name=".record.BootReceiver"
+            android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
-                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
-            </intent-filter>
-        </receiver>
-        <receiver
-            android:name=".record.CarBluetoothReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
-                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 

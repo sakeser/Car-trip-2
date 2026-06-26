@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.cartrip.analyzer.record.AutoRecordPrefs
+import com.cartrip.analyzer.record.AutoRecordWatchService
 import com.cartrip.analyzer.record.CompanionCarManager
 
 /**
@@ -141,6 +142,8 @@ fun AutoRecordScreen(onBack: () -> Unit) {
 
             ToggleRow("Auto-record drives", "Hands-free start/stop", enabled) {
                 enabled = it; AutoRecordPrefs.setEnabled(context, it)
+                // Start/stop the persistent armed watcher (the reliable background trigger).
+                if (it) AutoRecordWatchService.start(context) else AutoRecordWatchService.stop(context)
             }
 
             if (enabled) {
