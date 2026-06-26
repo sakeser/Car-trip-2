@@ -485,6 +485,22 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
+> **Status update (Rev AS–AV + design notes, 2026-06-26):**
+> - Shipped: Codex-review fixes (**AS**), Past-Trips **multi-select / batch delete (AT)**, trip-detail polish
+>   (**AU**: date eyebrow + short-trip fuel-chip suppression), **short-trip auto-discard (AV)** — a trip under
+>   5 m **or** 10 s is deleted, not saved, with a "Trip not recorded" alert. See `REV_HISTORY.md`.
+> - **Two-stage auto-record trigger (PLANNED — owner's idea, and the right design).** Today a Bluetooth/charger
+>   trigger immediately *arms a provisional recording* and commits it on motion within 90 s. But the owner's
+>   Tucson Bluetooth connects 20–40 s before departure, often while still **walking up** to the car — and
+>   motion-confirm accepts accelerometer vibration, so **walking can falsely confirm a trip** (contaminated
+>   start, since there's no start-side trim), and a long warm-up (>90 s) makes the provisional discard with no
+>   re-arm. Fix: **decouple the signals — Bluetooth presence = ARM (no recording yet); wireless charging =
+>   START.** By the time the phone is on the mount the owner is seated and about to drive, so the start is
+>   clean, walking never confirms, and the warm-up-timeout gap disappears. Largely supersedes start-side trim
+>   on the BT path. Classic-BT trigger (`useBluetooth`) is wired + the Tucson MAC is set correctly; the CDM
+>   "Pair car" path can't pair the classic-BT Tucson (it bound the wrong device) — those stale CDM
+>   associations were cleared 2026-06-26.
+>
 > **Status update (Rev AP–AR, 2026-06-26):**
 > - **Auto-record charger trigger fixed (Rev AP)** — the decision read a stale/inverted sticky battery
 >   state; now trusts the broadcast edge (`AutoRecordPolicy.effectiveCharging`). **Background crash fixed
