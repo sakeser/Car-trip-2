@@ -39,9 +39,16 @@ import com.cartrip.analyzer.ui.CarTripTheme
 import com.cartrip.analyzer.ui.GuideScreen
 import com.cartrip.analyzer.ui.HomeScreen
 import com.cartrip.analyzer.ui.InsightsScreen
+import com.cartrip.analyzer.ui.OnboardingPrefs
+import com.cartrip.analyzer.ui.OnboardingScreen
+import com.cartrip.analyzer.ui.OnboardingState
+import com.cartrip.analyzer.ui.PremiumPrefs
+import com.cartrip.analyzer.ui.PremiumScreen
 import com.cartrip.analyzer.ui.TripDetailScreen
 import com.cartrip.analyzer.ui.TripListScreen
 import com.cartrip.analyzer.ui.TripViewModel
+import com.cartrip.analyzer.ui.VehicleFuelPrefs
+import com.cartrip.analyzer.ui.VehicleFuelScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,6 +72,8 @@ private fun AppRoot() {
     val vm: TripViewModel = viewModel()
     val nav = rememberNavController()
     val live by RecordingState.state.collectAsStateWithLifecycle()
+    val trips by vm.trips.collectAsStateWithLifecycle()
+    val onboarding by OnboardingState.state.collectAsStateWithLifecycle()
 
     val permissions = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -85,6 +94,9 @@ private fun AppRoot() {
     LaunchedEffect(Unit) {
         val repaired = vm.recoverInterruptedTrips()
         CloudState.set { it.copy(email = CloudPrefs.email(context)) }
+        VehicleFuelPrefs.load(context)
+        OnboardingPrefs.load(context)
+        PremiumPrefs.load(context)
         if (repaired > 0) {
             CloudState.set {
                 it.copy(lastMessage = "Recovered $repaired interrupted trip${if (repaired == 1) "" else "s"} as partial.")
@@ -150,10 +162,18 @@ private fun AppRoot() {
         if (fine && notif) startRecordingService(context) else launcher.launch(permissions)
     }
 
+    fun requestStart() {
+        if (onboarding.completed) {
+            start()
+        } else {
+            nav.navigate("onboarding/true")
+        }
+    }
+
     NavHost(navController = nav, startDestination = "home") {
         composable("home") {
             HomeScreen(
-                onStart = { start() },
+                onStart = { requestStart() },
                 onStop = { stopRecordingService(context) },
                 onViewTrips = { nav.navigate("trips") },
                 onViewInsights = { nav.navigate("insights") },
@@ -163,11 +183,36 @@ private fun AppRoot() {
                 },
                 onConnectCloud = { connectCloud() },
                 onDisconnectCloud = { disconnectCloud() },
-                onOpenGuide = { nav.navigate("guide") }
+                onOpenGuide = { nav.navigate("guide") },
+                onOpenVehicleSetup = { nav.navigate("vehicle") },
+                onOpenPremium = { nav.navigate("premium") },
+                trips = trips,
+                onOpenTrip = { id -> nav.navigate("detail/$id") }
             )
         }
         composable("guide") {
             GuideScreen(onBack = { nav.popBackStack() })
+        }
+        composable(
+            "onboarding/{startAfter}",
+            arguments = listOf(navArgument("startAfter") { type = NavType.BoolType })
+        ) { entry ->
+            val startAfter = entry.arguments?.getBoolean("startAfter") == true
+            OnboardingScreen(
+                startAfterOnboarding = startAfter,
+                onBack = { nav.popBackStack() },
+                onComplete = { nav.popBackStack() },
+                onCompleteAndStart = {
+                    nav.popBackStack()
+                    start()
+                }
+            )
+        }
+        composable("vehicle") {
+            VehicleFuelScreen(onBack = { nav.popBackStack() })
+        }
+        composable("premium") {
+            PremiumScreen(onBack = { nav.popBackStack() })
         }
         composable("insights") {
             InsightsScreen(

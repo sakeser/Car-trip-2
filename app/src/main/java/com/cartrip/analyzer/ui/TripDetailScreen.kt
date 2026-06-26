@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.EventType
@@ -98,6 +99,7 @@ fun TripDetailScreen(
     var showMenu by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val actionScope = rememberCoroutineScope()
+    val fuelProfile by VehicleFuelState.state.collectAsStateWithLifecycle()
     val trip by produceState<TripEntity?>(initialValue = null, tripId, etaRefresh) {
         value = viewModel.loadTrip(tripId)
     }
@@ -165,7 +167,6 @@ fun TripDetailScreen(
         }
 
         val m = trip?.displayMetrics(a.metrics) ?: a.metrics
-        val displayAnalysis = a.copy(metrics = m)
         val scores = trip?.let { TripScores.from(it) }
         var selectedIndex by remember(a.points) { mutableStateOf(0) }
         var focusKey by remember(a.points) { mutableStateOf(0) }
@@ -181,6 +182,15 @@ fun TripDetailScreen(
             focusKey++
             actionScope.launch { scrollState.animateScrollTo(mapAnchorY) }
         }
+        val fetchTypicalEta: () -> Unit = {
+            fetchingEta = true
+            actionScope.launch {
+                val error = viewModel.fetchTypicalEstimate(tripId)
+                fetchingEta = false
+                if (error == null) etaRefresh++
+                else Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
+            }
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -195,49 +205,37 @@ fun TripDetailScreen(
             // --- Partial banner ---
             trip?.takeIf { it.isPartialRecording() }?.let { PartialBanner(it) }
 
-            // --- Hero: overall score + clean time/duration/distance, sub-scores ---
-            if (scores != null && trip != null) {
-                TripHero(trip!!, m, scores)
+            // --- Result story: actual vs expected, score, and the main trip outcome. ---
+            val currentTrip = trip
+            if (currentTrip != null) {
+                TripHero(
+                    trip = currentTrip,
+                    m = m,
+                    scores = scores,
+                    fetchingEta = fetchingEta,
+                    onFetchEta = fetchTypicalEta
+                )
+                TripResultDriversCard(
+                    trip = currentTrip,
+                    metrics = m,
+                    scores = scores
+                )
+                TripCostSummaryCard(
+                    metrics = m,
+                    fuelProfile = fuelProfile
+                )
             } else {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     ScoreRing(m.smoothness)
                 }
             }
 
-            // --- Data quality (sensor confidence) ---
-            trip?.takeIf { !it.isSample }?.let { t ->
-                val q = TripDataQuality.from(t)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(q.color()))
-                    Text("Data quality: ${q.level.label}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = q.color())
-                    Text(q.detail(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            // --- You vs traffic (moved up, reframed) ---
-            trip?.let { t ->
-                EtaComparisonCard(
-                    trip = t,
-                    actualS = m.durationS,
-                    fetching = fetchingEta,
-                    onFetch = {
-                        fetchingEta = true
-                        actionScope.launch {
-                            val error = viewModel.fetchTypicalEstimate(tripId)
-                            fetchingEta = false
-                            if (error == null) etaRefresh++
-                            else Toast.makeText(ctx, error, Toast.LENGTH_LONG).show()
-                        }
-                    }
-                )
-            }
-
             // --- Map + replay timeline ---
             if (a.points.size >= 2) {
+                ResultSectionHeader(
+                    title = "Route replay",
+                    subtitle = "Scrub the timeline or tap events to see where the drive changed."
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -279,6 +277,10 @@ fun TripDetailScreen(
             }
 
             // --- Driving factors + road & ride (quiet, visual) ---
+            ResultSectionHeader(
+                title = "Driver and road signals",
+                subtitle = "The details behind score, comfort, speed, and route confidence."
+            )
             trip?.let { t ->
                 SafetyFactorsCard(
                     trip = t,
@@ -341,6 +343,401 @@ private fun PartialBanner(trip: TripEntity) {
                 Text(trip.partialReasonText(), style = MaterialTheme.typography.bodySmall, color = Color(0xFF9A3412))
             }
         }
+    }
+}
+
+@Composable
+private fun TripHero(
+    trip: TripEntity,
+    m: DriveMetrics,
+    scores: TripScores?,
+    fetchingEta: Boolean,
+    onFetchEta: () -> Unit
+) {
+    val endMs = if (trip.endTime > 0) trip.endTime else trip.startTime + (m.durationS * 1000).toLong()
+    val comparison = expectedDriveComparison(trip, m.durationS)
+    val score = scores?.overall ?: m.smoothness
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = ResultInk),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(
+                        "TRIP RESULT",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.68f)
+                    )
+                    Text(
+                        comparison.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = comparison.color
+                    )
+                    Text(
+                        "${Format.timeOfDay(trip.startTime)} - ${Format.timeOfDay(endMs)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.74f)
+                    )
+                }
+                ScoreRing(score, ringSize = 76.dp)
+            }
+
+            Text(
+                comparison.detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.84f)
+            )
+
+            if (comparison.hasEstimate) {
+                ResultTimeComparisonBars(
+                    actualS = m.durationS,
+                    expectedS = trip.googleEtaTrafficS,
+                    freeFlowS = trip.googleEtaFreeFlowS,
+                    actualColor = comparison.color
+                )
+            } else {
+                OutlinedButton(
+                    onClick = onFetchEta,
+                    enabled = !fetchingEta,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (fetchingEta) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.height(18.dp).width(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Compare to expected drive", color = Color.White)
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ResultMetricTile("Actual time", Format.tripMinutes(m.durationS), Modifier.weight(1f))
+                ResultMetricTile("Distance", Format.tripDistance(m.distanceM), Modifier.weight(1f))
+                ResultMetricTile("Avg speed", Format.speedKmh(m.avgMovingSpeedMps * 3.6), Modifier.weight(1f))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ResultHeroScore("Safety", scores?.safety)
+                ResultHeroScore("Comfort", scores?.comfort)
+                ResultHeroScore("Pace", scores?.speed)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResultTimeComparisonBars(
+    actualS: Double,
+    expectedS: Double,
+    freeFlowS: Double,
+    actualColor: Color
+) {
+    val rows = buildList {
+        if (freeFlowS > 0.0) add(ResultTimeBar("Free-flow", freeFlowS, ResultBlue))
+        add(ResultTimeBar("Expected", expectedS, Color.White.copy(alpha = 0.58f)))
+        add(ResultTimeBar("You", actualS, actualColor))
+    }
+    val maxS = rows.maxOf { it.seconds }.coerceAtLeast(1.0)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    row.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.72f),
+                    modifier = Modifier.width(66.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.White.copy(alpha = 0.14f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth((row.seconds / maxS).toFloat().coerceIn(0.05f, 1f))
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(row.color)
+                    )
+                }
+                Text(
+                    Format.tripMinutes(row.seconds),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier.width(42.dp),
+                    textAlign = TextAlign.End
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResultMetricTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.1f))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.68f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun ResultHeroScore(label: String, value: Int?) {
+    val color = value?.let { TripScores.color(it) } ?: Color.White.copy(alpha = 0.58f)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(modifier = Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(color))
+        Text(
+            "$label ${value ?: "-"}",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.78f)
+        )
+    }
+}
+
+@Composable
+private fun TripResultDriversCard(
+    trip: TripEntity,
+    metrics: DriveMetrics,
+    scores: TripScores?
+) {
+    val comparison = expectedDriveComparison(trip, metrics.durationS)
+    val idle = idleSummary(metrics)
+    val inputs = drivingInputSummary(trip, scores)
+    val quality = if (!trip.isSample) TripDataQuality.from(trip) else null
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "What affected this result",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            ResultDriverRow(
+                title = "Pace vs expected",
+                detail = comparison.driverDetail,
+                color = comparison.color
+            )
+            ResultDriverRow(
+                title = "Stops and idle",
+                detail = idle.detail,
+                color = idle.color
+            )
+            ResultDriverRow(
+                title = "Driving inputs",
+                detail = inputs.detail,
+                color = inputs.color
+            )
+            quality?.let {
+                ResultDriverRow(
+                    title = "Data confidence",
+                    detail = "${it.level.label}: ${it.detail()}",
+                    color = it.color()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TripCostSummaryCard(
+    metrics: DriveMetrics,
+    fuelProfile: VehicleFuelProfile
+) {
+    val estimate = FuelCost.estimate(metrics.distanceM, fuelProfile) ?: return
+    val costPerKm = if (metrics.distanceM > 0.0) {
+        estimate.cost / (metrics.distanceM / 1000.0)
+    } else {
+        0.0
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ResultGreen)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Estimated trip cost",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        fuelProfile.displayName(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    FuelCost.money(estimate.cost),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ResultGreen
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CostFact(
+                    label = "Fuel used",
+                    value = FuelCost.fuel(estimate.fuelAmount, estimate.fuelUnitLabel),
+                    modifier = Modifier.weight(1f)
+                )
+                CostFact(
+                    label = "Cost / km",
+                    value = FuelCost.money(costPerKm),
+                    modifier = Modifier.weight(1f)
+                )
+                CostFact(
+                    label = "Profile",
+                    value = fuelProfile.unit.label,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CostFact(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun ResultDriverRow(title: String, detail: String, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 5.dp)
+                .size(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(color)
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ResultSectionHeader(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1076,6 +1473,114 @@ private fun eventExplanation(event: DriveEvent): String {
     }
     return "$intensity  (${"%.2f".format(g)} g)"
 }
+
+private data class ExpectedDriveComparison(
+    val hasEstimate: Boolean,
+    val title: String,
+    val detail: String,
+    val driverDetail: String,
+    val color: Color
+)
+
+private data class ResultTimeBar(
+    val label: String,
+    val seconds: Double,
+    val color: Color
+)
+
+private data class ResultDriverSummary(
+    val detail: String,
+    val color: Color
+)
+
+private fun expectedDriveComparison(trip: TripEntity, actualS: Double): ExpectedDriveComparison {
+    val expectedS = trip.googleEtaTrafficS
+    if (trip.etaSource.isEmpty() || expectedS <= 0.0 || actualS <= 0.0) {
+        return ExpectedDriveComparison(
+            hasEstimate = false,
+            title = "Compare this drive",
+            detail = "Fetch a typical route estimate to see whether this trip lost or saved time.",
+            driverDetail = "Expected-route comparison has not been fetched for this trip yet.",
+            color = ResultAmber
+        )
+    }
+
+    val deltaS = actualS - expectedS
+    val absMin = (kotlin.math.abs(deltaS) / 60.0).roundToInt().coerceAtLeast(1)
+    val source = if (trip.etaSource == "live") "traffic at trip end" else "typical traffic for this time"
+    return when {
+        deltaS > 45.0 -> ExpectedDriveComparison(
+            hasEstimate = true,
+            title = "+$absMin min slower",
+            detail = "Actual ${Format.tripMinutes(actualS)} vs expected ${Format.tripMinutes(expectedS)} using $source.",
+            driverDetail = "This trip took $absMin min longer than expected.",
+            color = ResultRed
+        )
+        deltaS < -45.0 -> ExpectedDriveComparison(
+            hasEstimate = true,
+            title = "$absMin min saved",
+            detail = "Actual ${Format.tripMinutes(actualS)} vs expected ${Format.tripMinutes(expectedS)} using $source.",
+            driverDetail = "This trip beat the expected time by $absMin min.",
+            color = ResultGreen
+        )
+        else -> ExpectedDriveComparison(
+            hasEstimate = true,
+            title = "On expected pace",
+            detail = "Actual ${Format.tripMinutes(actualS)} closely matched expected ${Format.tripMinutes(expectedS)}.",
+            driverDetail = "Your drive landed within about a minute of the expected route time.",
+            color = ResultGreen
+        )
+    }
+}
+
+private fun idleSummary(metrics: DriveMetrics): ResultDriverSummary {
+    val idleS = metrics.idleS.coerceAtLeast(0.0)
+    val idlePct = if (metrics.durationS > 0.0) idleS / metrics.durationS else 0.0
+    val pct = (idlePct * 100).roundToInt()
+    return when {
+        idleS < 60.0 -> ResultDriverSummary("Very little stopped or crawling time was recorded.", ResultGreen)
+        idlePct >= 0.25 -> ResultDriverSummary(
+            "${Format.tripMinutes(idleS)} stopped or crawling, about $pct% of the trip.",
+            ResultRed
+        )
+        idlePct >= 0.10 -> ResultDriverSummary(
+            "${Format.tripMinutes(idleS)} stopped or crawling, about $pct% of the trip.",
+            ResultAmber
+        )
+        else -> ResultDriverSummary(
+            "${Format.tripMinutes(idleS)} stopped or crawling, a modest part of the trip.",
+            ResultGreen
+        )
+    }
+}
+
+private fun drivingInputSummary(trip: TripEntity, scores: TripScores?): ResultDriverSummary {
+    val events = trip.hardBrakeCount + trip.hardAccelCount + trip.hardCornerCount
+    val speeding = trip.limitCoverage >= 0.4 && trip.speedingPct > 0.05
+    val color = scores?.safety?.let { TripScores.color(it) } ?: when {
+        events >= 6 -> ResultRed
+        events >= 2 -> ResultAmber
+        else -> ResultGreen
+    }
+    val eventText = if (events == 0) {
+        "No hard braking, acceleration, or cornering events stood out."
+    } else {
+        "$events hard input${if (events == 1) "" else "s"}: " +
+            "${trip.hardBrakeCount} brake, ${trip.hardAccelCount} accel, ${trip.hardCornerCount} corner."
+    }
+    val speedText = if (speeding) {
+        " Speeding covered ${"%.0f".format(trip.speedingPct * 100)}% of matched speed-limit time."
+    } else {
+        ""
+    }
+    return ResultDriverSummary(eventText + speedText, color)
+}
+
+private val ResultInk = Color(0xFF10211F)
+private val ResultGreen = Color(0xFF22C55E)
+private val ResultAmber = Color(0xFFF59E0B)
+private val ResultRed = Color(0xFFEF4444)
+private val ResultBlue = Color(0xFF38BDF8)
 
 
 @Composable
