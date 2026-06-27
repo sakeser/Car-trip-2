@@ -4,6 +4,23 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AY (2026-06-26) — tighten the bump-echo veto (field-test event audit)
+
+Field-data audit of the auto-record drives (trips 1164-1170) cross-checked every tagged event against the
+raw speed/gyro/gravity-decomposed accel. Findings: auto-on, motion-confirm, stop/trim, and the <5m/<10s
+discard all worked; high-confidence events + potholes were all sound. One borderline displayed event (trip
+1168: `ACCEL 0.36g conf 0.90` with FLAT GPS speed 32->32, coincident with a pothole) was a pothole's
+horizontal shake mislabeled as an accel.
+
+RCA: `DisplayEvents.isBumpEcho` only vetoed pothole-coincident fused brake/accel at **conf < 0.6**, so the
+high-confidence one slipped through. Fix: also veto a high-confidence fused brake/accel that coincides with a
+pothole **when the GPS speed slope contradicts the direction** (accel not actually speeding up / brake not
+slowing) via a new `speedSlopeKmh` helper + `BUMP_ECHO_MIN_SLOPE_KMH=3.0`. Fails open when GPS context is
+thin, and never fires away from potholes — so a genuine brake/accel over a bump (which moves the 1 Hz speed
+by several km/h) survives. +5 `DisplayEventsTest` cases (flat-on-bump dropped, rising-over-bump kept, low-conf
+preserved, no-bump kept, no-GPS fail-open). **100 tests**, no schema change.
+- v2.88/99 → **v2.89/100**. Built + tests green; device was disconnected at install time (still on v2.88).
+
 ## Rev AX (2026-06-26) — fix "Your trip icon" not affecting the map marker
 
 The Options -> "Your trip icon" picker (Car/Arrow/Person/Dot) saved correctly but the map replay marker

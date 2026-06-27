@@ -1,6 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-26 · App version **2.88 (build 99)** · Branch `main` (Rev AL–AX; AV pushed, AW–AX local).
+_Last updated: 2026-06-26 · App version **2.89 (build 100)** · Branch `main` (Rev AL–AY; AV pushed, AW–AY local).
+Device note: S25 last installed **2.88** (AX); AY built + 100 tests green but not yet installed (device was unplugged)._
 **Hands-free auto-record now works** via a persistent "armed" watcher (Rev AO); **Rev AP** fixed the
 charger-trigger (stale-sticky→broadcast-edge); **Rev AQ** fixed a background crash — a `location` FGS started
 from the background on Android 14 needs **`ACCESS_BACKGROUND_LOCATION` ("Allow all the time")**, which the

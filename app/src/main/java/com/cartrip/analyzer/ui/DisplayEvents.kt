@@ -16,6 +16,10 @@ object DisplayEvents {
     private const val CLUSTER_TIME_MS = 4_000L
     private const val MAX_CLUSTER_SPAN_MS = 8_000L
     private const val LOW_CONFIDENCE = 0.6
+    // A real brake/accel of display strength shifts the 1 Hz GPS speed by more than this over a few
+    // seconds; a pothole's horizontal shake leaves it flat. Used to unmask bump-contaminated
+    // longitudinals that coincide with a pothole even at high detector confidence.
+    private const val BUMP_ECHO_MIN_SLOPE_KMH = 3.0
 
     // Speed/g gating for turn-like events (corners & swerves). A sharp-feeling number at a crawl, or a
     // gentle one at speed, usually isn't a notable maneuver — so require more g the slower you're going.
@@ -29,7 +33,7 @@ object DisplayEvents {
         val sorted = rawEvents.sortedBy { it.tMs }
         val filtered = sorted
             .filter { passesDisplayThreshold(it, speedAt(points, it.tMs)) }
-            .filterNot { isBumpEcho(it, rawEvents) }
+            .filterNot { isBumpEcho(it, rawEvents, points) }
         if (filtered.isEmpty()) return emptyList()
 
         // Cluster strictly by time, bounded so a cluster can't stretch across distinct moments.
@@ -106,14 +110,32 @@ object DisplayEvents {
         return g >= minG
     }
 
-    private fun isBumpEcho(event: DriveEvent, rawEvents: List<DriveEvent>): Boolean {
+    private fun isBumpEcho(event: DriveEvent, rawEvents: List<DriveEvent>, points: List<TrackPoint>): Boolean {
         if (event.source != "fused") return false
         if (event.type != EventType.ACCEL && event.type != EventType.BRAKE) return false
-        if (event.confidence >= LOW_CONFIDENCE) return false
         val nearPothole = rawEvents.any {
             it.type == EventType.POTHOLE && kotlin.math.abs(it.tMs - event.tMs) <= 1_000L
         }
-        return nearPothole
+        if (!nearPothole) return false
+        // A low-confidence brake/accel sitting on a bump is almost always the bump's horizontal shake.
+        if (event.confidence < LOW_CONFIDENCE) return true
+        // A high-confidence one might be a genuine brake/accel that happened over a bump -- keep it only
+        // if the GPS speed actually moved the right way. A bump's shake leaves the speed flat, so veto
+        // only when the speed track CONTRADICTS the direction; fail open when GPS context is too thin.
+        val slope = speedSlopeKmh(points, event.tMs) ?: return false
+        return when (event.type) {
+            EventType.ACCEL -> slope < BUMP_ECHO_MIN_SLOPE_KMH    // tagged accel but not actually speeding up
+            EventType.BRAKE -> slope > -BUMP_ECHO_MIN_SLOPE_KMH   // tagged brake but not actually slowing
+            else -> false
+        }
+    }
+
+    /** (mean speed after - mean speed before) across the event, km/h; null if GPS context is too thin. */
+    private fun speedSlopeKmh(points: List<TrackPoint>, tMs: Long): Double? {
+        val before = points.filter { it.tMs in (tMs - 3500)..(tMs - 500) }
+        val after = points.filter { it.tMs in (tMs + 500)..(tMs + 3500) }
+        if (before.isEmpty() || after.isEmpty()) return null
+        return after.sumOf { it.speedKmh } / after.size - before.sumOf { it.speedKmh } / before.size
     }
 
     private fun speedAt(points: List<TrackPoint>, tMs: Long): Double =
