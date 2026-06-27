@@ -4,6 +4,40 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BB (2026-06-27) — START-side trip trim (drop the parked prefix on auto trips)
+
+The stop side already trims retrospectively to the moment the car came to rest (`AutoStop`), but the
+**start** side didn't — an auto-armed trip begins recording the instant the trigger fires (charger / BT /
+the new Rev BA motion re-arm), which is usually while still parked (seatbelt, warm-up, backing out). Those
+leading stationary seconds contaminated every auto trip's start: the geocoded start location was the
+parking spot, idle time + fuel idle-burn counted the warm-up, and door-slam/settling jostle landed near t0.
+
+Fix — the mirror of the stop trim, hardened by replaying it over the on-device trip DB (see below):
+- `AutoStart.retrospectiveStartTime` (pure, +8 tests): find the first **sustained** pull-away — a motion
+  run that exceeds `MOVING_MPS` (4 km/h) and stays out of a full stop for `DEPART_SUSTAIN_MS` (3 s) — then
+  the true start is the last at/below-`STATIONARY_MPS` (0.7 m/s) sample just before that run, kept as a
+  zero-speed ZUPT anchor. The sustain requirement was added after field replay showed GPS at trip start is
+  noisy: a cold fix reports speed 0 while position jitters, and a car backing out *creeps* above walking
+  pace for a second then pauses — the naive "first sample above threshold" latched onto that and
+  under-trimmed (real case: trip 1169 picked a 2 s creep at t+4 s instead of the real departure at t+16 s).
+  By construction it never trims a sample above `MOVING_MPS`, so real driving distance is structurally
+  preserved. Returns null (no trim) when no sustained departure is found (no GPS / non-drive) or the car
+  was already departing from the first sample (re-armed mid-motion).
+- **Field-validated (offline replay over 34 real trips from the device DB):** 0 trips lose real distance
+  (kept-distance ≥ recorded distance everywhere — the trimmed prefixes are parked idle, parking-lot
+  maneuvering, and stale cold-start fixes), 0 real drives over-trimmed into the discard, 26/34 get a
+  sensible parked-prefix trim, and the 1169 under-trim is fixed (3.6 s → 15.9 s).
+- `RecordingService` captures a small leading `(t, speed)` window from trip start through the first motion
+  (closed once moving, capped at `START_TRACK_MAX_SAMPLES`), and on stop — **auto trips only** — deletes
+  the leading locations/motions/gnss rows before `startCut` via new `delete*Before` DAO queries, mirroring
+  the existing `delete*After` end-trim. Time bases all share the monotonic `elapsedRealtime` ms clock, so a
+  single cutoff trims locations and motions together (same as the stop side).
+- **Over-trim safety:** the start trim runs *before* `finalizeTrip`, so the analyzer recomputes
+  distance/duration over the trimmed range and the existing too-short discard (< `MIN_TRIP_DISTANCE_M` 5 m
+  **or** < `MIN_TRIP_DURATION_S` 10 s) now also catches a trip trimmed down to nothing (e.g. a brief crawl
+  that never became a real drive) — deleted, not saved, with the "Trip not recorded" notice.
+- Manual trips are untouched (Start means "begin now"); only `autoStarted` trips are trimmed.
+
 ## Rev BA (2026-06-27) — re-arm auto-record on motion (close the long-idle silent-miss gap)
 
 Failure mode closed: an in-car trigger (charger/BT) only arms a **provisional** trip that discards itself

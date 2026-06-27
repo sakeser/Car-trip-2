@@ -60,6 +60,9 @@ interface TripDao {
     @Query("DELETE FROM gnss_samples WHERE tripId = :id AND t > :after")
     suspend fun deleteGnssSamplesAfter(id: Long, after: Long)
 
+    @Query("DELETE FROM gnss_samples WHERE tripId = :id AND t < :before")
+    suspend fun deleteGnssSamplesBefore(id: Long, before: Long)
+
     @Insert
     suspend fun insertGnssMeasurements(items: List<GnssMeasurementSample>)
 
@@ -71,6 +74,9 @@ interface TripDao {
 
     @Query("DELETE FROM gnss_measurements WHERE tripId = :id AND t > :after")
     suspend fun deleteGnssMeasurementsAfter(id: Long, after: Long)
+
+    @Query("DELETE FROM gnss_measurements WHERE tripId = :id AND t < :before")
+    suspend fun deleteGnssMeasurementsBefore(id: Long, before: Long)
 
     @Insert
     suspend fun insertAnalysisPoints(items: List<AnalysisPointEntity>)
@@ -214,6 +220,13 @@ interface TripDao {
 
     @Query("DELETE FROM motions WHERE tripId = :id AND t > :after")
     suspend fun deleteMotionsAfter(id: Long, after: Long)
+
+    // Start-side trim (auto-record): drop the parked prefix before the drive actually began.
+    @Query("DELETE FROM locations WHERE tripId = :id AND t < :before")
+    suspend fun deleteLocationsBefore(id: Long, before: Long)
+
+    @Query("DELETE FROM motions WHERE tripId = :id AND t < :before")
+    suspend fun deleteMotionsBefore(id: Long, before: Long)
 
     @Query("DELETE FROM analysis_points WHERE tripId = :id")
     suspend fun deleteAnalysisPoints(id: Long)

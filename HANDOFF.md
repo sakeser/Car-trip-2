@@ -197,10 +197,12 @@ hands-free" notice + `stopSelf()` — never crashes), and the app declares `ACCE
 Auto-record card that requests "Allow all the time". **So hands-free background start needs the owner to grant
 "Allow all the time" location** (done on the S25 via `pm grant`; the in-app card covers a fresh install).
 
-**Known limitations / TODO:** (a) no re-arm if you wait > 90 s after the trigger before driving
-(provisional discards, no restart until a new trigger event — a re-arm-on-motion fix is wanted); (b)
-start-side trip trim not done (the parked seconds before pulling away aren't trimmed — the *stop* side is);
-(c) CDM kept as a secondary path; the wrong association could be cleaned up with a "remove pairing" button;
+**Known limitations / TODO:** (a) ~~no re-arm if you wait > 90 s after the trigger before driving~~ **DONE
+(Rev BA)** — `AutoRecordWatchService` runs `MotionRearmDetector` on the accelerometer while
+armed-but-not-recording and re-arms on sustained motion; (b) ~~start-side trip trim not done~~ **DONE
+(Rev BB)** — `AutoStart.retrospectiveStartTime` trims the parked prefix on auto trips, the mirror of the
+stop-side `AutoStop` trim (the *stop* side was already done); (c) CDM kept as a secondary path; the wrong
+association could be cleaned up with a "remove pairing" button;
 (d) with `requireWireless=false`, charging *anywhere* arms-then-discards a 90 s provisional. **Cost:** a
 permanent silent "Auto-record on" notification (the accepted tradeoff).
 
@@ -219,7 +221,8 @@ Reviewed by reading the code paths, not by driving — so the owner can field-te
 | Unplug **during** a trip | 8 s grace → trim back to rest → save as AUTO_STOP | Code ✓ |
 | Unplug then **replug within 8 s** | `CHARGING_RESUMED` cancels grace → keeps recording | Code ✓ |
 | Plug in but **never drive** (≤90 s) | motion-confirm fails → silent discard, no junk trip | Device ✓ |
-| Plug in, **wait > 90 s**, then drive | provisional already discarded → **no recording** until a new trigger | **KNOWN GAP** (re-arm-on-motion = roadmap) |
+| Plug in, **wait > 90 s**, then drive | watcher re-arms on sustained accelerometer motion → fresh provisional records | Code ✓ (Rev BA) · **DRIVE** |
+| Auto trip starts while parked (warm-up) | leading parked prefix trimmed to first motion; over-trim → too-short discard | Code ✓ (Rev BB) |
 | Charger event **while already recording** | "trigger still present, cancel grace" (idempotent) | Code ✓ |
 | `requireWireless` ON + **wired** charging | no arm (after 1.5 s settle re-read of plug type) | Code ✓ |
 | Watcher process killed (low memory) | `START_STICKY` restart → re-arms | Code ✓ |
@@ -532,10 +535,16 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 > - **Harsh-stop detector — DONE (Rev AH/AI).** Recalibrated from 27 trips; `EventType.HARSH_STOP` map
 >   events + Safety/Comfort penalty. See memory `harsh-stop-recalibration`.
 > - **You-vs-traffic redesign — DONE (Rev AJ/AK).** Single to-scale timeline; trip screen de-cluttered.
-> - **Still TODO:** auto-record **re-arm-on-motion** (the >90 s-then-drive gap in the matrix) + **START-side
->   trip trim** (see §3 limitations); a **haptic on/off toggle** + optionally a CDM "remove pairing" /
->   dedupe button; severe-corner count (item 2); Insights depth (item 4); rough-stretch mapping (item 5);
->   lane-detection offline algorithm. The Rev U receiver design below is **superseded** (kept for history).
+> - **Auto-record re-arm-on-motion — DONE (Rev BA, v2.91).** While armed-but-not-recording,
+>   `AutoRecordWatchService` runs a pure `MotionRearmDetector` on the accelerometer (jerk EMA ≥ 0.40 for
+>   ≥ 4 s, 15 s cooldown) and re-arms via `reevaluate("rearm-motion")`, closing the >90 s-then-drive gap.
+> - **START-side trip trim — DONE (Rev BB, v2.92).** `AutoStart.retrospectiveStartTime` (mirror of
+>   `AutoStop`) trims the parked prefix (warm-up / backing out) on **auto trips only**, before finalize, so
+>   the too-short discard also catches an over-trimmed non-drive. New `delete*Before` DAO queries.
+> - **Still TODO:** the **two-stage trigger** (BT = arm, charging = start — owner's design, see status box
+>   above) which would also clean the BT-path start; a **haptic on/off toggle** + optionally a CDM "remove
+>   pairing" / dedupe button; severe-corner count (item 2); Insights depth (item 4); rough-stretch mapping
+>   (item 5); lane-detection offline algorithm. The Rev U receiver design below is **superseded** (history).
 
 1. **Auto-recording trigger (Rev U) — SUPERSEDED by Rev AG CompanionDeviceManager (see status box above).** Hands-free start/stop
    so the owner never taps Start. Context: the phone is **always wireless-charging on a mount in the

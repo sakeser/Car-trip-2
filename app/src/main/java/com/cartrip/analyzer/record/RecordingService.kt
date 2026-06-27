@@ -125,6 +125,13 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     // the moment the car actually came to rest, instead of trimming to a fixed grace.
     private val recentSpeedTrack = ArrayDeque<Pair<Long, Double>>()
     private var autoStopRequested = false
+    // Leading (monotonic tLoc, speedMps) window from the START of the trip across the warm-up and
+    // pull-away, so an auto-record START can retrospectively trim the parked prefix (warm-up / backing
+    // out). Held open for a few minutes (not just "until moving") because the real departure must be
+    // confirmed as *sustained* motion, not a brief parking-lot creep. See [AutoStart].
+    private val startSpeedTrack = ArrayList<Pair<Long, Double>>()
+    private var startTrackOpen = true
+    private var startTrackFirstT = 0L
     // Auto-record (Rev U): this trip was auto-armed; motion-confirm + stop-grace timers.
     @Volatile private var autoStarted = false
     private var motionConfirmJob: Job? = null
@@ -267,6 +274,21 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                 dao.deleteMotionsAfter(finishedId, trimCutoff.motionT)
                 dao.deleteGnssSamplesAfter(finishedId, trimCutoff.motionT)
                 dao.deleteGnssMeasurementsAfter(finishedId, trimCutoff.motionT)
+            }
+            // Start-side trim (auto trips only): an auto-armed trip starts recording while still parked
+            // (warm-up / backing out), so drop the leading stationary prefix the same retrospective way
+            // the stop side drops the idle tail. Done BEFORE finalize so the analyzer recomputes
+            // distance/duration over the trimmed range — and the too-short discard below then catches a
+            // trip trimmed down to nothing (e.g. a brief crawl that never became a real drive).
+            if (autoStarted) {
+                val startCut = AutoStart.retrospectiveStartTime(startSpeedTrack.toList())
+                if (startCut != null) {
+                    dao.deleteLocationsBefore(finishedId, startCut)
+                    dao.deleteMotionsBefore(finishedId, startCut)
+                    dao.deleteGnssSamplesBefore(finishedId, startCut)
+                    dao.deleteGnssMeasurementsBefore(finishedId, startCut)
+                    AutoRecordLog.add(this@RecordingService, "start-trimmed parked prefix to first motion")
+                }
             }
             val finalized = TripFinalizer.finalizeTrip(
                 dao = dao,
@@ -437,6 +459,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         sawDriving = false
         lastDrivingLocT = 0L
         recentSpeedTrack.clear()
+        startSpeedTrack.clear()
+        startTrackOpen = true
+        startTrackFirstT = 0L
         autoStopRequested = false
         lastMotionWrite = 0L
         motionSensorRegistered = false
@@ -893,6 +918,16 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     }
 
     private fun updateAutoStop(tLoc: Long, speedMps: Double) {
+        // Capture the leading samples (warm-up → pull-away) for the auto-record START trim. Held open for
+        // START_TRACK_MAX_MS so the departure can be confirmed as sustained motion (a brief creep then
+        // pause must not close it early); the sample cap is a defensive backstop.
+        if (startTrackOpen) {
+            if (startTrackFirstT == 0L) startTrackFirstT = tLoc
+            startSpeedTrack.add(tLoc to speedMps)
+            if (tLoc - startTrackFirstT >= START_TRACK_MAX_MS || startSpeedTrack.size >= START_TRACK_MAX_SAMPLES) {
+                startTrackOpen = false
+            }
+        }
         // Keep a short rolling (time, speed) window so the stop can be placed at the real rest moment.
         recentSpeedTrack.addLast(tLoc to speedMps)
         val windowStart = tLoc - STOP_TRACK_WINDOW_MS
@@ -1163,6 +1198,11 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         // when the idle timer fires and we look back for the rest moment.
         private const val STOP_TRACK_WINDOW_MS = 8L * 60L * 1000L
         private const val AUTO_STOP_END_GRACE_MS = 3L * 1000L
+        // The start-trim window: capture the first few minutes so the pull-away can be confirmed as
+        // sustained motion. 5 min covers any realistic warm-up; a longer idle just isn't trimmed (safe).
+        // The sample cap is a defensive backstop (~33 min at 1 Hz).
+        private const val START_TRACK_MAX_MS = 5L * 60L * 1000L
+        private const val START_TRACK_MAX_SAMPLES = 2000
         // Smoothed sample-to-sample accel delta (m/s^2) above this during the confirm window means the
         // car is driving even without GPS. Conservative start; tune from the logged "vib" values.
         private const val SENSOR_MOTION_VIB = 0.30
