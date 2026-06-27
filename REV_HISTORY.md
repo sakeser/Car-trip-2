@@ -4,6 +4,23 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev AZ (2026-06-26) — cluster potholes separately so bumps can't bridge maneuvers
+
+Field finding: the event-cluster grows by adjacency (each event within `CLUSTER_TIME_MS=4s`, up to an
+8 s span), so frequent **potholes were bridging two distinct maneuvers** into one marker and hiding one of
+them (trip 1165: a swerve and a corner 8 s apart, chained via a pothole between them, showed as one swerve;
+trip 1168: a corner + accel + bumps collapsed to one pothole). Fix: `DisplayEvents.clean` now **partitions
+events into a driving stream and a pothole stream and clusters each independently** (`clusterStream`), so a
+bump can't chain two maneuvers and a maneuver-coincident bump shows on its own. Driving events still cluster
+among themselves, so a genuinely combined moment (e.g. accel through a curve, 2 s apart) stays one marker;
+swerve/corner that are truly one maneuver still merge, while ones 5 s+ apart stay separate.
+
+Regression-confirmed on the field trips (old vs new): trip 1165 recovers the hidden CORNER, trip 1168
+recovers the hidden ACCEL, and trips 1126/1128/1130/1166/1169/1170 are unchanged (no driving markers lost);
+a couple of previously-masked coincident potholes now show. +3 `DisplayEventsTest` cases (pothole doesn't
+bridge swerve/corner; coincident pothole+brake both show; same-kind events still merge). **103 tests.**
+- v2.89/100 → **v2.90/101**. No schema change. Installed on S25.
+
 ## Rev AY (2026-06-26) — tighten the bump-echo veto (field-test event audit)
 
 Field-data audit of the auto-record drives (trips 1164-1170) cross-checked every tagged event against the

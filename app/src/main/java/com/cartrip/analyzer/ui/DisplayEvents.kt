@@ -36,9 +36,21 @@ object DisplayEvents {
             .filterNot { isBumpEcho(it, rawEvents, points) }
         if (filtered.isEmpty()) return emptyList()
 
+        // Potholes are environmental, not maneuvers, so cluster them in their OWN stream. Otherwise a
+        // string of frequent bumps can "bridge" two separate maneuvers (e.g. a swerve and a corner 5 s
+        // apart) into one cluster, hiding one of them; and a bump coincident with a maneuver would mask
+        // one or the other. Driving events still cluster among themselves (a genuinely combined moment
+        // stays one marker), but a bump can no longer chain them together.
+        val (potholes, driving) = filtered.partition { it.type == EventType.POTHOLE }
+        return (clusterStream(driving) + clusterStream(potholes)).sortedBy { it.tMs }
+    }
+
+    /** Time-cluster one stream (events pre-sorted by time) and reduce each cluster to one marker. */
+    private fun clusterStream(events: List<DriveEvent>): List<DriveEvent> {
+        if (events.isEmpty()) return emptyList()
         // Cluster strictly by time, bounded so a cluster can't stretch across distinct moments.
         val clusters = ArrayList<MutableList<DriveEvent>>()
-        filtered.forEach { event ->
+        events.forEach { event ->
             val cluster = clusters.lastOrNull()
             val last = cluster?.lastOrNull()
             val start = cluster?.firstOrNull()
@@ -51,7 +63,6 @@ object DisplayEvents {
                 clusters.add(arrayListOf(event))
             }
         }
-
         return clusters.map { cluster ->
             val representative = chooseRepresentative(cluster)
             if (cluster.size == 1) representative
@@ -59,7 +70,7 @@ object DisplayEvents {
                 source = "summary",
                 confidence = cluster.maxOf { it.confidence }
             )
-        }.sortedBy { it.tMs }
+        }
     }
 
     private fun chooseRepresentative(cluster: List<DriveEvent>): DriveEvent {

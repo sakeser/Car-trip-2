@@ -115,4 +115,33 @@ class DisplayEventsTest {
         val out = DisplayEvents.clean(listOf(accel, bump), pts(2_000, 50.0)) // no points near 5 s
         assertTrue("fail open when the speed track can't judge", out.any { it.type == EventType.ACCEL })
     }
+
+    // ---- Potholes cluster in their own stream (can't bridge separate maneuvers) ----
+
+    /** The trip-1165 case: a swerve and a corner 8 s apart, with a pothole between them, must NOT merge
+     *  into one marker just because the bump bridges the gap. */
+    @Test fun potholeDoesNotBridgeSwerveAndCorner() {
+        val swerve = DriveEvent(0L, EventType.SWERVE, 0.45 * g, "fused", 0.85)
+        val bump = DriveEvent(4000L, EventType.POTHOLE, 0.40 * g, "motion", 1.0)
+        val corner = DriveEvent(8000L, EventType.CORNER, 0.45 * g, "fused", 0.80)
+        val out = DisplayEvents.clean(listOf(swerve, bump, corner), pts(20_000, 50.0))
+        assertTrue("the swerve must remain its own marker", out.any { it.type == EventType.SWERVE })
+        assertTrue("the corner must remain its own marker", out.any { it.type == EventType.CORNER })
+    }
+
+    /** A pothole coincident with a real maneuver now shows as its own marker too (no longer hidden). */
+    @Test fun coincidentPotholeAndBrakeBothShown() {
+        val brake = DriveEvent(5000L, EventType.BRAKE, 0.45 * g, "gps", 1.0)
+        val bump = DriveEvent(5000L, EventType.POTHOLE, 0.45 * g, "motion", 1.0)
+        val out = DisplayEvents.clean(listOf(brake, bump), pts(20_000, 50.0))
+        assertTrue("the brake shows", out.any { it.type == EventType.BRAKE })
+        assertTrue("the coincident pothole also shows", out.any { it.type == EventType.POTHOLE })
+    }
+
+    /** Two driving events of the same kind close together still collapse to one (within-stream). */
+    @Test fun twoNearbyCornersStillMergeAfterPartition() {
+        val a = DriveEvent(1000L, EventType.CORNER, 0.45 * g, "fused", 0.8)
+        val b = DriveEvent(3000L, EventType.CORNER, 0.45 * g, "fused", 0.8)
+        assertEquals(1, DisplayEvents.clean(listOf(a, b), pts(20_000, 50.0)).size)
+    }
 }
