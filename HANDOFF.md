@@ -546,10 +546,15 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 > - **START-side trip trim — DONE (Rev BB, v2.92).** `AutoStart.retrospectiveStartTime` (mirror of
 >   `AutoStop`) trims the parked prefix (warm-up / backing out) on **auto trips only**, before finalize, so
 >   the too-short discard also catches an over-trimmed non-drive. New `delete*Before` DAO queries.
-> - **Still TODO:** the **two-stage trigger** (BT = arm, charging = start — owner's design, see status box
->   above) which would also clean the BT-path start; a **haptic on/off toggle** + optionally a CDM "remove
->   pairing" / dedupe button; severe-corner count (item 2); Insights depth (item 4); rough-stretch mapping
->   (item 5); lane-detection offline algorithm. The Rev U receiver design below is **superseded** (history).
+> - **Better trip names — DONE (Rev BC, v2.93).** `HomeDetector` learns home from endpoint frequency
+>   (endpoints near home read "Home"); same-name "loops" named by their farthest point ("North York ->
+>   Scarborough -> back") instead of "North York loop". See item 6 + O6 + memory
+>   `home-detection-and-stale-hardcode`.
+> - **Still TODO:** **trip-naming follow-ups** — *work* detection + a *user-settable home* (item 6); the
+>   **two-stage trigger** (BT = arm, charging = start — owner's design, see status box above) which would
+>   also clean the BT-path start; a **haptic on/off toggle** + optionally a CDM "remove pairing" / dedupe
+>   button; severe-corner count (item 2); Insights depth (item 4); rough-stretch mapping (item 5);
+>   lane-detection offline algorithm. The Rev U receiver design below is **superseded** (history).
 
 1. **Auto-recording trigger (Rev U) — SUPERSEDED by Rev AG CompanionDeviceManager (see status box above).** Hands-free start/stop
    so the owner never taps Start. Context: the phone is **always wireless-charging on a mount in the
@@ -596,6 +601,31 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
    `analysis_points` per trip or storing endpoints), speeding/pothole heatmaps, per-km stats, Last-X.
 5. **Rough-stretch mapping (O9)** — emit per-stretch geometry from `MotionFusion` so rough stretches
    map like potholes (re-analyze required). Revisit O1 (1 Hz GPS) / O2.
+6. **Trip-naming follow-ups (from Rev BC — see O6 / memory `home-detection-and-stale-hardcode`).**
+   - **Work detection.** Rev BC learns only *home* (`HomeDetector` = most-frequent endpoint cluster). Apply
+     the same frequency clustering to find the **2nd** frequent cluster as "Work" so commute-ish trips read
+     "Home -> Work" / "Work -> Home". The owner's workplace shows as a ~6-endpoint cluster near
+     `43.516,-79.671` (Speakman Dr, ~34 km). Guard against a 2nd cluster that's really just a sub-cluster of
+     home; require it to be well-separated and frequent. (`TripLabeler`'s hardcoded home/work are stale —
+     fallback-only — so don't rely on them.)
+   - **User-settable home (robust fix).** Frequency detection is ambiguous when two spots are near-equal
+     (Rev BC field case: 19 vs 14 endpoints, 560 m apart — needed the owner to disambiguate). Add a
+     **"Set home" control** (Settings / Vehicle screen, or long-press a trip's start/end on the map) that
+     persists an explicit home; naming prefers the user-set home over the detected one, and seeds the
+     control with the detected home. Same pattern could let the user set Work. Most robust answer; removes
+     the guess. Persist alongside the Rev BC `cartrip_home` SharedPreferences.
+7. **Walk/non-drive handling depth (from Rev BD).** Rev BD flags walks in the past-trips card (walking icon
+   + moving-avg speed instead of driving Safety/Comfort/Pace). Still to consider: the **trip-detail screen**
+   for a walk (it still shows the driving hero/scores — mirror the list treatment); whether walks deserve
+   **their own metrics** (steps/pace/elevation) vs. just suppressing driving ones; and whether to auto-set
+   `userIsDrive=false` so they're consistently excluded everywhere. `TripKind.isLikelyNonDrive` (top speed
+   0.1..12 km/h + manual override) is the gate. See memory `walk-non-drive-finding`.
+8. **Battery: GPS-on exceeds active recording (from Rev BD cross-check).** On a 3-walk day the OS attributed
+   ~2 h GPS vs ~1 h actually recorded. No background runaway (the watcher does no GPS — log showed only
+   no-op charger events; BT scanning 0), so the gap is the **~6 min pre-auto-stop idle window** (GPS stays
+   at full 1 Hz while confirming "still stopped") plus foreground auto-detect. Possible win: **drop GPS to a
+   low rate once stationary** for a bit (don't need 1 Hz to detect a continued stop), and/or shorten the idle
+   window. Coarse Android attribution, so treat as a hint, not a measurement. Revisit with O1 (1 Hz cap).
 
 _Done recently: trip-detail/past-trips UI overhaul (Rev P–T), 8-item UI polish batch (Rev V),
 non-drive guard + privacy + dead-code (Rev W), daypart insights + speeding run-length guard (Rev X),

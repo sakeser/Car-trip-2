@@ -4,6 +4,25 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BD (2026-06-27) — flag walks in the trip list (walk icon + moving-avg speed, no driving scores)
+
+Walks were recorded as trips but the past-trips card showed driving Safety/Comfort/Pace scores, which are
+meaningless for a walk (Safety from gait jostle, Pace from a bogus driving ETA). Now the trip card detects a
+non-drive (`TripKind.isLikelyNonDrive` — top speed in 0.1..12 km/h, honouring the manual `userIsDrive`
+override) and renders it differently:
+- a **walking-person icon** next to the trip name, and
+- in place of the three score columns, the **moving-average speed** (`Format.avgSpeedKmh` — 2 decimals,
+  e.g. "4.75 km/h", from `avgMovingSpeedMps`, idle excluded). +1 `FormatTest`.
+Drives are unchanged (Safety/Comfort/Pace as before). Scoped to the past-trips list card for now; the
+trip-detail screen and any deeper non-drive handling (separate metrics vs. just hiding) are left for later.
+
+Field-validated against 3 real walks this morning (trips 1171/1172/1173): all three correctly flagged
+non-drives (top speed 5.6-7.9 km/h) with sane moving-avg pace (4.54-4.75 km/h). (Battery cross-check from
+the owner's screenshots: GPS-on ~2 h vs ~1 h actually recorded — the gap is the pre-auto-stop idle window +
+foreground auto-detect, not background runaway; the watcher logged only no-op charger events + a few
+restarts, no phantom auto-records, BT scanning 0. A low-rate-GPS-while-stationary optimization is a possible
+future battery win.)
+
 ## Rev BC (2026-06-27) — better trip names: learn Home + name "loops" by where they went
 
 Two naming complaints fixed. (1) The geocoder fell back to "<area> loop" whenever a trip's start and end

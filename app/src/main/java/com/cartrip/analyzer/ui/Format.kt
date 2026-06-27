@@ -22,6 +22,13 @@ object Format {
 
     fun speedKmh(kmh: Double): String = String.format(Locale.US, "%.0f km/h", kmh)
 
+    /**
+     * Average speed for a walk/non-drive trip card, e.g. "4.75 km/h" (2 decimals). Input is the
+     * moving-only average speed in m/s (idle excluded). "—" when unknown (no moving time recorded).
+     */
+    fun avgSpeedKmh(movingMps: Double): String =
+        if (movingMps > 0) String.format(Locale.US, "%.2f km/h", movingMps * 3.6) else "—"
+
     fun accel(mps2: Double): String = String.format(Locale.US, "%.1f m/s²", mps2)
 
     /** Acceleration as a g-force, e.g. "0.43g" — the human-friendly form (no m/s²). */

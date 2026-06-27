@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -333,6 +335,9 @@ private fun TripRow(
     val finished = trip.endTime != 0L
     val scores = if (finished) TripScores.from(trip) else null
     val partial = trip.isPartialRecording()
+    // A walk/non-drive: driving scores (Safety especially) are meaningless, so the card flags it with a
+    // walking icon and shows moving-average speed instead of the score columns.
+    val isWalk = finished && TripKind.isLikelyNonDrive(trip)
     val highlighted = selected || checked
 
     Card(
@@ -365,6 +370,14 @@ private fun TripRow(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.width(22.dp)
+                    )
+                }
+                if (isWalk) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.DirectionsWalk,
+                        contentDescription = "Walk",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
                 Text(
@@ -401,7 +414,17 @@ private fun TripRow(
                         fraction = (trip.durationS / maxDurationS).coerceIn(0.03, 1.0).toFloat(),
                         modifier = Modifier.weight(1f)
                     )
-                    if (scores != null) {
+                    if (isWalk) {
+                        // Walk: driving scores don't apply — show moving-average speed (idle excluded).
+                        Text(
+                            Format.avgSpeedKmh(trip.avgMovingSpeedMps),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    } else if (scores != null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(SCORE_COL_GAP)) {
                             MiniScore(scores.safety)
                             MiniScore(scores.comfort)
