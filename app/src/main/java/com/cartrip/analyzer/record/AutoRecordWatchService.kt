@@ -10,8 +10,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.cartrip.analyzer.MainActivity
@@ -29,23 +36,96 @@ import com.cartrip.analyzer.R
  *     start [RecordingService] from the background.
  *
  * It reuses the existing [AutoRecordController] decision logic; the only cost is a low-importance ongoing
- * notification. It does no GPS/sensor work itself, so it's near-zero battery while idle.
+ * notification. While idle it does no sensor work, so it's near-zero battery.
+ *
+ * **Re-arm on motion (Rev BA):** a trigger broadcast only arms a *provisional* trip that discards itself
+ * if no motion is confirmed within [AutoRecordPrefs.MOTION_CONFIRM_MS]. So plug in, sit longer than that
+ * window (warm-up / phone call), then drive — and the original provisional is already gone with nothing to
+ * restart it: a silently unrecorded trip. To close that gap, while **armed-but-not-recording** (see
+ * [AutoRecordController.isArmedNotRecording] — essentially only while plugged in, so accelerometer cost is
+ * moot) this service runs a [MotionRearmDetector] on the accelerometer; sustained driving vibration calls
+ * [AutoRecordController.reevaluate] to arm a fresh provisional, which runs its own motion-confirm. A
+ * ticker re-evaluates the watch on/off state ([updateMotionWatch]) every [TICK_MS], so unplug /
+ * trip-start / restart all settle within one tick with no broadcast wiring.
  */
 class AutoRecordWatchService : Service() {
 
     private val receivers = mutableListOf<BroadcastReceiver>()
+
+    // Re-arm-on-motion watch. Registered only while armed-but-not-recording; the pure detector decides.
+    private var sensorManager: SensorManager? = null
+    private var accelSensor: Sensor? = null
+    private val rearmDetector = MotionRearmDetector()
+    private var motionWatchOn = false
+    private val ticker = Handler(Looper.getMainLooper())
+    private val tickRunnable = object : Runnable {
+        override fun run() {
+            updateMotionWatch()
+            ticker.postDelayed(this, TICK_MS)
+        }
+    }
+
+    private val rearmListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            val fired = rearmDetector.onSample(
+                SystemClock.elapsedRealtime(),
+                event.values[0].toDouble(), event.values[1].toDouble(), event.values[2].toDouble()
+            )
+            if (fired) {
+                AutoRecordLog.add(this@AutoRecordWatchService,
+                    "re-arm: sustained motion (vibEma=${"%.2f".format(rearmDetector.vibrationEma)}) -> reevaluate")
+                // Funnel through the normal policy: it re-reads the trigger (so a just-unplugged race
+                // no-ops) and the fresh provisional runs its own motion-confirm + short-trip discard.
+                AutoRecordController.reevaluate(applicationContext, "rearm-motion")
+                // Stop feeding until the next tick re-decides (a started trip turns the watch off).
+                stopMotionWatch()
+            }
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
         startForegroundCompat()
         registerReceivers()
-        AutoRecordLog.add(this, "watch service armed (foreground)")
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        accelSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        AutoRecordLog.add(this, "watch service armed (foreground)" +
+            if (accelSensor == null) " [no accelerometer: re-arm-on-motion disabled]" else "")
         // A trigger may already be present (plugged in when enabled) — evaluate once.
         AutoRecordController.reevaluate(applicationContext, "watch-start")
+        // Start the self-correcting motion-watch ticker (drives the re-arm accelerometer on/off).
+        ticker.post(tickRunnable)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+
+    /** Turn the re-arm accelerometer watch on/off to track the armed-but-not-recording window. */
+    private fun updateMotionWatch() {
+        val want = accelSensor != null && AutoRecordController.isArmedNotRecording(applicationContext)
+        if (want && !motionWatchOn) {
+            rearmDetector.reset()
+            val ok = sensorManager?.registerListener(
+                rearmListener, accelSensor, SensorManager.SENSOR_DELAY_GAME
+            ) ?: false
+            if (ok) {
+                motionWatchOn = true
+                AutoRecordLog.add(this, "re-arm watch ON (armed, awaiting motion)")
+            }
+        } else if (!want && motionWatchOn) {
+            stopMotionWatch()
+        }
+    }
+
+    private fun stopMotionWatch() {
+        if (!motionWatchOn) return
+        runCatching { sensorManager?.unregisterListener(rearmListener) }
+        rearmDetector.reset()
+        motionWatchOn = false
+        AutoRecordLog.add(this, "re-arm watch OFF")
+    }
 
     private fun registerReceivers() {
         // Power: pass the broadcast *edge* as the authoritative charging value — the sticky battery
@@ -95,6 +175,8 @@ class AutoRecordWatchService : Service() {
     }
 
     override fun onDestroy() {
+        ticker.removeCallbacks(tickRunnable)
+        stopMotionWatch()
         receivers.forEach { runCatching { unregisterReceiver(it) } }
         receivers.clear()
         AutoRecordLog.add(this, "watch service stopped")
@@ -134,6 +216,9 @@ class AutoRecordWatchService : Service() {
     companion object {
         const val CHANNEL_ID = "auto_record_watch"
         private const val NOTIF_ID = 43
+        // How often to re-decide the re-arm watch on/off. Short enough that unplug / trip-start settle
+        // quickly; cost is trivial since the service is alive only while auto-record is enabled.
+        private const val TICK_MS = 3_000L
 
         /** Start the watcher if auto-record is enabled (idempotent). Call from a foreground context. */
         fun start(context: Context) {

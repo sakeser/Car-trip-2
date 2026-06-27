@@ -4,6 +4,31 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BA (2026-06-27) — re-arm auto-record on motion (close the long-idle silent-miss gap)
+
+Failure mode closed: an in-car trigger (charger/BT) only arms a **provisional** trip that discards itself
+if no motion is confirmed within `MOTION_CONFIRM_MS` (90 s). So plug in, then sit longer than that window
+(warm-up, a phone call, adjusting) before pulling away, and the provisional is already gone with nothing to
+restart it — the whole drive goes **silently unrecorded**. This was the last known reliability gap on the
+primary (charger) path.
+
+Fix: while **armed-but-not-recording**, `AutoRecordWatchService` now runs a pure `MotionRearmDetector` on
+the accelerometer; sustained driving-level vibration re-arms a fresh provisional via the normal policy.
+- `MotionRearmDetector` (pure, +11 tests): gravity-cancelling jerk EMA (same `0.94/0.06` as the recorder)
+  must hold >= `0.40` continuously for >= 4 s to fire, with a 15 s cooldown. Threshold sits above the 0.30
+  motion-confirm gate, so a re-arm always clears confirm; a false fire only ever costs one discarded
+  provisional (the fresh provisional runs its own GPS/vibration confirm + the Rev AV short-trip discard),
+  so no false trip can persist.
+- `AutoRecordController.isArmedNotRecording()` — one policy-correct definition of the gap window (trigger
+  present + not recording), reading the same sticky-charge/car-BT state as `reevaluate`.
+- The watch is driven by a **self-correcting 3 s ticker** that registers/unregisters the accelerometer
+  (`SENSOR_DELAY_GAME`, `TYPE_LINEAR_ACCELERATION` -> `ACCELEROMETER`, matching the recorder), so every
+  edge settles uniformly with no new broadcast wiring: unplug / trip-start / service-restart turn it off
+  within one tick; on fire it funnels through `reevaluate("rearm-motion")` (a just-unplugged race no-ops).
+- Degraded modes: no accelerometer -> feature self-disables (logged once); FGS background-block doesn't
+  apply (the watch is itself a running FGS, so the start succeeds); jostle/handling filtered by sustain +
+  cooldown + the provisional's own confirm.
+
 ## Rev AZ (2026-06-26) — cluster potholes separately so bumps can't bridge maneuvers
 
 Field finding: the event-cluster grows by adjacency (each event within `CLUSTER_TIME_MS=4s`, up to an

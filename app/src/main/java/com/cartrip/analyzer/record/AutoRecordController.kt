@@ -90,6 +90,22 @@ object AutoRecordController {
     }
 
     /**
+     * True only in the **armed-but-not-recording** window — an in-car trigger is present yet no trip is
+     * running. [AutoRecordWatchService] watches the accelerometer for real motion exactly during this
+     * window and calls [reevaluate] to re-arm, closing the gap where the first provisional discards (long
+     * idle after plug-in) and nothing restarts when the drive finally begins. Reads the same sticky charge
+     * + car-BT state as [reevaluate], so the watch turns off the instant the trigger drops or a trip starts.
+     */
+    fun isArmedNotRecording(context: Context): Boolean {
+        val cfg = AutoRecordPrefs.config(context)
+        if (!cfg.enabled) return false
+        if (RecordingState.state.value.recording) return false
+        val (charging, stickyWireless) = chargeState(context)
+        val wireless = charging && stickyWireless
+        return AutoRecordPolicy.triggerPresent(cfg, charging, wireless, carBtConnected)
+    }
+
+    /**
      * Hands-free trigger from [CarPresenceService] (CompanionDeviceManager). The car coming into range IS
      * the in-car signal here, so -- unlike [reevaluate] -- this does not consult the charger/Bluetooth
      * policy; the service's motion-confirm still discards a non-drive, so a stray connect never keeps a
