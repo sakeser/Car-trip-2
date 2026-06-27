@@ -4,6 +4,29 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BC (2026-06-27) — better trip names: learn Home + name "loops" by where they went
+
+Two naming complaints fixed. (1) The geocoder fell back to "<area> loop" whenever a trip's start and end
+resolved to the **same** name — and "North York" is a former municipality covering ~100 km², so most
+round trips on that side of the city read "North York loop", saying nothing. (2) Home was never used by the
+geocoded path, though most trips begin or end there.
+
+- **Home is now learned from frequency** (`HomeDetector`, pure, +5 tests; roadmap O6): the most frequent
+  endpoint cluster across all trips is home. Grid-densest cell + a 250 m radius **refinement** so a cluster
+  split across a cell boundary is counted whole. An endpoint within 200 m of home is named **"Home"** (free,
+  no geocode). Persisted in SharedPreferences from the trip-list refresh so the single-trip title uses it
+  too. Field-validated: lands 18 m from the owner's actual home and labels 17/34 trips "Home -> ..." (the
+  owner confirmed which of two nearby frequent spots is home — the hardcoded "Harrison Garden" was stale;
+  detection picked the right one).
+- **Same-name trips are named by their farthest point** (`GeoNamer.compose` gains `via` + `roundTrip`):
+  the farthest track point from the start is the destination, so a loop reads "North York -> Scarborough
+  -> back" (start/end physically coincide) or "North York -> Scarborough" (same coarse area, ended
+  elsewhere). Only a trip that genuinely stayed in one area falls back to "X loop"/"X drive". Distinct
+  endpoints ("A -> B") are unchanged. With Home learned, most trips read the short, clear "Home -> X".
+- `TripViewModel.loadTripLabels` now does two passes (learn home from all endpoints, then name each trip),
+  loading each track once; the via point is only geocoded for same-name trips, so the per-refresh geocode
+  budget barely changes.
+
 ## Rev BB (2026-06-27) — START-side trip trim (drop the parked prefix on auto trips)
 
 The stop side already trims retrospectively to the moment the car came to rest (`AutoStop`), but the

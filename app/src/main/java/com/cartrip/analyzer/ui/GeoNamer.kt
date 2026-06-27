@@ -3,6 +3,7 @@ package com.cartrip.analyzer.ui
 import android.content.Context
 import android.location.Address
 import android.location.Geocoder
+import com.cartrip.analyzer.analysis.GeoUtils
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -58,16 +59,31 @@ object GeoNamer {
     }
 
     /**
-     * Compose a "start -> end" label from two endpoint names. Returns null when neither endpoint is
-     * nameable, so the caller can fall back to [TripLabeler].
+     * Compose a readable label from the endpoint names. Returns null when neither endpoint is nameable,
+     * so the caller can fall back to [TripLabeler].
+     *
+     * Distinct endpoints read "A -> B". When both endpoints resolve to the **same** name (the old
+     * uninformative "North York loop"), name the trip by where it actually went -- [via], the farthest
+     * point from the start -- so it becomes "North York -> Scarborough -> back" ([roundTrip], start and
+     * end physically coincide) or "North York -> Scarborough" (same coarse area, ended elsewhere). Only
+     * when the trip genuinely stayed in one area (no distinct [via]) does it fall back to "A loop" / "A
+     * drive". With home learned ([HomeDetector]) most trips read "Home -> X", which is short and clear.
      */
-    fun compose(from: String?, to: String?): String? {
+    fun compose(from: String?, to: String?, via: String? = null, roundTrip: Boolean = false): String? {
         val a = from?.trim()?.ifBlank { null }
         val b = to?.trim()?.ifBlank { null }
+        val v = via?.trim()?.ifBlank { null }
+        val viaDistinct = v != null && !v.equals(a, ignoreCase = true) && !v.equals(b, ignoreCase = true)
         return when {
             a != null && b != null && !a.equals(b, ignoreCase = true) -> "$a $ARROW $b"
-            a != null && b != null -> "$a loop"   // round trip within one named area
-            a != null -> "$a drive"
+            a != null && b != null ->                          // same endpoint name
+                when {
+                    viaDistinct && roundTrip -> "$a $ARROW $v $ARROW back"
+                    viaDistinct -> "$a $ARROW $v"
+                    roundTrip -> "$a loop"                     // genuinely stayed in one area
+                    else -> "$a drive"
+                }
+            a != null -> if (viaDistinct) "$a $ARROW $v" else "$a drive"
             b != null -> "Drive to $b"
             else -> null
         }
@@ -134,10 +150,18 @@ object GeoNamer {
         }
     }
 
+    /** Distance under which a trip's start and end are treated as the same spot -> a round trip. */
+    private const val LOOP_RADIUS_M = 250.0
+    /** The farthest point must be at least this far from the start to be a meaningful "via". */
+    private const val MIN_VIA_M = 600.0
+
     /**
-     * Reverse-geocode a trip's start/end into a "start -> end" label, or null to fall back to
-     * [TripLabeler]. [budget] caps the live geocoder calls spent on this refresh. Never throws and
-     * never touches the main thread itself -- call from a background dispatcher.
+     * Reverse-geocode a trip into a readable label, or null to fall back to [TripLabeler].
+     *
+     * An endpoint at the learned [home] is named "Home" for free (no geocode). When both endpoints
+     * resolve to the same name, the trip is named by its [viaLat]/[viaLon] (the farthest point from the
+     * start) so a "loop" says where it went. [budget] caps live geocoder calls; the via point is only
+     * geocoded when it's actually needed (same-name endpoints). Never throws; call off the main thread.
      */
     fun nameTrip(
         context: Context,
@@ -146,12 +170,30 @@ object GeoNamer {
         endLat: Double,
         endLon: Double,
         budget: Budget,
+        home: HomeDetector.LatLon? = null,
+        viaLat: Double? = null,
+        viaLon: Double? = null,
     ): String? {
         if (!Geocoder.isPresent()) return null
         val geocoder = Geocoder(context, Locale.getDefault())
         val prefs = context.getSharedPreferences(CACHE, Context.MODE_PRIVATE)
-        val from = endpointName(geocoder, prefs, startLat, startLon, budget)
-        val to = endpointName(geocoder, prefs, endLat, endLon, budget)
-        return compose(from, to)
+        val from = if (HomeDetector.isHome(startLat, startLon, home)) HOME
+            else endpointName(geocoder, prefs, startLat, startLon, budget)
+        val to = if (HomeDetector.isHome(endLat, endLon, home)) HOME
+            else endpointName(geocoder, prefs, endLat, endLon, budget)
+        val roundTrip = GeoUtils.haversine(startLat, startLon, endLat, endLon) <= LOOP_RADIUS_M
+        // Only resolve a "via" when both endpoints share a name (the case that would read "X loop") and
+        // the farthest point is meaningfully away from the start -- spends a geocode only when useful.
+        val sameName = from != null && to != null && from.equals(to, ignoreCase = true)
+        val via = if (sameName && viaLat != null && viaLon != null &&
+            GeoUtils.haversine(startLat, startLon, viaLat, viaLon) >= MIN_VIA_M
+        ) {
+            if (HomeDetector.isHome(viaLat, viaLon, home)) HOME
+            else endpointName(geocoder, prefs, viaLat, viaLon, budget)
+        } else null
+        return compose(from, to, via, roundTrip)
     }
+
+    /** Display name for an endpoint at the learned home. */
+    private const val HOME = "Home"
 }

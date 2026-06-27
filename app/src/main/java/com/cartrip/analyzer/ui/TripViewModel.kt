@@ -31,11 +31,37 @@ import kotlinx.coroutines.withContext
 class TripViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
-        /** Max live reverse-geocode lookups per trip-list refresh (each unnamed trip uses up to 2). */
-        const val GEO_BUDGET_PER_REFRESH = 12
+        /** Max live reverse-geocode lookups per trip-list refresh (an unnamed trip uses up to 3). */
+        const val GEO_BUDGET_PER_REFRESH = 16
+        /** Persisted learned-home location (lat/lon), shared with the single-trip title path. */
+        const val HOME_PREFS = "cartrip_home"
     }
 
     private val dao = AppDatabase.get(app).tripDao()
+
+    /** The farthest track point from the trip's start — the natural turnaround/destination of a loop. */
+    private fun farthestFrom(points: List<AnalysisPointEntity>): AnalysisPointEntity? {
+        val start = points.firstOrNull() ?: return null
+        return points.maxByOrNull { GeoUtils.haversine(start.lat, start.lon, it.lat, it.lon) }
+    }
+
+    private fun loadHome(ctx: Application): HomeDetector.LatLon? {
+        val p = ctx.getSharedPreferences(HOME_PREFS, android.content.Context.MODE_PRIVATE)
+        if (!p.contains("lat")) return null
+        return HomeDetector.LatLon(
+            java.lang.Double.longBitsToDouble(p.getLong("lat", 0)),
+            java.lang.Double.longBitsToDouble(p.getLong("lon", 0))
+        )
+    }
+
+    private fun saveHome(ctx: Application, home: HomeDetector.LatLon?) {
+        val p = ctx.getSharedPreferences(HOME_PREFS, android.content.Context.MODE_PRIVATE)
+        if (home == null) { p.edit().clear().apply(); return }
+        p.edit()
+            .putLong("lat", java.lang.Double.doubleToRawLongBits(home.lat))
+            .putLong("lon", java.lang.Double.doubleToRawLongBits(home.lon))
+            .apply()
+    }
 
     val trips: StateFlow<List<TripEntity>> =
         dao.observeTrips().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -51,8 +77,13 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         val points = dao.getAnalysisPoints(trip.id)
         val start = points.firstOrNull()
         val end = points.lastOrNull()
+        val via = farthestFrom(points)
+        val home = loadHome(getApplication())
         val geo = if (start != null && end != null) {
-            GeoNamer.nameTrip(getApplication(), start.lat, start.lon, end.lat, end.lon, GeoNamer.Budget(2))
+            GeoNamer.nameTrip(
+                getApplication(), start.lat, start.lon, end.lat, end.lon,
+                GeoNamer.Budget(3), home, via?.lat, via?.lon
+            )
         } else null
         geo ?: Format.relativeDay(trip.startTime)
     }
@@ -136,34 +167,51 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         dao.getAnalysisPointsSince(cutoff)
     }
 
+    /** Per-trip endpoints distilled from its track — start, end, and the farthest point (loop "via"). */
+    private data class TripEnds(
+        val start: AnalysisPointEntity?,
+        val end: AnalysisPointEntity?,
+        val via: AnalysisPointEntity?,
+        val static: String,
+    )
+
     suspend fun loadTripLabels(trips: List<TripEntity>): Map<Long, String> = withContext(Dispatchers.IO) {
         val ctx = getApplication<Application>()
         // Caps live geocoder calls for this one refresh; cached cells are free, so over a few
         // refreshes (and across runs, via SharedPreferences) the whole list fills in.
         val budget = GeoNamer.Budget(GEO_BUDGET_PER_REFRESH)
-        trips.associate { trip ->
+        // Pass 1: load each trip's track once and keep only its lightweight endpoints (the full point
+        // arrays are released between iterations). Also build the static fallback label here.
+        val ends = trips.associate { trip ->
             val points = dao.getAnalysisPoints(trip.id)
-            val static = TripLabeler.label(trip, points)
-            // The label is only shown for unnamed trips (TripListScreen: name.ifBlank { label }),
-            // so don't spend a geocode on a trip the user has already named.
-            val label = if (trip.name.isNotBlank()) {
-                static
-            } else {
-                geocodedLabel(ctx, points, budget) ?: static
-            }
+            trip.id to TripEnds(points.firstOrNull(), points.lastOrNull(), farthestFrom(points), TripLabeler.label(trip, points))
+        }
+        // Learn home from every trip's endpoints; persist it so the single-trip title path can use it.
+        val home = HomeDetector.detect(
+            ends.values.flatMap { listOfNotNull(it.start, it.end) }.map { HomeDetector.LatLon(it.lat, it.lon) }
+        )
+        if (home != null) saveHome(ctx, home)
+        // Pass 2: compose each label (home-aware, with a loop "via"). Only unnamed trips spend a geocode.
+        trips.associate { trip ->
+            val e = ends.getValue(trip.id)
+            val label = if (trip.name.isNotBlank()) e.static
+            else geocodedLabel(ctx, e, home ?: loadHome(ctx), budget) ?: e.static
             trip.id to label
         }
     }
 
-    /** Reverse-geocoded "start -> end" label for a trip's stored route, or null to fall back. */
+    /** Reverse-geocoded label for a trip's stored route (home-aware, loop-via), or null to fall back. */
     private fun geocodedLabel(
         ctx: Application,
-        points: List<AnalysisPointEntity>,
+        e: TripEnds,
+        home: HomeDetector.LatLon?,
         budget: GeoNamer.Budget,
     ): String? {
-        val start = points.firstOrNull() ?: return null
-        val end = points.lastOrNull() ?: return null
-        return GeoNamer.nameTrip(ctx, start.lat, start.lon, end.lat, end.lon, budget)
+        val start = e.start ?: return null
+        val end = e.end ?: return null
+        return GeoNamer.nameTrip(
+            ctx, start.lat, start.lon, end.lat, end.lon, budget, home, e.via?.lat, e.via?.lon
+        )
     }
 
     suspend fun loadAnalysis(id: Long): TripAnalysis = withContext(Dispatchers.IO) {

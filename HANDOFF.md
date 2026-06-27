@@ -465,10 +465,15 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
   `MultiSeriesChart`/`Series` from `Charts.kt` (Rev Y); swapped the deprecated `List`/`ShowChart`/
   `TrendingUp`/`TrendingDown` icons to their `AutoMirrored` forms. (A `t0` name-shadow warning in the
   replay block remains, harmless.)
-- **O6 — `TripLabeler` is GTA-hardcoded. [ADDRESSED, Rev O]** `GeoNamer` now reverse-geocodes
-  unnamed trips' start/end (fail-soft, SharedPreferences-cached by quantized coords) into
-  `North York -> Scarborough` labels, with the GTA `TripLabeler` as the fallback. Still open: learn
-  home/work from frequency rather than hardcoding, and the labeler remains the (GTA-biased) fallback.
+- **O6 — `TripLabeler` is GTA-hardcoded. [ADDRESSED, Rev O; home learned Rev BC]** `GeoNamer` now
+  reverse-geocodes unnamed trips' start/end (fail-soft, SharedPreferences-cached by quantized coords) into
+  `North York -> Scarborough` labels, with the GTA `TripLabeler` as the fallback. **Rev BC** adds
+  frequency-based **home detection** (`HomeDetector`: densest endpoint cluster across all trips, radius-
+  refined, persisted) so endpoints near home read "Home", and names same-name "loops" by their farthest
+  point ("North York -> Scarborough -> back") instead of the uninformative "North York loop". Field-
+  validated (lands 18 m from the owner's home; the stale hardcoded "Harrison Garden" was 560 m off — the
+  owner confirmed the detected spot). Still open: **work** detection (only home is learned; `TripLabeler`'s
+  hardcoded home/work remain the offline-fallback only, used when geocoding fails); a user-settable home.
 - **O7 — Field data analyzed (Rev K–L).** Narrated trips 845/847 analyzed vs transcripts: capture
   excellent (~46 Hz motion, clean 1 Hz GPS, GNSS now logged). Fixed the corner→longitudinal
   contamination (Rev K) and the GPS-detector score-blindness by promoting the fused detector into
