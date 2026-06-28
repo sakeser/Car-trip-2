@@ -86,7 +86,12 @@ data class TripEntity(
     val gnssSampleCount: Int = 0,
     // Manual "is this a drive?" override (null = auto-detect by top speed, true = drive, false = walk/
     // non-drive). Lets the owner correct a mislabeled trip; respected by TripKind everywhere.
-    val userIsDrive: Boolean? = null
+    val userIsDrive: Boolean? = null,
+    // Drawdowns (Rev CI): forced, unnecessary speed losses while cruising — cruising fast, then braking
+    // hard/long (>50% speed loss) that later recovers (not a normal stop). A traffic-quality / stop-and-go
+    // signal that feeds the Drive Stress Score. drawdownSeverity = sum of (speed lost, km/h)^2 over drawdowns.
+    val drawdownCount: Int = 0,
+    val drawdownSeverity: Double = 0.0
 )
 
 @Entity(tableName = "locations", indices = [Index("tripId")])

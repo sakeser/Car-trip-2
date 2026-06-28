@@ -2,6 +2,7 @@ package com.cartrip.analyzer.data
 
 import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.DriveMetrics
+import com.cartrip.analyzer.analysis.Drawdowns
 import com.cartrip.analyzer.analysis.EventType
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
@@ -77,12 +78,19 @@ object TripFinalizer {
             motionTurnCount = metrics.motionTurnCount,
             fusedConfidence = metrics.fusedConfidence
         )
-        val pointEntities = preserveSpeedLimits(samplePoints(analysis.points), previousPoints)
-            .map { it.toEntity(tripId) }
+        val annotatedPoints = preserveSpeedLimits(samplePoints(analysis.points), previousPoints)
+        // Drawdowns (Rev CI): computed from the limit-annotated, sampled track so it can use limits when
+        // present, and so a re-analyze recomputes it. A walk can't have a (>=60 km/h) drawdown anyway.
+        val drawdowns = Drawdowns.detect(annotatedPoints)
+        val withDrawdowns = updated.copy(
+            drawdownCount = drawdowns.count,
+            drawdownSeverity = drawdowns.severity
+        )
+        val pointEntities = annotatedPoints.map { it.toEntity(tripId) }
         // Persist GPS/pothole events and the Rev D fused events together (each tagged by source).
         val eventEntities = (analysis.events + analysis.fusedEvents).map { it.toEntity(tripId) }
-        dao.finalizeTripTx(updated, pointEntities, eventEntities)
-        return Result(updated, analysis.copy(metrics = metrics))
+        dao.finalizeTripTx(withDrawdowns, pointEntities, eventEntities)
+        return Result(withDrawdowns, analysis.copy(metrics = metrics))
     }
 
     /**

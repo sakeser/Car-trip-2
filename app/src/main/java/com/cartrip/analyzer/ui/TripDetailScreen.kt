@@ -995,6 +995,16 @@ private fun SafetyFactorsCard(
                 }
             }
 
+            // Drawdowns: forced cruise-then-slow-then-recover events (traffic / stop-and-go). Feeds the
+            // Drive Stress Score; surfaced here as a compact line when present.
+            if (trip.drawdownCount > 0) {
+                Text(
+                    "Forced slowdowns: ${trip.drawdownCount} (traffic / stop-and-go)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             // Consolidated event detail: the full tap-to-jump list lives here (no separate card).
             if (listEvents.isNotEmpty()) {
                 Box(
