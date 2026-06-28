@@ -112,10 +112,9 @@ fun InsightsScreen(
         }.ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
         val averages = ScoreAverages.from(wScores)
-        // Cross-trip trouble spots — recurring hotspots + every rough spot (loaded off the main thread).
-        val trouble by produceState(initialValue = TripViewModel.TroubleSpots(emptyList(), emptyList())) {
-            value = runCatching { viewModel.loadTroubleSpots() }
-                .getOrDefault(TripViewModel.TroubleSpots(emptyList(), emptyList()))
+        // Cross-trip recurring-event hotspots (loaded off the main thread).
+        val hotspots by produceState(initialValue = emptyList<EventHotspots.Hotspot>()) {
+            value = runCatching { viewModel.loadEventHotspots() }.getOrDefault(emptyList())
         }
 
         LazyColumn(
@@ -148,24 +147,19 @@ fun InsightsScreen(
                 }
             }
 
-            if (trouble.hotspots.isNotEmpty() || trouble.roughSpots.isNotEmpty()) {
+            if (hotspots.isNotEmpty()) {
                 item {
                     SectionTitle("Trouble spots")
-                    val roughLatLng = remember(trouble.roughSpots) {
-                        trouble.roughSpots.map { LatLng(it.first, it.second) }
-                    }
                     TroubleSpotsMap(
-                        hotspots = trouble.hotspots,
-                        roughSpots = roughLatLng,
+                        hotspots = hotspots,
+                        onOpenTrip = onOpenTrip,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(280.dp)
                             .clip(RoundedCornerShape(12.dp))
                     )
                 }
-                if (trouble.hotspots.isNotEmpty()) {
-                    item { RecurringSpotsCard(trouble.hotspots.take(6)) }
-                }
+                item { RecurringSpotsCard(hotspots.take(6)) }
             }
         }
     }

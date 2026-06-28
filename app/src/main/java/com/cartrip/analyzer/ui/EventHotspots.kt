@@ -28,7 +28,17 @@ object EventHotspots {
         EventType.HARSH_STOP -> "Hard stop"
     }
 
-    data class Ev(val tripId: Long, val kind: String, val lat: Double, val lon: Double)
+    data class Ev(
+        val tripId: Long,
+        val kind: String,
+        val lat: Double,
+        val lon: Double,
+        val gForce: Double = 0.0,       // event magnitude in g, for the per-instance detail
+        val tripStartWall: Long = 0L,   // the drive's wall-clock start, for dating each instance
+    )
+
+    /** One occurrence of a hotspot's event — which drive, how hard, when. */
+    data class Instance(val tripId: Long, val gForce: Double, val tripStartWall: Long)
 
     data class Hotspot(
         val kind: String,
@@ -37,6 +47,7 @@ object EventHotspots {
         val trips: Int,   // distinct trips with this event-kind here
         val count: Int,   // total events
         val where: String = "",  // optional friendly location ("near Home"/"near Work"), set by the caller
+        val instances: List<Instance> = emptyList(),  // each occurrence (for the tap-to-detail view)
     )
 
     private fun cell(v: Double) = (v / CELL).roundToInt()
@@ -57,6 +68,9 @@ object EventHotspots {
                 lon = items.sumOf { it.lon } / items.size,
                 trips = trips,
                 count = items.size,
+                instances = items
+                    .map { Instance(it.tripId, it.gForce, it.tripStartWall) }
+                    .sortedByDescending { it.tripStartWall },
             )
         }.sortedWith(compareByDescending<Hotspot> { it.trips }.thenByDescending { it.count })
     }

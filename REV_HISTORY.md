@@ -4,6 +4,16 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BS (2026-06-28) — trouble-spots map: drop rough spots, tappable hotspot detail
+
+Owner rework of the trouble-spots map. **Rough spots (potholes) removed entirely** — the map now shows only
+recurring **maneuver** hotspots (hard braking / acceleration / sharp turn / hard stop) as pins coloured by
+kind. **Tapping a pin** opens a detail bottom sheet listing every occurrence: the drive's date + that
+instance's **g-force**, with the peak called out; tapping an occurrence opens that trip. `EventHotspots.Ev`
+now carries `gForce` + the drive's wall-clock start; `Hotspot` carries its `Instance` list. `loadEventHotspots`
+excludes `POTHOLE` and tags each event with g-force + trip date (replaces `loadTroubleSpots`/rough-spot
+collection). `TroubleSpotsMap` lost the rough-spot circles and gained tappable markers + the detail sheet.
+
 ## Rev BR (2026-06-28) — Insights cleanup: drop stale sections, smooth you-vs-traffic
 
 Owner feedback on the Insights screen. Removed the **Highlights** section (best/worst/longest cards — not
