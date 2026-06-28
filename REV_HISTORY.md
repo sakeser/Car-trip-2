@@ -4,6 +4,22 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BJ (2026-06-28) — cross-trip recurring-event hotspots (Insights)
+
+Roadmap item 9 (owner-requested): as routes overlap, surface places where the *same kind* of event recurs
+across **distinct** trips — a pothole you hit every commute, a turn you always take sharply, a regular
+hard-brake spot. Pure `EventHotspots` (grid-cluster ~55 m by (cell, kind); a hotspot needs >=2 distinct
+trips so one eventful drive can't manufacture one; CORNER+SWERVE collapse to "Sharp turn"). +6 unit tests.
+`TripViewModel.loadEventHotspots` locates each stored `drive_events` row via the nearest analysis point
+(excludes walks/samples) and tags home/work hotspots "near Home"/"near Work". New Insights **"Recurring
+spots"** card lists the strongest (most distinct trips first).
+
+Field-validated on real data (prototype replay): clear signal already — a recurring pothole at home (5
+events/3 trips), and a recurring swerve+corner at the workplace entrance (43.516,-79.670) = the same turn
+into the work lot each commute. Exactly the "flag that turn/area" the owner asked for; grows with data.
+(The Insights card itself wasn't visually verified — device was intermittently offline overnight; logic is
+unit-tested + data-validated.) Pairs with O9 (rough-stretch geometry) and item 4 (repeated-route compare).
+
 ## Rev BI (2026-06-28) — work detection skips the home neighbourhood
 
 Field replay of Rev BH exposed a flaw: the owner has several frequent spots *within ~1 km of home* (the

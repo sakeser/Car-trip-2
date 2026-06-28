@@ -41,6 +41,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -113,6 +114,10 @@ fun InsightsScreen(
         val best = windowTrips.maxByOrNull { it.smoothness }
         val worst = windowTrips.minByOrNull { it.smoothness }
         val longest = windowTrips.maxByOrNull { it.distanceM }
+        // Cross-trip recurring-event hotspots (grows with data; loaded off the main thread).
+        val hotspots by produceState(initialValue = emptyList<EventHotspots.Hotspot>()) {
+            value = runCatching { viewModel.loadEventHotspots() }.getOrDefault(emptyList())
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -140,6 +145,13 @@ fun InsightsScreen(
                 ) {
                     rowSpecs.forEach { MiniStatCard(it, Modifier.weight(1f)) }
                     if (rowSpecs.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+
+            if (hotspots.isNotEmpty()) {
+                item {
+                    SectionTitle("Recurring spots")
+                    RecurringSpotsCard(hotspots.take(6))
                 }
             }
 
@@ -635,6 +647,48 @@ private fun SectionTitle(text: String) {
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(bottom = 8.dp)
     )
+}
+
+@Composable
+private fun RecurringSpotsCard(hotspots: List<EventHotspots.Hotspot>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                "The same thing keeps happening here across your drives.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            hotspots.forEach { h ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (h.where.isNotEmpty()) "${h.kind} · ${h.where}" else h.kind,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "on ${h.trips} drives" + if (h.count > h.trips) " · ${h.count} times" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        "${h.trips}×",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

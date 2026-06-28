@@ -210,6 +210,40 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         dao.getAnalysisPointsSince(cutoff)
     }
 
+    /**
+     * Cross-trip recurring-event hotspots (roadmap item 9): places where the same kind of event recurs
+     * across multiple drives. Each stored event is located via the nearest analysis point by time; walks
+     * and sample trips are excluded. See [EventHotspots].
+     */
+    suspend fun loadEventHotspots(): List<EventHotspots.Hotspot> = withContext(Dispatchers.IO) {
+        val drives = dao.getAllTrips().filter {
+            it.endTime > 0 && !it.isSample && !TripKind.isLikelyNonDrive(it)
+        }
+        val evs = ArrayList<EventHotspots.Ev>()
+        for (t in drives) {
+            val events = dao.getDriveEvents(t.id)
+            if (events.isEmpty()) continue
+            val pts = dao.getAnalysisPoints(t.id)
+            if (pts.isEmpty()) continue
+            for (e in events) {
+                val type = runCatching { EventType.valueOf(e.type) }.getOrNull() ?: continue
+                val p = pts.minByOrNull { kotlin.math.abs(it.t - e.t) } ?: continue
+                if (kotlin.math.abs(p.t - e.t) > 4000) continue   // no nearby fix -> can't place it
+                evs.add(EventHotspots.Ev(t.id, EventHotspots.kindOf(type), p.lat, p.lon))
+            }
+        }
+        // Tag each hotspot with a friendly location when it's at the learned home/work.
+        val home = loadHome(getApplication()); val work = loadWork(getApplication())
+        EventHotspots.find(evs).map { h ->
+            val where = when {
+                HomeDetector.isHome(h.lat, h.lon, home) -> "near Home"
+                HomeDetector.isWork(h.lat, h.lon, work) -> "near Work"
+                else -> ""
+            }
+            h.copy(where = where)
+        }
+    }
+
     /** Per-trip endpoints distilled from its track — start, end, and the farthest point (loop "via"). */
     private data class TripEnds(
         val start: AnalysisPointEntity?,
