@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CrisisAlert
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -203,6 +204,23 @@ fun TripDetailScreen(
                                     }
                                 }
                             )
+                            if (t.userIsDrive != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Reset to automatic") },
+                                    leadingIcon = { Icon(Icons.Filled.Autorenew, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        actionScope.launch {
+                                            // Clear the manual override; drive/walk reverts to the top-speed heuristic.
+                                            viewModel.setTripIsDrive(tripId, null)
+                                            etaRefresh++
+                                            CloudState.set {
+                                                it.copy(lastMessage = "Drive/walk set back to automatic.")
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
                         DropdownMenuItem(
                             text = { Text("Delete trip") },

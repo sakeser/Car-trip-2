@@ -92,6 +92,16 @@ fun GuideScreen(onBack: () -> Unit) {
             }
             item {
                 GuideCard(
+                    "Credits & data sources",
+                    listOf(
+                        "Speed limits & road geometry: ${0xA9.toChar()} OpenStreetMap contributors, under the Open Database License (ODbL). Limits are cached on this phone and reused for up to 30 days.",
+                        "Maps, traffic ETAs & place names: Google Maps Platform.",
+                        "Fuel prices: Ontario Ministry of Energy weekly Toronto average."
+                    )
+                )
+            }
+            item {
+                GuideCard(
                     "Settings (coming soon)",
                     listOf(
                         "Sensitivity controls for event thresholds (how hard a brake/turn/pothole has to be to count), speeding tolerance, and auto-stop timing will live here. Roughed in for now - tell me which knobs you want and I'll wire them up."

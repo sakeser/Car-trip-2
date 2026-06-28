@@ -4,6 +4,27 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CP cont. (2026-06-28, v3.28/build 139) — reset-to-automatic + OSM attribution + doc/test sync
+
+Low-risk autonomous polish pass on the CP backlog (built + 187 unit tests green; **not yet installed/
+eyeballed on the S25** — the UI changes are compile- and test-clean, device verification pending; **not pushed**).
+- **Trip Detail "Reset to automatic."** The trip overflow menu now offers "Reset to automatic" whenever a
+  manual drive/walk override is set (`trip.userIsDrive != null`); it clears the override back to null so the
+  kind reverts to the top-speed heuristic. Reuses the existing `TripViewModel.setTripIsDrive(id, null)` →
+  `TripDao.setUserIsDrive` plumbing — no schema or logic change. `ui/TripDetailScreen.kt`.
+- **Visible OSM/ODbL attribution.** New "Credits & data sources" card in the "How it works" guide crediting
+  "© OpenStreetMap contributors (ODbL)" for speed limits / road data, plus Google Maps Platform and the
+  Ontario gas-price source. The © glyph is built at runtime via `0xA9.toChar()` so the `.kt` source stays
+  ASCII (the Windows Cp1252 mojibake trap). `ui/GuideScreen.kt`.
+- **Doc/trust cleanup.** Synced the `ROADMAP_NEW.md` frontier to v3.28 / build 139 / schema v21 / 187 tests;
+  corrected the stale per-suite test counts in HANDOFF §7 (now exact and summing to 187); updated the HANDOFF
+  header + §14 CP status.
+- Not touched (still gated): CQ Places *activation* (paid — owner go-ahead) and CR SQLCipher/biometric.
+
+For the v3.23–v3.27 revs (Rev CO doc-truth pass; CP Stress-Score depth + review fixes + StressScore/TripKind
+decouple; CR export-file retention; CP migration-test foundation; CQ Places scaffold) see **HANDOFF.md §14 /
+§14.1** and the git log — they were recorded there rather than in this file.
+
 ## Rev CK-CN (2026-06-28, v3.22) — past-trips polish, smart bar sizing, AI export
 
 Owner's new backlog, easiest/lowest-risk first.

@@ -1,7 +1,12 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.27 (build 138)** (CR export retention + migration foundation + Places scaffold) · Branch `main`,
-**all pushed** · S25 installed **3.27 (build 138)**. Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.28 (build 139)** (Rev CP cont.: Trip-Detail reset-to-automatic +
+visible OSM/ODbL attribution + doc/test-count sync; atop CR export retention + migration foundation + Places
+scaffold) · on review branch **`rev-cp-v3.28-polish`** (`682f791`); **`main` is untouched at `efa82a8` =
+origin/main**, **NOT pushed** — v3.28 awaits the owner's review + push authorization (to land it:
+`git checkout main && git merge --ff-only rev-cp-v3.28-polish`, then push) · S25 installed **3.27 (build
+138)** — v3.28 **not yet installed/eyeballed on device** (UI changes build + unit-test clean; device
+verification pending). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -472,19 +477,20 @@ Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.
 Note: the Git-Bash `/c/...` path won't glob in Windows Python — count via `grep -c '<testcase'` on the
 XMLs, or open one in the editor.
 
-Files: `AutoStopTest`, `FusedEventDetectorTest` (8: peak-percentile, corner-veto, ambiguous-steering,
-maneuver-peak magnitude), `DisplayEventsTest`, `TripAnalyzerTest`, `MotionFusionTest`, `GnssQualityTest`,
-`SpeedTierTest`, `TilesTest`, `TripBucketsTest`, `TripLabelerTest`, `GeoAndPolylineTest`,
-`DisplayEventsTest` (8), `GeoNamerTest` (9: pickName / composeLabel), `FuelEstimatorTest` (5),
-`TripScoresTest` (3: fused drives Safety / cap / GPS-fallback), `AutoRecordPolicyTest` (7: trigger /
-arm / stop / wireless / Bluetooth gating), `FormatTest`, `TripNamingTest` (same-name disambiguation),
-`TripKindTest` (3: walk vs drive vs zero-speed), `DrivingTimesTest` (2: dayparts / summarize). All
+Files: `AutoStopTest` (6), `FusedEventDetectorTest` (11: peak-percentile, corner-veto, ambiguous-steering,
+maneuver-peak magnitude), `DisplayEventsTest` (19), `TripAnalyzerTest` (3), `MotionFusionTest` (6),
+`GnssQualityTest` (5), `SpeedTierTest` (4), `TilesTest` (4), `TripBucketsTest` (3), `TripLabelerTest` (2),
+`GeoAndPolylineTest` (4), `GeoNamerTest` (11: pickName / composeLabel), `FuelEstimatorTest` (5),
+`TripScoresTest` (3: fused drives Safety / cap / GPS-fallback), `AutoRecordPolicyTest` (10: trigger /
+arm / stop / wireless / Bluetooth gating), `FormatTest` (2), `TripNamingTest` (3, same-name disambiguation),
+`TripKindTest` (6: walk vs drive vs zero-speed), `DrivingTimesTest` (2: dayparts / summarize). All
 pure-JVM (no Robolectric/instrumented).
 
-Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (5), `AiInsightsExportTest` (3),
+Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (8), `AiInsightsExportTest` (3),
 `EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
 `GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard),
-`ExportRetentionTest` (4), `PlacesTest` (4). Count is **187** (`grep -rc '@Test'` across `app/src/test`).
+`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7). Count is **187** (`grep -rc '@Test'`
+across `app/src/test`). The per-suite counts above are exact and sum to 187 (verified 2026-06-28).
 
 Gaps: **no Compose/UI tests, no instrumented tests.** Room migrations: **schema export is now on** (v3.27 —
 `exportSchema=true` + `app/schemas/.../21.json`), so Room validates migrations at compile time and v21+ is a
@@ -1176,8 +1182,12 @@ source** before acting (some Codex notes were stale or already-handled). Verdict
   migrations were instead validated by **real on-device app upgrades** (failure-mode matrix §3). **Next
   migration (v22):** add `androidTestImplementation("androidx.room:room-testing:2.6.1")` + a `testInstrumentationRunner`
   + a `MigrationTestHelper` androidTest for v21→v22 (both schemas will then exist) — needs an emulator/device
-  run. Also open: shared bar/chart scale component (the queued "bar-sizing audit"), Trip Detail reset-to-auto
-  override, Past Trips open affordance, a visible **OSM "© OpenStreetMap contributors (ODbL)"** attribution credit.
+  run. **Done in v3.28/build 139 (Rev CP cont.):** Trip Detail **"Reset to automatic"** for the drive/walk
+  override (clears `userIsDrive` back to null; only shown when a manual override exists), and a visible
+  **OSM "© OpenStreetMap contributors (ODbL)"** attribution credit in the "How it works" guide (a new
+  "Credits & data sources" card; the © glyph is built via `0xA9.toChar()` so the `.kt` source stays ASCII —
+  mojibake trap). Still open: shared bar/chart scale component (the queued "bar-sizing audit") and a better
+  Past Trips open/preview affordance.
 - **CQ (P2, gated on owner's Places go/no-go):** **SCAFFOLD DONE (v3.27, inert):** `cloud/Places.kt`
   (Nearby Search New: pure `topPlaceName` parser + `cellKey` cache key, both unit-tested; `nearbyName` fetch
   with `X-Goog-FieldMask=places.displayName`, ~60 m radius, rank-by-distance; `placeNameCached` caches by

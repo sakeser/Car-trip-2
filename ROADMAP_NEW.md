@@ -3,17 +3,20 @@
 New items from the owner, assessed + ordered by value × (1/risk). Worked top-down ("clear the log,
 easiest/least-risk first"). Rev letters continue from CJ.
 
-> **⚠️ FRONTIER (updated 2026-06-28):** CK–CN shipped in **v3.22**. A second-reviewer (Codex) audit then
-> produced **Rev CO** (source bumped to 3.23/build 134) — a doc-truth + low-risk-correctness pass (docs reconciled to 3.23/build 134/schema
-> v21; sample GNSS cleanup; AI-export labels; quick-toggle background-location gate; export-schema refresh;
-> fuel-week wording). A **second re-review** then produced small follow-ups (system-guide `.docx` marked
-> non-authoritative; HANDOFF "uncommitted"/test-count fixed; auto-record "foreground-only" label; export
-> `UserTripName` rename; share guard). **Rev CP (v3.24/build 135) then shipped the Drive Stress Score depth**
-> (hero pill, km-weighted average, Insights smoothed trend — see the section just below for shipped-vs-open).
-> **Still open** (not yet built): the `StressScore` **decouple** out of `ui`, Room **migration tests**, an
-> optional `GeneratedTripLabel` export column, then **CQ** Places / **CR** commercialization. **The
-> authoritative plan lives in `HANDOFF.md` §14 / §14.1** — read that first. The Tier A–C items below are still
-> valid backlog; cross-reference §14 + §13.3 before starting.
+> **⚠️ FRONTIER (updated 2026-06-28 — source v3.28 / build 139, schema v21, 187 tests):** The authoritative
+> plan lives in **`HANDOFF.md` §14 / §14.1** — read that first; this box is the quick status. Shipped since the
+> CK–CN batch (v3.22): **Rev CO** doc-truth + low-risk-correctness pass; **Rev CP** Drive Stress Score depth
+> (hero pill, km-weighted average, Insights smoothed trend), **then `StressScore` + `TripKind` decoupled out of
+> `ui` into `analysis/` (v3.26)**; **CR export-file retention** (`export/ExportRetention` prunes the unencrypted
+> per-trip `.xlsx`, v3.27); **Room migration-test FOUNDATION** (`exportSchema=true` + committed
+> `schemas/.../21.json` baseline, v3.27); **Places scaffold** (`cloud/Places.kt` + `PlacesPrefs`, flag **OFF** /
+> inert — no wiring, no cost, v3.27); **Trip-Detail "Reset to automatic"** + a **visible OSM/ODbL attribution**
+> credit + a doc/test-count sync (v3.28). **Still open (priority order):** finish the **bar-sizing audit** +
+> Past-Trips open affordance (CP polish); **CQ** = *activate* Places (paid — needs the owner's go-ahead, a UI
+> toggle, diagnostics, and wiring into naming with a Geocoder fallback); **CR** = commercialization hardening
+> (privacy policy, Data Safety, background-location / foreground-only package) and **SQLCipher + biometric**
+> at-rest encryption (gated, higher-risk — ask first). The Tier A–C items below are older backlog;
+> cross-reference §14 + §13.3 before starting.
 
 ## ⭐ Drive Stress Score — depth (owner-requested, HIGH interest)
 
