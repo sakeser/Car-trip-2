@@ -123,6 +123,19 @@ fun InsightsScreen(
         }.ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
         val averages = ScoreAverages.from(wScores)
+        // The window immediately preceding the current one, for a "this window vs previous" delta strip.
+        // All-time has no prior period, so it shows no deltas.
+        val prevWindowTrips = when (window) {
+            InsightWindow.DAYS30 ->
+                completed.filter { it.startTime in (now - 2 * thirtyDays) until (now - thirtyDays) }
+            InsightWindow.KM500 -> {
+                val cur = windowTrips.toHashSet()
+                recentByDistance(completed.filterNot { it in cur }, 500_000.0)
+            }
+            InsightWindow.ALL -> emptyList()
+        }
+        val prevAverages = if (prevWindowTrips.isNotEmpty())
+            ScoreAverages.from(prevWindowTrips.map { TripScores.from(it) }) else null
         // Cross-trip recurring-event hotspots (loaded off the main thread). [sliderG] tracks the live slider
         // position (for the label); [appliedG] only changes when the user lifts their finger, so we reload
         // once per adjustment instead of on every drag frame.
@@ -142,6 +155,11 @@ fun InsightsScreen(
             item { WindowSelector(window) { window = it } }
 
             item { DriveScoreHero(averages, windowTrips.size, window.label) }
+
+            // Compact "this window vs previous" delta strip (the re-imagined Health metrics).
+            if (prevAverages != null) {
+                item { WindowDeltaStrip(averages, prevAverages, window.label) }
+            }
 
             // Fuel & cost — directly below the drive score.
             run {
@@ -308,6 +326,55 @@ private fun WindowSelector(selected: InsightWindow, onSelect: (InsightWindow) ->
                 label = { Text(w.label) }
             )
         }
+    }
+}
+
+/**
+ * A compact strip showing how each score changed from the previous comparable window — the re-imagined
+ * "Health metrics" (Rev BR removed the old sparkline grid). Green = improved, red = worsened.
+ */
+@Composable
+private fun WindowDeltaStrip(current: ScoreAverages, previous: ScoreAverages, windowLabel: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                "Change vs previous $windowLabel",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DeltaCell("Drive", current.drive - previous.drive, Modifier.weight(1f))
+                DeltaCell("Safety", current.safety - previous.safety, Modifier.weight(1f))
+                DeltaCell("Comfort", current.comfort - previous.comfort, Modifier.weight(1f))
+                DeltaCell("Pace", paceDelta(current.pace, previous.pace), Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/** Delta only when both windows have a pace score; null otherwise (shown as a dash). */
+private fun paceDelta(cur: Int?, prev: Int?): Int? = if (cur != null && prev != null) cur - prev else null
+
+@Composable
+private fun DeltaCell(label: String, delta: Int?, modifier: Modifier = Modifier) {
+    val color = when {
+        delta == null || delta == 0 -> MaterialTheme.colorScheme.onSurfaceVariant
+        delta > 0 -> Color(0xFF22C55E)
+        else -> Color(0xFFEF4444)
+    }
+    val text = when {
+        delta == null -> "-"
+        delta > 0 -> "+$delta"
+        delta < 0 -> "$delta"
+        else -> "0"
+    }
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
 

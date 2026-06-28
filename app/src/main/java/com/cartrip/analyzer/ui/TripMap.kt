@@ -13,7 +13,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,6 +50,7 @@ fun TripMap(
     selectedPoint: TrackPoint? = null,
     focusKey: Int = 0,
     resetKey: Int = 0,
+    replayFollow: Boolean = false,
     onEventClick: (DriveEvent) -> Unit = {},
     onStartOpen: () -> Unit = {},
     onStopOpen: () -> Unit = {},
@@ -132,6 +136,25 @@ fun TripMap(
     LaunchedEffect(resetKey) {
         if (resetKey > 0) {
             bounds?.let { runCatching { camera.animate(CameraUpdateFactory.newLatLngBounds(it, 56)) } }
+        }
+    }
+
+    // Dynamic replay camera: while the replay is playing, follow the car and set the zoom from its speed
+    // (zoomed out on fast highway stretches, zoomed in for the slow last mile). Sampled a few times a
+    // second rather than per frame so the camera glides instead of thrashing.
+    val followingPoint by rememberUpdatedState(selectedPoint)
+    LaunchedEffect(replayFollow) {
+        if (!replayFollow) return@LaunchedEffect
+        while (isActive) {
+            followingPoint?.let { p ->
+                runCatching {
+                    camera.animate(
+                        CameraUpdateFactory.newLatLngZoom(LatLng(p.lat, p.lon), replayZoom(p.speedKmh)),
+                        300
+                    )
+                }
+            }
+            delay(300)
         }
     }
 
@@ -260,6 +283,16 @@ private fun relaxedBounds(bounds: LatLngBounds, visibleRouteFraction: Double = 0
         LatLng((bounds.southwest.latitude - latPad).coerceAtLeast(-85.0), bounds.southwest.longitude - lonPad),
         LatLng((bounds.northeast.latitude + latPad).coerceAtMost(85.0), bounds.northeast.longitude + lonPad)
     )
+}
+
+/**
+ * Replay camera zoom from the car's current speed: zoom in for the slow last mile (~16.5), zoom out on
+ * fast highway stretches (~13.5), linearly interpolated between 20 and 100 km/h.
+ */
+private fun replayZoom(speedKmh: Double): Float = when {
+    speedKmh <= 20.0 -> 16.5f
+    speedKmh >= 100.0 -> 13.5f
+    else -> 16.5f - ((speedKmh - 20.0) / 80.0).toFloat() * 3.0f
 }
 
 /** The route line colour Google Maps uses for a driving route (Google blue), shared by all maps. */

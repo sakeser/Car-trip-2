@@ -229,6 +229,9 @@ fun TripDetailScreen(
         var mapAnchorY by remember(a.points) { mutableStateOf(0) }
         val scrollState = rememberScrollState()
         var mapTouched by remember { mutableStateOf(false) }
+        // True only while the replay is actively advancing (after the on-open settle), so the map can
+        // follow the car with a speed-based zoom. Pauses while a finger is on the map (manual pan).
+        var replayPlaying by remember(a.points) { mutableStateOf(false) }
         val maxPointIndex = (a.points.size - 1).coerceAtLeast(0)
         val safeSelectedIndex = selectedIndex.coerceIn(0, maxPointIndex)
         val selectedPoint = a.points.getOrNull(safeSelectedIndex)
@@ -341,6 +344,7 @@ fun TripDetailScreen(
                         selectedPoint = selectedPoint,
                         focusKey = focusKey,
                         resetKey = cameraResetKey,
+                        replayFollow = replayPlaying && !mapTouched,
                         onEventClick = jumpToEvent,
                         onStartOpen = { startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") } },
                         onStopOpen = { endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Stop") } },
@@ -364,7 +368,9 @@ fun TripDetailScreen(
                     selectedIndex = safeSelectedIndex,
                     onSelectedIndex = { selectedIndex = it.coerceIn(0, maxPointIndex) },
                     onEventJump = jumpToEvent,
-                    onReplayStart = { cameraResetKey++ }
+                    // The map now follows the car during replay, so don't snap back to the whole route on play.
+                    onReplayStart = { },
+                    onPlayingChange = { replayPlaying = it }
                 )
                 // Filter chips sit below the scrubber: they gate which event markers show on the
                 // map and timeline above.
@@ -400,7 +406,9 @@ fun TripDetailScreen(
                     trip = t,
                     points = a.points,
                     events = shownEvents,
-                    listEvents = visibleEvents,
+                    // Show every cleaned event in the tap-to-jump list by default; the filter chips only
+                    // gate which markers appear on the map, not what the Driving list shows (owner request).
+                    listEvents = shownEvents,
                     rawEventCount = rawEvents.size,
                     routeLimitCoverage = routeLimitCoverage,
                     checking = fetchingLimits,
@@ -509,13 +517,36 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
                 HeroStat(Icons.Filled.Route, Format.tripDistance(m.distanceM))
                 cost?.let { HeroStat(Icons.Filled.LocalGasStation, String.format(java.util.Locale.US, "$%.2f", it)) }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                MiniScoreRing("Safety", scores.safety)
-                MiniScoreRing("Comfort", scores.comfort)
-                MiniScoreRing("Pace", scores.speed)
+            if (TripKind.isLikelyNonDrive(trip)) {
+                // A walk / non-drive: driving scores (Safety/Comfort/Pace) are meaningless. Mirror the
+                // Past-trips list — flag it as a walk and show moving-average speed instead of the rings.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.DirectionsWalk,
+                        contentDescription = "Walk",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        "  Walk / non-drive · ${Format.avgSpeedKmh(m.avgMovingSpeedMps)} avg",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    MiniScoreRing("Safety", scores.safety)
+                    MiniScoreRing("Comfort", scores.comfort)
+                    MiniScoreRing("Pace", scores.speed)
+                }
             }
         }
     }
@@ -582,7 +613,8 @@ private fun ReplayTimeline(
     selectedIndex: Int,
     onSelectedIndex: (Int) -> Unit,
     onEventJump: (DriveEvent) -> Unit,
-    onReplayStart: () -> Unit = {}
+    onReplayStart: () -> Unit = {},
+    onPlayingChange: (Boolean) -> Unit = {}
 ) {
     val t0 = points.first().tMs
     val tN = points.last().tMs.coerceAtLeast(t0 + 1)
@@ -609,6 +641,9 @@ private fun ReplayTimeline(
     // ~50% longer than before — 5 s up to ~20 min of driving, then ~1 s per 4 min, capped at 45 s.
     var playing by remember(points) { mutableStateOf(true) }
     var didInitialDelay by remember(points) { mutableStateOf(false) }
+    // Tell the map to follow the car only once replay is actually moving (after the on-open settle), so
+    // the initial whole-route fit isn't immediately overridden.
+    LaunchedEffect(playing, didInitialDelay) { onPlayingChange(playing && didInitialDelay) }
     LaunchedEffect(playing, points) {
         if (!playing || points.size <= 1) return@LaunchedEffect
         // Let the screen settle for ~1 s before the replay starts moving (once, on open).
@@ -915,7 +950,8 @@ private fun SafetyFactorsCard(
     val needsMapRefresh = hasScoredLimits && !hasRouteLimits
     val speedingSummary = remember(points) { speedingSummary(points) }
     val eventSummaries = remember(events) { drivingEventSummaries(events) }
-    var listExpanded by remember { mutableStateOf(false) }
+    // Events show by default (owner request) — the full tap-to-jump list is open, collapsible if long.
+    var listExpanded by remember { mutableStateOf(true) }
     val firstT = points.firstOrNull()?.tMs ?: 0L
     Card(
         modifier = Modifier.fillMaxWidth(),
