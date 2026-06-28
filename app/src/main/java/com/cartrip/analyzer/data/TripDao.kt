@@ -87,6 +87,9 @@ interface TripDao {
     @Query("SELECT * FROM trips ORDER BY startTime DESC")
     fun observeTrips(): Flow<List<TripEntity>>
 
+    @Query("SELECT * FROM trips ORDER BY startTime DESC")
+    suspend fun getAllTrips(): List<TripEntity>
+
     @Query("SELECT * FROM trips WHERE id = :id")
     suspend fun getTrip(id: Long): TripEntity?
 

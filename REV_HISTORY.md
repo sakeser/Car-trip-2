@@ -4,6 +4,15 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BG (2026-06-27) — backfill speeding severity for older trips
+
+Rev BF's `speedingSeverity` defaulted to 0 on existing trips (the migration can't recompute it), so their
+Safety speeding penalty read 0 until limits were re-fetched. One-time backfill on app start
+(`TripViewModel.backfillSpeedingSeverity`, pref-guarded): for each older trip with limits already fetched
+(`limitCoverage > 0`), recompute `speedingSeverity` from the **stored** per-point speed limits in
+`analysis_points` via the pure `SpeedLimits.speedingSummary` — **no network**. New trips already compute it
+at finalize. Idempotent and cheap after the first run.
+
 ## Rev BF (2026-06-27) — magnitude-weighted speeding penalty (Safety) + limit-misread grace
 
 The Safety speeding term was **magnitude-blind**: it penalized *% of time over* the limit equally whether

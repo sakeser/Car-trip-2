@@ -92,6 +92,30 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         TripFinalizer.recoverInterruptedTrips(dao)
     }
 
+    /**
+     * One-time backfill (Rev BG) of the Rev BF magnitude-weighted `speedingSeverity` for trips that
+     * pre-date it. Recomputed from each trip's *stored* per-point speed limits (`analysis_points`), so it
+     * needs no network — only trips whose limits were already fetched (`limitCoverage > 0`) can be filled.
+     * Guarded by a pref so it runs once; cheap and idempotent thereafter.
+     */
+    suspend fun backfillSpeedingSeverity() = withContext(Dispatchers.IO) {
+        val prefs = getApplication<Application>()
+            .getSharedPreferences("cartrip_maint", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("speedingSeverityBackfilled_v20", false)) return@withContext
+        var updated = 0
+        for (t in dao.getAllTrips()) {
+            if (t.speedingSeverity > 0.0 || t.limitCoverage <= 0.0) continue
+            val pts = dao.getAnalysisPoints(t.id)
+            if (pts.size < 5) continue
+            val limits = pts.map { if (it.speedLimitKmh > 0.0) it.speedLimitKmh else null }
+            if (limits.none { it != null }) continue
+            val r = SpeedLimits.speedingSummary(pts.map { it.t }, pts.map { it.speedKmh }, limits)
+            if (r.severity > 0.0) { dao.updateTrip(t.copy(speedingSeverity = r.severity)); updated++ }
+        }
+        prefs.edit().putBoolean("speedingSeverityBackfilled_v20", true).apply()
+        updated
+    }
+
     /** Sweep any finished-but-unsynced trips to Google Sheets (recovered partials, past failures). */
     suspend fun syncPendingTrips(): Int = withContext(Dispatchers.IO) {
         TripSync.syncPending(getApplication(), dao)

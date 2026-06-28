@@ -87,6 +87,8 @@ private fun AppRoot() {
 
     LaunchedEffect(Unit) {
         val repaired = vm.recoverInterruptedTrips()
+        // One-time: fill in the Rev BF speeding severity for older trips (from stored limits, no network).
+        runCatching { vm.backfillSpeedingSeverity() }
         CloudState.set { it.copy(email = CloudPrefs.email(context)) }
         if (repaired > 0) {
             CloudState.set {
