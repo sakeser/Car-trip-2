@@ -60,6 +60,13 @@ android {
     }
 }
 
+// Export the Room schema as JSON so migrations are validated at compile time and future versions have a
+// captured baseline for MigrationTestHelper tests. (Retroactive 1->20 schemas were never captured — this
+// starts the record at the current version forward.)
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)

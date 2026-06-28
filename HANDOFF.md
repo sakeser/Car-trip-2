@@ -487,9 +487,11 @@ Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (5), 
 `GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard). Count is
 **183** (`grep -rc '@Test'` across `app/src/test`).
 
-Gaps: **no Room-migration tests, no Compose/UI tests, no instrumented tests** (the highest-value gap given
-21 migrations + a commercialization goal — see §14 Rev CP); network paths (Overpass, Routes, Sheets,
-GasPrice) and the GnssStatus reading are not unit-tested (verified manually/on-device).
+Gaps: **no Compose/UI tests, no instrumented tests.** Room migrations: **schema export is now on** (v3.27 —
+`exportSchema=true` + `app/schemas/.../21.json`), so Room validates migrations at compile time and v21+ is a
+captured baseline for future `MigrationTestHelper` tests; retroactive 1→20 step tests aren't feasible (historical
+schemas were never captured — validated by real on-device upgrades instead). See §14.1 CP. Network paths
+(Overpass, Routes, Sheets, GasPrice) and the GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ---
 
@@ -1166,12 +1168,16 @@ source** before acting (some Codex notes were stale or already-handled). Verdict
   timezone/locale fragility for no user gain).
 
 **Still open — Rev CP/CQ/CR (priority order):**
-- **CP (P1):** Room **migration tests** — the real test gap. Needs `androidx.room:room-testing` +
-  `exportSchema=true` (currently `false` in `AppDatabase.kt:23`) + an instrumented `MigrationTest` exercising
-  1→21. ⚠️ Instrumented/Robolectric — **needs an emulator/device run**, so it couldn't be executed in the
-  doc/desktop session; set up + flag for a device run. Also: shared bar/chart scale component (the queued
-  "bar-sizing audit"), Trip Detail reset-to-auto override, Past Trips open affordance, a visible **OSM "©
-  OpenStreetMap contributors (ODbL)"** attribution credit.
+- **CP (P1):** Room **migration tests** — **FOUNDATION DONE (v3.27):** `exportSchema=true` +
+  `ksp { arg("room.schemaLocation", "$projectDir/schemas") }` now capture the schema as JSON
+  (`app/schemas/com.cartrip.analyzer.data.AppDatabase/21.json` committed; Room also validates migrations
+  against it at compile time). ⚠️ **Retroactive 1→20 step tests aren't feasible** — historical schemas were
+  never captured (exportSchema was false), and reconstructing 20 versions by hand is error-prone; those
+  migrations were instead validated by **real on-device app upgrades** (failure-mode matrix §3). **Next
+  migration (v22):** add `androidTestImplementation("androidx.room:room-testing:2.6.1")` + a `testInstrumentationRunner`
+  + a `MigrationTestHelper` androidTest for v21→v22 (both schemas will then exist) — needs an emulator/device
+  run. Also open: shared bar/chart scale component (the queued "bar-sizing audit"), Trip Detail reset-to-auto
+  override, Past Trips open affordance, a visible **OSM "© OpenStreetMap contributors (ODbL)"** attribution credit.
 - **CQ (P2, gated on owner's Places go/no-go):** Places API (New) prototype behind a feature flag — caching,
   field masks, cost telemetry, Geocoder fallback (§13.4).
 - **CR (pre-launch, P1):** commercialization hardening — privacy policy, Data Safety inventory, ~~export

@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         GnssMeasurementSample::class
     ],
     version = 21,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun tripDao(): TripDao

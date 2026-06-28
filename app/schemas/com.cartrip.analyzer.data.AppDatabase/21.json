@@ -1,0 +1,1011 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 21,
+    "identityHash": "cede97021e6066c085a57896338f2f5c",
+    "entities": [
+      {
+        "tableName": "trips",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `startTime` INTEGER NOT NULL, `endTime` INTEGER NOT NULL, `distanceM` REAL NOT NULL, `durationS` REAL NOT NULL, `movingS` REAL NOT NULL, `idleS` REAL NOT NULL, `maxSpeedMps` REAL NOT NULL, `avgMovingSpeedMps` REAL NOT NULL, `maxAccelMps2` REAL NOT NULL, `maxBrakeMps2` REAL NOT NULL, `maxLateralMps2` REAL NOT NULL, `peakGForce` REAL NOT NULL, `maxHorizGForce` REAL NOT NULL, `hardAccelCount` INTEGER NOT NULL, `hardBrakeCount` INTEGER NOT NULL, `hardCornerCount` INTEGER NOT NULL, `smoothness` INTEGER NOT NULL, `analyzed` INTEGER NOT NULL, `googleEtaTrafficS` REAL NOT NULL, `googleEtaFreeFlowS` REAL NOT NULL, `etaSource` TEXT NOT NULL, `etaFetchedAt` INTEGER NOT NULL, `status` TEXT NOT NULL, `endReason` TEXT NOT NULL, `lastCheckpointAt` INTEGER NOT NULL, `lastLocationAt` INTEGER NOT NULL, `lastMotionAt` INTEGER NOT NULL, `locationSampleCount` INTEGER NOT NULL, `motionSampleCount` INTEGER NOT NULL, `gpsGapCount` INTEGER NOT NULL, `hardBrakePct` REAL NOT NULL, `aggressiveTurnPct` REAL NOT NULL, `hardAccelPct` REAL NOT NULL, `speedingPct` REAL NOT NULL, `maxOverLimitKmh` REAL NOT NULL, `limitCoverage` REAL NOT NULL, `speedingSeverity` REAL NOT NULL, `maxJerk` REAL NOT NULL, `jerkyPct` REAL NOT NULL, `syncedAt` INTEGER NOT NULL, `syncError` TEXT NOT NULL, `isSample` INTEGER NOT NULL, `roughRoadPct` REAL NOT NULL, `potholeCount` INTEGER NOT NULL, `harshStopCount` INTEGER NOT NULL, `roughStretchCount` INTEGER NOT NULL, `bumpyScore` REAL NOT NULL, `motionBrakeCount` INTEGER NOT NULL, `motionAccelCount` INTEGER NOT NULL, `motionTurnCount` INTEGER NOT NULL, `fusedConfidence` REAL NOT NULL, `gnssAvgSatsUsed` REAL NOT NULL, `gnssAvgCn0` REAL NOT NULL, `gnssTopCn0` REAL NOT NULL, `gnssL5Seen` INTEGER NOT NULL, `gnssSampleCount` INTEGER NOT NULL, `userIsDrive` INTEGER, `drawdownCount` INTEGER NOT NULL, `drawdownSeverity` REAL NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startTime",
+            "columnName": "startTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endTime",
+            "columnName": "endTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distanceM",
+            "columnName": "distanceM",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationS",
+            "columnName": "durationS",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "movingS",
+            "columnName": "movingS",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "idleS",
+            "columnName": "idleS",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxSpeedMps",
+            "columnName": "maxSpeedMps",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "avgMovingSpeedMps",
+            "columnName": "avgMovingSpeedMps",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxAccelMps2",
+            "columnName": "maxAccelMps2",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxBrakeMps2",
+            "columnName": "maxBrakeMps2",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxLateralMps2",
+            "columnName": "maxLateralMps2",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "peakGForce",
+            "columnName": "peakGForce",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxHorizGForce",
+            "columnName": "maxHorizGForce",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hardAccelCount",
+            "columnName": "hardAccelCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hardBrakeCount",
+            "columnName": "hardBrakeCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hardCornerCount",
+            "columnName": "hardCornerCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "smoothness",
+            "columnName": "smoothness",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "analyzed",
+            "columnName": "analyzed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "googleEtaTrafficS",
+            "columnName": "googleEtaTrafficS",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "googleEtaFreeFlowS",
+            "columnName": "googleEtaFreeFlowS",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "etaSource",
+            "columnName": "etaSource",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "etaFetchedAt",
+            "columnName": "etaFetchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endReason",
+            "columnName": "endReason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastCheckpointAt",
+            "columnName": "lastCheckpointAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastLocationAt",
+            "columnName": "lastLocationAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastMotionAt",
+            "columnName": "lastMotionAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationSampleCount",
+            "columnName": "locationSampleCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "motionSampleCount",
+            "columnName": "motionSampleCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gpsGapCount",
+            "columnName": "gpsGapCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hardBrakePct",
+            "columnName": "hardBrakePct",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aggressiveTurnPct",
+            "columnName": "aggressiveTurnPct",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hardAccelPct",
+            "columnName": "hardAccelPct",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speedingPct",
+            "columnName": "speedingPct",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxOverLimitKmh",
+            "columnName": "maxOverLimitKmh",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "limitCoverage",
+            "columnName": "limitCoverage",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speedingSeverity",
+            "columnName": "speedingSeverity",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxJerk",
+            "columnName": "maxJerk",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jerkyPct",
+            "columnName": "jerkyPct",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncedAt",
+            "columnName": "syncedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncError",
+            "columnName": "syncError",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSample",
+            "columnName": "isSample",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roughRoadPct",
+            "columnName": "roughRoadPct",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "potholeCount",
+            "columnName": "potholeCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "harshStopCount",
+            "columnName": "harshStopCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roughStretchCount",
+            "columnName": "roughStretchCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bumpyScore",
+            "columnName": "bumpyScore",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "motionBrakeCount",
+            "columnName": "motionBrakeCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "motionAccelCount",
+            "columnName": "motionAccelCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "motionTurnCount",
+            "columnName": "motionTurnCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fusedConfidence",
+            "columnName": "fusedConfidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gnssAvgSatsUsed",
+            "columnName": "gnssAvgSatsUsed",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gnssAvgCn0",
+            "columnName": "gnssAvgCn0",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gnssTopCn0",
+            "columnName": "gnssTopCn0",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gnssL5Seen",
+            "columnName": "gnssL5Seen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gnssSampleCount",
+            "columnName": "gnssSampleCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userIsDrive",
+            "columnName": "userIsDrive",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "drawdownCount",
+            "columnName": "drawdownCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "drawdownSeverity",
+            "columnName": "drawdownSeverity",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "locations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `t` INTEGER NOT NULL, `lat` REAL NOT NULL, `lon` REAL NOT NULL, `speed` REAL NOT NULL, `bearing` REAL NOT NULL, `accuracy` REAL NOT NULL, `bearingAccuracy` REAL NOT NULL, `speedAccuracy` REAL NOT NULL, `verticalAccuracy` REAL NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "t",
+            "columnName": "t",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lat",
+            "columnName": "lat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lon",
+            "columnName": "lon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speed",
+            "columnName": "speed",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bearing",
+            "columnName": "bearing",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accuracy",
+            "columnName": "accuracy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bearingAccuracy",
+            "columnName": "bearingAccuracy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speedAccuracy",
+            "columnName": "speedAccuracy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verticalAccuracy",
+            "columnName": "verticalAccuracy",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_locations_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_locations_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "motions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `t` INTEGER NOT NULL, `ax` REAL NOT NULL, `ay` REAL NOT NULL, `az` REAL NOT NULL, `gx` REAL NOT NULL, `gy` REAL NOT NULL, `gz` REAL NOT NULL, `grx` REAL NOT NULL, `gry` REAL NOT NULL, `grz` REAL NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "t",
+            "columnName": "t",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ax",
+            "columnName": "ax",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ay",
+            "columnName": "ay",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "az",
+            "columnName": "az",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gx",
+            "columnName": "gx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gy",
+            "columnName": "gy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gz",
+            "columnName": "gz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grx",
+            "columnName": "grx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gry",
+            "columnName": "gry",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grz",
+            "columnName": "grz",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_motions_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_motions_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "analysis_points",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `t` INTEGER NOT NULL, `lat` REAL NOT NULL, `lon` REAL NOT NULL, `speedKmh` REAL NOT NULL, `longAccel` REAL NOT NULL, `latAccel` REAL NOT NULL, `speedLimitKmh` REAL NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "t",
+            "columnName": "t",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lat",
+            "columnName": "lat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lon",
+            "columnName": "lon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speedKmh",
+            "columnName": "speedKmh",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longAccel",
+            "columnName": "longAccel",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latAccel",
+            "columnName": "latAccel",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speedLimitKmh",
+            "columnName": "speedLimitKmh",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_analysis_points_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_analysis_points_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "drive_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `t` INTEGER NOT NULL, `type` TEXT NOT NULL, `magnitude` REAL NOT NULL, `source` TEXT NOT NULL, `confidence` REAL NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "t",
+            "columnName": "t",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "magnitude",
+            "columnName": "magnitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_drive_events_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_drive_events_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "cached_ways",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`wayId` INTEGER NOT NULL, `limitKmh` REAL NOT NULL, `source` TEXT NOT NULL, `minLat` REAL NOT NULL, `minLon` REAL NOT NULL, `maxLat` REAL NOT NULL, `maxLon` REAL NOT NULL, `geometry` TEXT NOT NULL, `fetchedAt` INTEGER NOT NULL, PRIMARY KEY(`wayId`))",
+        "fields": [
+          {
+            "fieldPath": "wayId",
+            "columnName": "wayId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "limitKmh",
+            "columnName": "limitKmh",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minLat",
+            "columnName": "minLat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minLon",
+            "columnName": "minLon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxLat",
+            "columnName": "maxLat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxLon",
+            "columnName": "maxLon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geometry",
+            "columnName": "geometry",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAt",
+            "columnName": "fetchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "wayId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cached_ways_minLat",
+            "unique": false,
+            "columnNames": [
+              "minLat"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_ways_minLat` ON `${TABLE_NAME}` (`minLat`)"
+          },
+          {
+            "name": "index_cached_ways_minLon",
+            "unique": false,
+            "columnNames": [
+              "minLon"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_ways_minLon` ON `${TABLE_NAME}` (`minLon`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "cached_tiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`tileKey` TEXT NOT NULL, `fetchedAt` INTEGER NOT NULL, `source` TEXT NOT NULL, PRIMARY KEY(`tileKey`))",
+        "fields": [
+          {
+            "fieldPath": "tileKey",
+            "columnName": "tileKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAt",
+            "columnName": "fetchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "tileKey"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "gnss_samples",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `t` INTEGER NOT NULL, `satsUsed` INTEGER NOT NULL, `satsVisible` INTEGER NOT NULL, `meanCn0` REAL NOT NULL, `topCn0` REAL NOT NULL, `l5` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "t",
+            "columnName": "t",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "satsUsed",
+            "columnName": "satsUsed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "satsVisible",
+            "columnName": "satsVisible",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "meanCn0",
+            "columnName": "meanCn0",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "topCn0",
+            "columnName": "topCn0",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "l5",
+            "columnName": "l5",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_gnss_samples_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_gnss_samples_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "gnss_measurements",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `t` INTEGER NOT NULL, `svid` INTEGER NOT NULL, `constellation` INTEGER NOT NULL, `cn0` REAL NOT NULL, `carrierFreqHz` REAL NOT NULL, `pseudorangeRateMps` REAL NOT NULL, `pseudorangeRateUncMps` REAL NOT NULL, `adrMeters` REAL NOT NULL, `adrState` INTEGER NOT NULL, `adrUncMeters` REAL NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "t",
+            "columnName": "t",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "svid",
+            "columnName": "svid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "constellation",
+            "columnName": "constellation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cn0",
+            "columnName": "cn0",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "carrierFreqHz",
+            "columnName": "carrierFreqHz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pseudorangeRateMps",
+            "columnName": "pseudorangeRateMps",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pseudorangeRateUncMps",
+            "columnName": "pseudorangeRateUncMps",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adrMeters",
+            "columnName": "adrMeters",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adrState",
+            "columnName": "adrState",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adrUncMeters",
+            "columnName": "adrUncMeters",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_gnss_measurements_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_gnss_measurements_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          }
+        ],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cede97021e6066c085a57896338f2f5c')"
+    ]
+  }
+}
