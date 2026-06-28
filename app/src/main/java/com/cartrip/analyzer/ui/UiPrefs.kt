@@ -62,6 +62,18 @@ object UiPrefs {
         prefs(ctx).edit().putString(KEY_YOU_ICON, icon.key).apply()
     }
 
+    private const val KEY_EVENT_G = "event_g_threshold"
+    /** Default minimum g-force for an event to count toward a trouble-spot hotspot (user-tunable). */
+    const val DEFAULT_EVENT_G = 0.35f
+
+    /** Minimum event g-force for trouble-spot hotspots (drops weak/marginal events). */
+    fun eventGThreshold(ctx: Context): Float =
+        prefs(ctx).getFloat(KEY_EVENT_G, DEFAULT_EVENT_G)
+
+    fun setEventGThreshold(ctx: Context, g: Float) {
+        prefs(ctx).edit().putFloat(KEY_EVENT_G, g).apply()
+    }
+
     fun vector(icon: YouIcon): ImageVector = when (icon) {
         YouIcon.CAR -> Icons.Filled.DirectionsCar
         YouIcon.ARROW -> Icons.Filled.Navigation

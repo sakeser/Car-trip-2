@@ -4,6 +4,23 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BT (2026-06-28) — trouble-spots: g-force floor, >=3 instances, fix zoom, reorder Insights
+
+Owner feedback. (1) **g-force floor** — events below a threshold no longer count toward a hotspot (drops the
+0.16 g "sharp turn" etc.); **user-settable** via filter chips (0.30/0.35/0.40/0.45 g, default 0.35,
+`UiPrefs.eventGThreshold`), the map reloads on change. (2) A hotspot now needs **>=3 total occurrences**
+(`MIN_INSTANCES`) on **>=2 distinct trips** (clarified clustering: events within a ~55 m grid cell of the
+same kind; the distinct-trip + instance counts reject one-off flukes and GPS jitter, ~10 m accuracy << 55 m
+cell). (3) Removed the **list below the map**. (4) **Fixed map zoom** — frames a single/clustered hotspot
+properly (degenerate-bounds case) instead of defaulting to a Toronto-wide view. (5) **Insights reorder**:
+Fuel & cost now sits directly under Drive score; Trouble spots directly under You-vs-traffic.
+
+Why the events looked "light" (investigated, not relics): detection is magnitude-threshold + vetoes with a
+1.5 s windowed *peak* magnitude — brake/accel fire at >=0.25 g, corners at >=0.32 g lateral, and **swerves
+are gated on yaw-rate** (0.45 rad/s) so their stored lateral-g is often low (0.11-0.16 g). `confidence`
+(0.4-0.9 fused) is computed but not used to gate. So the g-force floor is the right lever to show only
+strong, real events. (Raising the detector thresholds + a re-analyze-all is the deeper option — queued.)
+
 ## Rev BS (2026-06-28) — trouble-spots map: drop rough spots, tappable hotspot detail
 
 Owner rework of the trouble-spots map. **Rough spots (potholes) removed entirely** — the map now shows only

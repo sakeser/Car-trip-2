@@ -72,7 +72,8 @@ fun InsightsScreen(
     onOpenTrip: (Long) -> Unit
 ) {
     val trips by viewModel.trips.collectAsStateWithLifecycle()
-    val vehicle = VehiclePrefs.load(LocalContext.current)
+    val context = LocalContext.current
+    val vehicle = VehiclePrefs.load(context)
     val completed = trips
         .filter { it.analyzed && it.endTime > 0 }
         .sortedBy { it.startTime }
@@ -112,9 +113,10 @@ fun InsightsScreen(
         }.ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
         val averages = ScoreAverages.from(wScores)
-        // Cross-trip recurring-event hotspots (loaded off the main thread).
-        val hotspots by produceState(initialValue = emptyList<EventHotspots.Hotspot>()) {
-            value = runCatching { viewModel.loadEventHotspots() }.getOrDefault(emptyList())
+        // Cross-trip recurring-event hotspots (loaded off the main thread; reloads when the g threshold changes).
+        var eventG by remember { mutableStateOf(UiPrefs.eventGThreshold(context)) }
+        val hotspots by produceState(initialValue = emptyList<EventHotspots.Hotspot>(), eventG) {
+            value = runCatching { viewModel.loadEventHotspots(eventG.toDouble()) }.getOrDefault(emptyList())
         }
 
         LazyColumn(
@@ -126,15 +128,7 @@ fun InsightsScreen(
 
             item { DriveScoreHero(averages, windowTrips.size, window.label) }
 
-            item { GoogleVsYouHero(windowTrips) }
-
-            item { WhenYouDriveCard(windowTrips) }
-
-            item {
-                SectionTitle("Score trends")
-                ScoreTrendsCard(wScores, window.label)
-            }
-
+            // Fuel & cost — directly below the drive score.
             run {
                 val fuel = FuelInsights.summarize(windowTrips, vehicle)
                 if (fuel.hasData) {
@@ -147,19 +141,50 @@ fun InsightsScreen(
                 }
             }
 
-            if (hotspots.isNotEmpty()) {
-                item {
-                    SectionTitle("Trouble spots")
-                    TroubleSpotsMap(
-                        hotspots = hotspots,
-                        onOpenTrip = onOpenTrip,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(280.dp)
-                            .clip(RoundedCornerShape(12.dp))
+            item { GoogleVsYouHero(windowTrips) }
+
+            // Trouble spots — directly below the traffic comparison.
+            item {
+                SectionTitle("Trouble spots")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Spots where the same maneuver recurs across drives. Min strength:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0.30f, 0.35f, 0.40f, 0.45f).forEach { g ->
+                            FilterChip(
+                                selected = kotlin.math.abs(eventG - g) < 0.001f,
+                                onClick = { eventG = g; UiPrefs.setEventGThreshold(context, g) },
+                                label = { Text(String.format(Locale.US, "%.2fg", g)) }
+                            )
+                        }
+                    }
+                    if (hotspots.isNotEmpty()) {
+                        TroubleSpotsMap(
+                            hotspots = hotspots,
+                            onOpenTrip = onOpenTrip,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(280.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                    } else {
+                        Text(
+                            String.format(Locale.US, "No recurring spots at or above %.2fg yet.", eventG),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                item { RecurringSpotsCard(hotspots.take(6)) }
+            }
+
+            item { WhenYouDriveCard(windowTrips) }
+
+            item {
+                SectionTitle("Score trends")
+                ScoreTrendsCard(wScores, window.label)
             }
         }
     }
@@ -645,48 +670,6 @@ private fun FuelStat(value: String, label: String, modifier: Modifier = Modifier
             textAlign = TextAlign.Center,
             maxLines = 1
         )
-    }
-}
-
-@Composable
-private fun RecurringSpotsCard(hotspots: List<EventHotspots.Hotspot>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                "The same thing keeps happening here across your drives.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            hotspots.forEach { h ->
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            if (h.where.isNotEmpty()) "${h.kind} · ${h.where}" else h.kind,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "on ${h.trips} drives" + if (h.count > h.trips) " · ${h.count} times" else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        "${h.trips}×",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
     }
 }
 

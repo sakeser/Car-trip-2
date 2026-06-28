@@ -216,7 +216,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
      * (Rev BS). Each event is located via the nearest analysis point by time and carries its g-force + the
      * drive's date for the tap-to-detail view. Walks and sample trips are excluded. See [EventHotspots].
      */
-    suspend fun loadEventHotspots(): List<EventHotspots.Hotspot> = withContext(Dispatchers.IO) {
+    suspend fun loadEventHotspots(gForceFloor: Double): List<EventHotspots.Hotspot> = withContext(Dispatchers.IO) {
         val drives = dao.getAllTrips().filter {
             it.endTime > 0 && !it.isSample && !TripKind.isLikelyNonDrive(it)
         }
@@ -243,7 +243,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         // neighbourhood for the strongest few (budget caps live geocoder calls; cache makes refreshes free).
         val home = loadHome(getApplication()); val work = loadWork(getApplication())
         val budget = GeoNamer.Budget(8)
-        EventHotspots.find(evs).mapIndexed { i, h ->
+        EventHotspots.find(evs, gForceFloor = gForceFloor).mapIndexed { i, h ->
             val where = when {
                 HomeDetector.isHome(h.lat, h.lon, home) -> "near Home"
                 HomeDetector.isWork(h.lat, h.lon, work) -> "near Work"

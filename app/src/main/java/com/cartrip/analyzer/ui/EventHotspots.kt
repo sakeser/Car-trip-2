@@ -18,6 +18,8 @@ object EventHotspots {
     private const val CELL = 0.0005
     /** A hotspot must recur on at least this many distinct trips. */
     const val MIN_TRIPS = 2
+    /** ...and have at least this many total occurrences (so a couple of flukes don't qualify). */
+    const val MIN_INSTANCES = 3
 
     /** Group the raw [EventType]s into the human "kind" shown to the user (swerve+corner = one turn). */
     fun kindOf(type: EventType): String = when (type) {
@@ -53,15 +55,23 @@ object EventHotspots {
     private fun cell(v: Double) = (v / CELL).roundToInt()
 
     /**
-     * Find recurring hotspots. Events are grouped by (~55 m cell, kind); a cell-kind becomes a hotspot when
-     * it appears on >= [minTrips] distinct trips. Returned strongest-first (most trips, then most events).
+     * Find recurring hotspots. Only events at/above [gForceFloor] (g) count — drops weak/marginal events
+     * (e.g. a 0.16 g "swerve"). Surviving events are grouped by (~[CELL]≈55 m cell, kind); a cell-kind
+     * becomes a hotspot when it appears on >= [minTrips] distinct trips AND has >= [minInstances] total
+     * occurrences. Returned strongest-first (most trips, then most events).
      */
-    fun find(events: List<Ev>, minTrips: Int = MIN_TRIPS): List<Hotspot> {
+    fun find(
+        events: List<Ev>,
+        minTrips: Int = MIN_TRIPS,
+        minInstances: Int = MIN_INSTANCES,
+        gForceFloor: Double = 0.0,
+    ): List<Hotspot> {
         if (events.isEmpty()) return emptyList()
-        val byCell = events.groupBy { Triple(cell(it.lat), cell(it.lon), it.kind) }
+        val strong = if (gForceFloor > 0.0) events.filter { it.gForce >= gForceFloor } else events
+        val byCell = strong.groupBy { Triple(cell(it.lat), cell(it.lon), it.kind) }
         return byCell.mapNotNull { (key, items) ->
             val trips = items.map { it.tripId }.distinct().size
-            if (trips < minTrips) return@mapNotNull null
+            if (trips < minTrips || items.size < minInstances) return@mapNotNull null
             Hotspot(
                 kind = key.third,
                 lat = items.sumOf { it.lat } / items.size,

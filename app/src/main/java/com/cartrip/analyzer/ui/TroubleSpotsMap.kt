@@ -54,11 +54,20 @@ fun TroubleSpotsMap(
     val mapId = GoogleMapConfig.mapId(context)
     val pts = remember(hotspots) { hotspots.map { LatLng(it.lat, it.lon) } }
     val bounds = remember(pts) { boundsFor(pts) }
+    // Start centred on the spots (not Toronto) so it's framed even before the animate runs.
     val camera = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(TORONTO, 10f)
+        position = CameraPosition.fromLatLngZoom(pts.firstOrNull() ?: TORONTO, 13f)
     }
-    LaunchedEffect(bounds) {
-        bounds?.let { runCatching { camera.animate(CameraUpdateFactory.newLatLngBounds(it, 56)) } }
+    LaunchedEffect(bounds, pts.size) {
+        runCatching {
+            // A single spot (or all in one tight cluster) has a degenerate bounds — newLatLngBounds then
+            // over-zooms or fails, so frame a single point at a fixed zoom instead.
+            if (pts.size <= 1) {
+                pts.firstOrNull()?.let { camera.animate(CameraUpdateFactory.newLatLngZoom(it, 15f)) }
+            } else {
+                bounds?.let { camera.animate(CameraUpdateFactory.newLatLngBounds(it, 80)) }
+            }
+        }
     }
     var selected by remember { mutableStateOf<EventHotspots.Hotspot?>(null) }
 
