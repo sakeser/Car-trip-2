@@ -77,6 +77,33 @@ object UiPrefs {
         prefs(ctx).edit().putFloat(KEY_EVENT_G, g).apply()
     }
 
+    private const val KEY_SATELLITE = "map_satellite"
+
+    /** Whether maps render in satellite/aerial (hybrid) mode instead of the normal road map. */
+    fun satelliteMap(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_SATELLITE, false)
+
+    fun setSatelliteMap(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean(KEY_SATELLITE, on).apply()
+    }
+
+    /**
+     * Observe the satellite-map toggle as Compose state, updating live across every map when any map's
+     * toggle flips it (same pattern as [rememberYouIcon]).
+     */
+    @Composable
+    fun rememberSatelliteMap(ctx: Context): Boolean {
+        val p = remember(ctx) { prefs(ctx) }
+        var on by remember { mutableStateOf(satelliteMap(ctx)) }
+        DisposableEffect(p) {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+                if (key == null || key == KEY_SATELLITE) on = sp.getBoolean(KEY_SATELLITE, false)
+            }
+            p.registerOnSharedPreferenceChangeListener(listener)
+            onDispose { p.unregisterOnSharedPreferenceChangeListener(listener) }
+        }
+        return on
+    }
+
     fun vector(icon: YouIcon): ImageVector = when (icon) {
         YouIcon.CAR -> Icons.Filled.DirectionsCar
         YouIcon.ARROW -> Icons.Filled.Navigation

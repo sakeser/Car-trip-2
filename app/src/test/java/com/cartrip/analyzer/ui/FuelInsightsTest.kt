@@ -31,15 +31,35 @@ class FuelInsightsTest {
         assertEquals(s.totalLitres / s.totalKm * 100.0, s.avgL100, 1e-9)
     }
 
-    @Test fun seriesAreChronologicalAndCumulativeMonotonic() {
+    @Test fun perDriveSeriesChronological() {
         val s = FuelInsights.summarize(listOf(drive(5.0, 40.0), drive(8.0, 60.0), drive(12.0, 100.0)), v)
         assertEquals(3, s.costPerKm.size)
-        assertEquals(3, s.cumulativeCost.size)
-        // cumulative cost only ever grows
-        assertTrue(s.cumulativeCost[0] < s.cumulativeCost[1])
-        assertTrue(s.cumulativeCost[1] < s.cumulativeCost[2])
-        // last cumulative == total
-        assertEquals(s.totalCost.toFloat(), s.cumulativeCost.last(), 1e-3f)
+        assertEquals(3, s.l100.size)
+    }
+
+    @Test fun weeklySpendBucketsByWeekAndSumsToTotal() {
+        val week = 7L * 24 * 3600 * 1000
+        // Three drives across three consecutive weeks (week 0, 1, 2).
+        val trips = listOf(
+            driveAt(0L),
+            driveAt(week + 3600_000L),
+            driveAt(2 * week + 3600_000L),
+        )
+        val s = FuelInsights.summarize(trips, v)
+        assertEquals(3, s.weeklySpend.size)
+        // Each week has exactly one drive of equal cost.
+        val each = s.weeklySpend[0]
+        assertEquals(each, s.weeklySpend[1], 1e-3f)
+        assertEquals(each, s.weeklySpend[2], 1e-3f)
+        // The weekly series sums to the total spend.
+        assertEquals(s.totalCost.toFloat(), s.weeklySpend.sum(), 1e-2f)
+        // Idle weeks are kept as zeros: a 4-week gap creates empty buckets between drives.
+        val gapped = FuelInsights.summarize(listOf(driveAt(0L), driveAt(4 * week)), v)
+        assertEquals(5, gapped.weeklySpend.size)
+        assertEquals(0f, gapped.weeklySpend[1], 1e-6f)
+        assertEquals(0f, gapped.weeklySpend[2], 1e-6f)
+        // Smoothed series is the same length (trailing average, no lag-drop).
+        assertEquals(s.weeklySpend.size, s.weeklySpendSmoothed.size)
     }
 
     @Test fun walksAndZeroDistanceExcluded() {

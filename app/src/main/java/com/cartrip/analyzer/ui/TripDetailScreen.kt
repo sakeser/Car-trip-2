@@ -1429,14 +1429,14 @@ private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, you
                 Box(modifier = Modifier.width(w * fFree * p).fillMaxHeight().background(ETA_TYPICAL))
                 Box(modifier = Modifier.width(w * (fTyp - fFree).coerceAtLeast(0f) * p).fillMaxHeight().background(ETA_TRAFFIC))
             }
-            // The marker: a youColor bar in a white casing so it reads on top of the red band.
+            // The marker: a single crisp youColor line with a thin dark outline (not a white halo)
+            // so it reads cleanly on top of any band without the white edge artifact.
             Box(
-                modifier = Modifier.align(Alignment.CenterStart).offset(x = w * fYou * p - 3.dp)
-                    .width(6.dp).fillMaxHeight().background(Color.White)
-            )
-            Box(
-                modifier = Modifier.align(Alignment.CenterStart).offset(x = w * fYou * p - 1.5.dp)
-                    .width(3.dp).fillMaxHeight().background(youColor)
+                modifier = Modifier.align(Alignment.CenterStart).offset(x = w * fYou * p - 2.dp)
+                    .width(4.dp).fillMaxHeight()
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(youColor)
+                    .border(1.dp, Color.Black.copy(alpha = 0.30f), RoundedCornerShape(2.dp))
             )
         }
         // Scale legend — fixed left/right ends so the labels never overlap, whatever the times are.

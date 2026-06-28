@@ -1,11 +1,15 @@
 package com.cartrip.analyzer.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMapOptions
@@ -51,10 +55,12 @@ fun TripHeatMap(
         }
     }
 
+    val satellite = UiPrefs.rememberSatelliteMap(context)
+    Box(modifier = modifier) {
     GoogleMap(
-        modifier = modifier,
+        modifier = Modifier.matchParentSize(),
         cameraPositionState = camera,
-        properties = MapProperties(mapType = MapType.NORMAL),
+        properties = MapProperties(mapType = mapTypeFor(satellite)),
         uiSettings = MapUiSettings(
             compassEnabled = true,
             mapToolbarEnabled = false,
@@ -81,6 +87,12 @@ fun TripHeatMap(
                 jointType = JointType.ROUND
             )
         }
+    }
+        MapTypeToggle(
+            satellite = satellite,
+            onToggle = { UiPrefs.setSatelliteMap(context, !satellite) },
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+        )
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -77,10 +78,17 @@ fun TripListScreen(
     val selectionMode = selectedIds.isNotEmpty()
     var showMultiDeleteDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
+    // Recency window for the map + list. Default to a week so the all-time (heavy) map isn't the first load.
+    var recency by remember { mutableStateOf(RecencyFilter.WEEK) }
     // System back exits selection mode before leaving the screen.
     BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
-    val heatPoints by produceState(initialValue = emptyList<AnalysisPointEntity>(), trips) {
-        value = viewModel.loadHeatmapPoints(30)
+    val shownTrips = remember(trips, recency) {
+        val days = recency.days ?: return@remember trips
+        val cutoff = System.currentTimeMillis() - days * 24L * 60L * 60L * 1000L
+        trips.filter { it.startTime >= cutoff }
+    }
+    val heatPoints by produceState(initialValue = emptyList<AnalysisPointEntity>(), trips, recency) {
+        value = viewModel.loadHeatmapPoints(recency.days ?: 36_500)
     }
     val tripLabels by produceState(initialValue = emptyMap<Long, String>(), trips) {
         value = viewModel.loadTripLabels(trips)
@@ -146,7 +154,8 @@ fun TripListScreen(
             }
         } else {
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                // Frozen map: previews the selected trip's route, else the 30-day heatmap.
+                RecencyFilterRow(selected = recency, onSelect = { recency = it })
+                // Frozen map: previews the selected trip's route, else the recency-window heatmap.
                 // Maximized: near-edge-to-edge and taller so the route reads clearly.
                 Box(
                     modifier = Modifier
@@ -171,15 +180,26 @@ fun TripListScreen(
                     }
                 }
 
-                val maxDurationS = trips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
-                val grouped = TripBuckets.group(trips)
+                val maxDurationS = shownTrips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
+                val grouped = TripBuckets.group(shownTrips)
                 // Differentiate same-named trips ("North York Loop (10:14am)") across the whole list.
-                val shownNames = remember(trips, tripLabels) {
+                val shownNames = remember(shownTrips, tripLabels) {
                     TripNaming.disambiguate(
-                        trips.map {
+                        shownTrips.map {
                             TripNaming.Entry(it.id, it.name.ifBlank { tripLabels[it.id] ?: "Trip" }, it.startTime)
                         }
                     )
+                }
+                if (shownTrips.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No trips in ${recency.label.lowercase()}.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f),
@@ -314,6 +334,37 @@ fun TripListScreen(
                 dismissButton = {
                     TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
                 }
+            )
+        }
+    }
+}
+
+/** Recency windows for the Past-trips map + list. Default is a week so the heavy all-time map isn't first. */
+private enum class RecencyFilter(val label: String, val days: Int?) {
+    DAY("the last 24 h", 1),
+    THREE("the last 3 days", 3),
+    WEEK("the last 7 days", 7),
+    MONTH("the last 30 days", 30),
+    ALL("all time", null);
+
+    val chip: String
+        get() = when (this) {
+            DAY -> "24h"; THREE -> "3d"; WEEK -> "7d"; MONTH -> "30d"; ALL -> "All"
+        }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecencyFilterRow(selected: RecencyFilter, onSelect: (RecencyFilter) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        RecencyFilter.values().forEach { f ->
+            FilterChip(
+                selected = f == selected,
+                onClick = { onSelect(f) },
+                label = { Text(f.chip, style = MaterialTheme.typography.labelMedium) }
             )
         }
     }

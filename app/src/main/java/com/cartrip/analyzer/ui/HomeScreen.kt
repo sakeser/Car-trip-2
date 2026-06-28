@@ -64,6 +64,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.record.AutoRecordLog
+import com.cartrip.analyzer.record.AutoRecordPrefs
+import com.cartrip.analyzer.record.AutoRecordWatchService
 import com.cartrip.analyzer.record.RecordingState
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -129,7 +131,10 @@ fun HomeScreen(
                 onOpenGuide = { showOptions = false; onOpenGuide() },
                 onOpenDebug = { showOptions = false; onOpenDebug() },
                 onOpenVehicle = { showOptions = false; onOpenVehicle() },
-                onOpenAutoRecord = { showOptions = false; onOpenAutoRecord() }
+                onOpenAutoRecord = { showOptions = false; onOpenAutoRecord() },
+                onConnectCloud = onConnectCloud,
+                onDisconnectCloud = onDisconnectCloud,
+                onLoadDemoData = { showOptions = false; onLoadDemoData() }
             )
         }
 
@@ -214,20 +219,46 @@ fun HomeScreen(
                 Icon(Icons.AutoMirrored.Filled.ShowChart, contentDescription = null)
                 Text("  Insights", style = MaterialTheme.typography.titleMedium)
             }
-            OutlinedButton(
-                onClick = onLoadDemoData,
-                modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) {
-                Icon(Icons.Filled.Storage, contentDescription = null)
-                Text("  Load sample data", style = MaterialTheme.typography.titleMedium)
-            }
+            AutoRecordQuickToggle(onOpenAutoRecord = onOpenAutoRecord)
+        }
+    }
+}
 
-            CloudSection(
-                onConnect = onConnectCloud,
-                onDisconnect = onDisconnectCloud,
-                modifier = Modifier.fillMaxWidth()
+/**
+ * A compact "Auto-record" toggle for the Home screen so the owner can flip hands-free recording on/off
+ * without opening the full Auto-record screen (it costs battery, so quick access matters). Mirrors the
+ * core action there: flip the pref + start/stop the persistent watcher. Detailed setup (background-location
+ * permission, car pairing) still lives behind the row's "Set up" affordance.
+ */
+@Composable
+private fun AutoRecordQuickToggle(onOpenAutoRecord: () -> Unit) {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(AutoRecordPrefs.enabled(context)) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenAutoRecord)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(Icons.Filled.Sensors, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Auto-record", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Hands-free start/stop in the car",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Switch(
+            checked = enabled,
+            onCheckedChange = {
+                enabled = it
+                AutoRecordPrefs.setEnabled(context, it)
+                if (it) AutoRecordWatchService.start(context) else AutoRecordWatchService.stop(context)
+            }
+        )
     }
 }
 
@@ -243,7 +274,10 @@ private fun OptionsSheet(
     onOpenGuide: () -> Unit,
     onOpenDebug: () -> Unit,
     onOpenVehicle: () -> Unit,
-    onOpenAutoRecord: () -> Unit
+    onOpenAutoRecord: () -> Unit,
+    onConnectCloud: () -> Unit = {},
+    onDisconnectCloud: () -> Unit = {},
+    onLoadDemoData: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var youIcon by remember { mutableStateOf(UiPrefs.youIcon(context)) }
@@ -315,6 +349,23 @@ private fun OptionsSheet(
                         )
                     }
                 }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+
+            // Sheets sync lives here now (de-emphasized — it doesn't need Home-screen prominence).
+            CloudSection(
+                onConnect = onConnectCloud,
+                onDisconnect = onDisconnectCloud,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            )
+            // Sample data is a dev convenience, kept out of the main flow.
+            TextButton(
+                onClick = onLoadDemoData,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            ) {
+                Icon(Icons.Filled.Storage, contentDescription = null)
+                Text("  Load sample data", style = MaterialTheme.typography.labelLarge)
             }
         }
     }

@@ -17,6 +17,10 @@ object FuelInsights {
     const val SMOOTH_MIN_DRIVES = 10
     private const val SMOOTH_WINDOW = 5
 
+    private const val WEEK_MS = 7L * 24L * 60L * 60L * 1000L
+    /** Trailing window (in weeks) for smoothing the weekly spend-rate series. */
+    private const val WEEKLY_SMOOTH_WEEKS = 4
+
     data class Summary(
         val drives: Int,
         val totalKm: Double,
@@ -27,7 +31,8 @@ object FuelInsights {
         val costPerKm: List<Float>,         // $/km, per drive, chronological
         val costPerKmSmoothed: List<Float>, // $/km trailing moving average (empty until enough drives)
         val l100: List<Float>,              // L/100km, per drive
-        val cumulativeCost: List<Float>,    // running total $ across drives
+        val weeklySpend: List<Float>,         // $ spent per calendar week, oldest first (0 for idle weeks)
+        val weeklySpendSmoothed: List<Float>, // weekly spend, trailing-averaged so the rate reads as a trend
     ) {
         val hasData: Boolean get() = drives > 0
     }
@@ -66,15 +71,42 @@ object FuelInsights {
         return out
     }
 
+    /** Same-length trailing average: point i is the mean of items in (i-window, i]. Smooths without lag-dropping. */
+    private fun trailingAvg(series: List<Float>, window: Int): List<Float> {
+        if (series.isEmpty()) return emptyList()
+        return series.indices.map { i ->
+            val from = maxOf(0, i - window + 1)
+            var sum = 0f
+            for (j in from..i) sum += series[j]
+            sum / (i - from + 1)
+        }
+    }
+
+    /**
+     * Spend per calendar week from the first drive to the last, oldest first. Weeks with no driving are 0,
+     * so the series is a true rate over time (the derivative of cumulative spend) rather than a running total.
+     */
+    private fun weeklySpend(drives: List<TripEntity>, costs: List<Double>): List<Float> {
+        if (drives.isEmpty()) return emptyList()
+        val first = drives.first().startTime
+        val lastIdx = ((drives.last().startTime - first) / WEEK_MS).toInt().coerceAtLeast(0)
+        val weeks = FloatArray(lastIdx + 1)
+        for (i in drives.indices) {
+            val idx = ((drives[i].startTime - first) / WEEK_MS).toInt().coerceIn(0, lastIdx)
+            weeks[idx] += costs[i].toFloat()
+        }
+        return weeks.toList()
+    }
+
     /** [trips] should be chronological (oldest first). Non-drives (walks) and zero-distance are excluded. */
     fun summarize(trips: List<TripEntity>, v: FuelEstimator.Vehicle): Summary {
         val drives = trips.filter { it.distanceM > 0.0 && !TripKind.isLikelyNonDrive(it) }
-        if (drives.isEmpty()) return Summary(0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), emptyList(), emptyList(), emptyList())
+        if (drives.isEmpty()) return Summary(0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
 
         var totalKm = 0.0; var totalLitres = 0.0; var totalCost = 0.0
         val costPerKm = ArrayList<Float>(drives.size)
         val l100 = ArrayList<Float>(drives.size)
-        val cumulative = ArrayList<Float>(drives.size)
+        val costs = ArrayList<Double>(drives.size)
         for (t in drives) {
             val km = t.distanceM / 1000.0
             val litres = FuelEstimator.litres(km, t.avgMovingSpeedMps * 3.6, t.idleS, v)
@@ -82,8 +114,9 @@ object FuelInsights {
             totalKm += km; totalLitres += litres; totalCost += cost
             costPerKm += (cost / km).toFloat()
             l100 += (litres / km * 100.0).toFloat()
-            cumulative += totalCost.toFloat()
+            costs += cost
         }
+        val weekly = weeklySpend(drives, costs)
         return Summary(
             drives = drives.size,
             totalKm = totalKm,
@@ -94,7 +127,8 @@ object FuelInsights {
             costPerKm = costPerKm,
             costPerKmSmoothed = if (drives.size >= SMOOTH_MIN_DRIVES) smooth(costPerKm, SMOOTH_WINDOW) else emptyList(),
             l100 = l100,
-            cumulativeCost = cumulative,
+            weeklySpend = weekly,
+            weeklySpendSmoothed = trailingAvg(weekly, WEEKLY_SMOOTH_WEEKS),
         )
     }
 }

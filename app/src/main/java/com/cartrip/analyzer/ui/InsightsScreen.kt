@@ -715,8 +715,9 @@ private fun FuelSection(s: FuelInsights.Summary, spend: FuelInsights.Spend, v: F
                     perKm, "$/km", Color(0xFF22C55E)
                 )
             }
-            if (s.cumulativeCost.size >= 2) {
-                TimeSeriesChart("Spend over time", s.cumulativeCost, "$", Color(0xFF0EA5E9))
+            val weekly = if (s.weeklySpendSmoothed.size >= 2) s.weeklySpendSmoothed else s.weeklySpend
+            if (weekly.size >= 2) {
+                TimeSeriesChart("Spend rate ($/week)", weekly, "$/wk", Color(0xFF0EA5E9))
             }
         }
     }
