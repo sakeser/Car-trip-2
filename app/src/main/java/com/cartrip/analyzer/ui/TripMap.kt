@@ -151,8 +151,8 @@ fun TripMap(
         if (route.size >= 2) {
             Polyline(
                 points = route,
-                color = Color(0xFF0EA5E9),
-                width = 9f,
+                color = GoogleRouteBlue,
+                width = 10f,
                 jointType = JointType.ROUND
             )
 
@@ -250,14 +250,17 @@ private fun relaxedBounds(bounds: LatLngBounds, visibleRouteFraction: Double = 0
     )
 }
 
-private enum class MarkerGlyph { START, FINISH, BRAKE, ACCEL, TURN, SWERVE, BUMP, HARSH_STOP, CAR, ARROW, PERSON, DOT }
+/** The route line colour Google Maps uses for a driving route (Google blue), shared by all maps. */
+internal val GoogleRouteBlue = Color(0xFF4285F4)
+
+internal enum class MarkerGlyph { START, FINISH, BRAKE, ACCEL, TURN, SWERVE, BUMP, HARSH_STOP, CAR, ARROW, PERSON, DOT }
 
 /**
  * Draws a map marker as a [size]px bitmap: a coloured pin shape (octagon for the stop-sign brake,
  * diamond for the warning-style turn/swerve/bump, circle otherwise) under a white symbolic glyph.
  * Symbols are drawn with vector paths (no text), so they read at small sizes and stay ASCII-safe.
  */
-private fun markerIcon(glyph: MarkerGlyph, fill: Int, size: Int = 96): BitmapDescriptor {
+internal fun markerIcon(glyph: MarkerGlyph, fill: Int, size: Int = 96): BitmapDescriptor {
     val c = size / 2f
     val r = size * 0.33f
     val shadow = size * 0.045f

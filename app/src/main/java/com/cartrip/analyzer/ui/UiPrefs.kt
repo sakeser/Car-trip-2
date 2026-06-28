@@ -62,9 +62,12 @@ object UiPrefs {
         prefs(ctx).edit().putString(KEY_YOU_ICON, icon.key).apply()
     }
 
-    private const val KEY_EVENT_G = "event_g_threshold"
-    /** Default minimum g-force for an event to count toward a trouble-spot hotspot (user-tunable). */
-    const val DEFAULT_EVENT_G = 0.35f
+    // v2 key: reset to the lower 0.25 default (0.35 hid every hotspot on real data).
+    private const val KEY_EVENT_G = "event_g_threshold2"
+    /** Default minimum g-force for an event to count toward a trouble-spot hotspot (user-tunable slider). */
+    const val DEFAULT_EVENT_G = 0.25f
+    const val EVENT_G_MIN = 0.20f
+    const val EVENT_G_MAX = 0.50f
 
     /** Minimum event g-force for trouble-spot hotspots (drops weak/marginal events). */
     fun eventGThreshold(ctx: Context): Float =

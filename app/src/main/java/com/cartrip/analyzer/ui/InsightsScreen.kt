@@ -32,6 +32,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -113,10 +114,13 @@ fun InsightsScreen(
         }.ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
         val averages = ScoreAverages.from(wScores)
-        // Cross-trip recurring-event hotspots (loaded off the main thread; reloads when the g threshold changes).
-        var eventG by remember { mutableStateOf(UiPrefs.eventGThreshold(context)) }
-        val hotspots by produceState(initialValue = emptyList<EventHotspots.Hotspot>(), eventG) {
-            value = runCatching { viewModel.loadEventHotspots(eventG.toDouble()) }.getOrDefault(emptyList())
+        // Cross-trip recurring-event hotspots (loaded off the main thread). [sliderG] tracks the live slider
+        // position (for the label); [appliedG] only changes when the user lifts their finger, so we reload
+        // once per adjustment instead of on every drag frame.
+        var sliderG by remember { mutableStateOf(UiPrefs.eventGThreshold(context)) }
+        var appliedG by remember { mutableStateOf(sliderG) }
+        val hotspots by produceState(initialValue = emptyList<EventHotspots.Hotspot>(), appliedG) {
+            value = runCatching { viewModel.loadEventHotspots(appliedG.toDouble()) }.getOrDefault(emptyList())
         }
 
         LazyColumn(
@@ -148,19 +152,24 @@ fun InsightsScreen(
                 SectionTitle("Trouble spots")
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Spots where the same maneuver recurs across drives. Min strength:",
+                        String.format(
+                            Locale.US,
+                            "Spots where the same maneuver recurs across drives. Min strength: %.2fg",
+                            sliderG
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0.30f, 0.35f, 0.40f, 0.45f).forEach { g ->
-                            FilterChip(
-                                selected = kotlin.math.abs(eventG - g) < 0.001f,
-                                onClick = { eventG = g; UiPrefs.setEventGThreshold(context, g) },
-                                label = { Text(String.format(Locale.US, "%.2fg", g)) }
-                            )
-                        }
-                    }
+                    Slider(
+                        value = sliderG,
+                        onValueChange = { sliderG = it },
+                        onValueChangeFinished = {
+                            appliedG = sliderG
+                            UiPrefs.setEventGThreshold(context, sliderG)
+                        },
+                        valueRange = UiPrefs.EVENT_G_MIN..UiPrefs.EVENT_G_MAX,
+                        steps = 5  // 0.20..0.50 in 0.05 increments
+                    )
                     if (hotspots.isNotEmpty()) {
                         TroubleSpotsMap(
                             hotspots = hotspots,
@@ -172,7 +181,7 @@ fun InsightsScreen(
                         )
                     } else {
                         Text(
-                            String.format(Locale.US, "No recurring spots at or above %.2fg yet.", eventG),
+                            String.format(Locale.US, "No recurring spots at or above %.2fg yet — slide left to see more.", appliedG),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

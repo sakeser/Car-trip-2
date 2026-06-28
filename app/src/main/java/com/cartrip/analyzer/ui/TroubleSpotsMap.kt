@@ -16,13 +16,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.graphics.Color as AndroidColor
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMapOptions
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
@@ -71,6 +72,18 @@ fun TroubleSpotsMap(
     }
     var selected by remember { mutableStateOf<EventHotspots.Hotspot?>(null) }
 
+    // Same glyph pins the trip map uses, coloured by kind.
+    val brakeIcon = remember { markerIcon(MarkerGlyph.BRAKE, AndroidColor.rgb(220, 38, 38), 84) }
+    val accelIcon = remember { markerIcon(MarkerGlyph.ACCEL, AndroidColor.rgb(245, 158, 11), 96) }
+    val turnIcon = remember { markerIcon(MarkerGlyph.TURN, AndroidColor.rgb(234, 179, 8), 84) }
+    val stopIcon = remember { markerIcon(MarkerGlyph.HARSH_STOP, AndroidColor.rgb(219, 39, 119), 84) }
+    fun iconFor(kind: String): BitmapDescriptor = when (kind) {
+        "Hard braking" -> brakeIcon
+        "Hard acceleration" -> accelIcon
+        "Hard stop" -> stopIcon
+        else -> turnIcon   // "Sharp turn" (corner + swerve)
+    }
+
     GoogleMap(
         modifier = modifier,
         cameraPositionState = camera,
@@ -88,7 +101,7 @@ fun TroubleSpotsMap(
                 state = MarkerState(LatLng(h.lat, h.lon)),
                 title = if (h.where.isNotEmpty()) "${h.kind} · ${h.where}" else h.kind,
                 snippet = "on ${h.trips} drives — tap for details",
-                icon = BitmapDescriptorFactory.defaultMarker(hueFor(h.kind)),
+                icon = iconFor(h.kind),
                 onClick = { selected = h; true }
             )
         }
@@ -147,10 +160,3 @@ private fun HotspotDetail(h: EventHotspots.Hotspot, onOpenTrip: (Long) -> Unit) 
     }
 }
 
-private fun hueFor(kind: String): Float = when (kind) {
-    "Hard braking" -> BitmapDescriptorFactory.HUE_RED
-    "Hard acceleration" -> BitmapDescriptorFactory.HUE_AZURE
-    "Sharp turn" -> BitmapDescriptorFactory.HUE_VIOLET
-    "Hard stop" -> BitmapDescriptorFactory.HUE_ROSE
-    else -> BitmapDescriptorFactory.HUE_YELLOW
-}

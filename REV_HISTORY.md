@@ -4,6 +4,16 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BU (2026-06-28) — trouble-spots: g slider + glyph pins; Google-blue routes
+
+Owner feedback (the 0.35 g default hid every hotspot — confirmed by replay: 0 at 0.35 g, 2 at 0.25 g, 3 at
+0.20 g). Changes: (1) the g-force chips become a **slider (0.20–0.50 g)** that adjusts live; **default
+lowered to 0.25** (key reset to `event_g_threshold2`) so the map isn't empty out of the box; reload fires on
+release (not every drag frame). (2) Hotspot pins now use the **trip map's glyph markers** coloured by kind
+(brake = red stop-octagon, accel = amber, sharp turn = yellow, hard stop = pink) — `markerIcon`/`MarkerGlyph`
+made `internal` for reuse. (3) Route line in `TripMap` recoloured to **Google-Maps blue** (`GoogleRouteBlue`
+= #4285F4), shared constant.
+
 ## Rev BT (2026-06-28) — trouble-spots: g-force floor, >=3 instances, fix zoom, reorder Insights
 
 Owner feedback. (1) **g-force floor** — events below a threshold no longer count toward a hotspot (drops the
