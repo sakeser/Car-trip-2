@@ -55,18 +55,30 @@ fun TroubleSpotsMap(
     val mapId = GoogleMapConfig.mapId(context)
     val pts = remember(hotspots) { hotspots.map { LatLng(it.lat, it.lon) } }
     val bounds = remember(pts) { boundsFor(pts) }
-    // Start centred on the spots (not Toronto) so it's framed even before the animate runs.
-    val camera = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(pts.firstOrNull() ?: TORONTO, 13f)
+    val centroid = remember(pts) {
+        if (pts.isEmpty()) TORONTO
+        else LatLng(pts.sumOf { it.latitude } / pts.size, pts.sumOf { it.longitude } / pts.size)
     }
-    LaunchedEffect(bounds, pts.size) {
+    // Degrees spanned by the spots; a small span means a tight cluster (e.g. all near home).
+    val spanDeg = remember(pts) {
+        if (pts.size < 2) 0.0
+        else maxOf(
+            pts.maxOf { it.latitude } - pts.minOf { it.latitude },
+            pts.maxOf { it.longitude } - pts.minOf { it.longitude }
+        )
+    }
+    val camera = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(centroid, 13f)
+    }
+    LaunchedEffect(bounds, pts.size, spanDeg) {
         runCatching {
-            // A single spot (or all in one tight cluster) has a degenerate bounds — newLatLngBounds then
-            // over-zooms or fails, so frame a single point at a fixed zoom instead.
-            if (pts.size <= 1) {
-                pts.firstOrNull()?.let { camera.animate(CameraUpdateFactory.newLatLngZoom(it, 15f)) }
-            } else {
-                bounds?.let { camera.animate(CameraUpdateFactory.newLatLngBounds(it, 80)) }
+            when {
+                // A single spot, or a tight cluster (<~2 km): fixed neighbourhood zoom for context —
+                // fitting tight bounds would zoom in too far (the reported issue).
+                pts.size <= 1 || spanDeg < 0.02 ->
+                    camera.animate(CameraUpdateFactory.newLatLngZoom(centroid, 13.5f))
+                // Spread-out spots: fit them all with generous padding.
+                else -> bounds?.let { camera.animate(CameraUpdateFactory.newLatLngBounds(it, 130)) }
             }
         }
     }

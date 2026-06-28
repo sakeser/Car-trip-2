@@ -31,13 +31,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import android.view.MotionEvent
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import com.cartrip.analyzer.cloud.CloudState
 import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
@@ -72,7 +71,7 @@ import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InsightsScreen(
     viewModel: TripViewModel,
@@ -196,14 +195,19 @@ fun InsightsScreen(
                                 .fillMaxWidth()
                                 .height(280.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .pointerInteropFilter { e ->
-                                    when (e.action) {
-                                        MotionEvent.ACTION_DOWN -> mapTouched = true
-                                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> mapTouched = false
+                                .pointerInput(Unit) {
+                                    // Track press state on the Initial pass: ancestors see every event
+                                    // (incl. the lift) before the map's AndroidView consumes it, so this
+                                    // reliably re-enables page scroll when the finger leaves the map.
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                                            mapTouched = e.changes.any { it.pressed }
+                                        }
                                     }
-                                    false  // don't consume — the map still handles the gesture
                                 }
                         )
+                        TroubleSpotsList(hotspots)
                     } else {
                         Text(
                             String.format(Locale.US, "No recurring spots at or above %.2fg yet — slide left to see more.", appliedG),
@@ -734,6 +738,53 @@ private fun FuelStat(value: String, label: String, modifier: Modifier = Modifier
             textAlign = TextAlign.Center,
             maxLines = 1
         )
+    }
+}
+
+/** Cards for the hotspots shown on the map — kind/location, recurrence, and peak g-force. */
+@Composable
+private fun TroubleSpotsList(hotspots: List<EventHotspots.Hotspot>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        hotspots.forEach { h ->
+            val peakG = h.instances.maxOfOrNull { it.gForce } ?: 0.0
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (h.where.isNotEmpty()) "${h.kind} · ${h.where}" else h.kind,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "${h.count} times across ${h.trips} drives",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            String.format(Locale.US, "%.2fg", peakG),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TripScores.color(((1.0 - (peakG / 0.6).coerceIn(0.0, 1.0)) * 100).roundToInt())
+                        )
+                        Text(
+                            "peak",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -4,6 +4,17 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BX (2026-06-28) — fix map-scroll freeze, trouble-spots zoom + list
+
+Follow-ups on Rev BW. (1) **Scroll-freeze fixed**: the `pointerInteropFilter` never saw ACTION_UP (the map's
+AndroidView swallowed it), so `mapTouched` stuck true and the page froze after touching a map. Replaced with
+press-tracking on the **Initial** pointer pass (`pointerInput` + `awaitPointerEvent(Initial)` → `mapTouched =
+changes.any { pressed }`), which always observes the lift; page scroll re-enables reliably. Both maps.
+(2) **Trouble-spots zoom**: a single spot or tight cluster (<~2 km span) now centres at a fixed neighbourhood
+zoom (13.5) for context instead of over-zooming a tight bounds-fit; spread-out spots fit with 130px padding.
+(3) **Re-added the trouble-spots list** below the map as cards: kind · location, "N times across M drives",
+and peak g-force (colour-graded).
+
 ## Rev BW (2026-06-28) — single-finger map pan
 
 Owner request: pan the maps with one finger instead of two. Maps inside scrolling parents show the

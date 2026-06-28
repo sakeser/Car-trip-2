@@ -23,10 +23,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.view.MotionEvent
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CrisisAlert
@@ -114,7 +113,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TripDetailScreen(
     tripId: Long,
@@ -325,12 +324,15 @@ fun TripDetailScreen(
                         .height(280.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .onGloballyPositioned { mapAnchorY = it.positionInParent().y.roundToInt() }
-                        .pointerInteropFilter { e ->
-                            when (e.action) {
-                                MotionEvent.ACTION_DOWN -> mapTouched = true
-                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> mapTouched = false
+                        .pointerInput(Unit) {
+                            // Track press on the Initial pass so page scroll re-enables when the finger
+                            // leaves the map (the map's AndroidView would otherwise swallow the lift).
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val e = awaitPointerEvent(PointerEventPass.Initial)
+                                    mapTouched = e.changes.any { it.pressed }
+                                }
                             }
-                            false  // don't consume — let the map pan/zoom
                         }
                 ) {
                     TripMap(
