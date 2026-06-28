@@ -36,6 +36,11 @@ object SpeedLimits {
     private const val MATCH_RADIUS_M = 35.0
     private const val OVER_TOL_KMH = 3.0
     private const val MOVING_KMH = 8.0
+    // Speeding-severity tuning (Rev BF). SEV_TOL_KMH: small overages below this are forgiven (0 penalty).
+    // LIMIT_DROP_GRACE_MS: after the matched limit drops (e.g. exiting a highway), keep crediting the
+    // higher recent limit for this long so normal deceleration to the new limit isn't counted as speeding.
+    private const val SEV_TOL_KMH = 5.0
+    private const val LIMIT_DROP_GRACE_MS = 6_000L
     private const val BBOX_PAD_DEG = 0.0006
     private const val ROUTE_BOX_PAD_DEG = 0.0010
     private const val ROUTE_BOX_MAX_SPAN_DEG = 0.025
@@ -57,7 +62,8 @@ object SpeedLimits {
     data class Result(
         val speedingPct: Double,
         val maxOverKmh: Double,
-        val coverage: Double
+        val coverage: Double,
+        val severity: Double = 0.0
     )
 
     data class Annotated(val result: Result, val points: List<AnalysisPointEntity>)
@@ -113,7 +119,8 @@ object SpeedLimits {
                 trip.copy(
                     speedingPct = annotated.result.speedingPct,
                     maxOverLimitKmh = annotated.result.maxOverKmh,
-                    limitCoverage = annotated.result.coverage
+                    limitCoverage = annotated.result.coverage,
+                    speedingSeverity = annotated.result.severity
                 ),
                 annotated.points.map { it.copy(id = 0) }
             )
@@ -127,28 +134,56 @@ object SpeedLimits {
         if (ways.isEmpty()) return null
 
         val limits = smoothIsolatedLimitMismatches(points.map { nearestLimit(it.lat, it.lon, ways) })
-        var covered = 0
-        var movingPts = 0
-        var speedingPts = 0
-        var maxOver = 0.0
-        val out = ArrayList<AnalysisPointEntity>(points.size)
-        for ((index, p) in points.withIndex()) {
-            val limit = limits[index]
-            out += if (limit != null) p.copy(speedLimitKmh = limit) else p.copy(speedLimitKmh = 0.0)
-            if (p.speedKmh < MOVING_KMH) continue
-            movingPts++
-            if (limit == null) continue
-            covered++
-            val over = p.speedKmh - limit
-            if (over > OVER_TOL_KMH) {
-                speedingPts++
-                if (over > maxOver) maxOver = over
-            }
+        val out = points.mapIndexed { i, p ->
+            p.copy(speedLimitKmh = limits[i] ?: 0.0)
         }
-        if (movingPts == 0) return null
-        val coverage = covered.toDouble() / movingPts
+        if (points.none { it.speedKmh >= MOVING_KMH }) return null
+        val result = speedingSummary(points.map { it.t }, points.map { it.speedKmh }, limits)
+        return Annotated(result, out)
+    }
+
+    /**
+     * Pure speeding summary (Rev BF) — testable without the network. For each moving point with a matched
+     * limit it computes how far over an **effective** limit it is, then aggregates:
+     *  - [Result.speedingPct] / [Result.maxOverKmh]: % of covered time over (by [OVER_TOL_KMH]) and the
+     *    worst overage — kept for display.
+     *  - [Result.severity]: the magnitude-weighted exposure that drives the Safety penalty — the mean over
+     *    covered time of `max(0, over - sevTol)^2` (super-linear in how far over, small overages forgiven).
+     *
+     * **Effective limit = the max matched limit within the trailing [graceMs] window.** This is lenient
+     * exactly when a transition would otherwise lie: right after a limit *drop* (highway exit) it keeps
+     * crediting the higher recent limit while you decelerate; right after a *rise* it adopts the new higher
+     * limit immediately (the window's max). So neither transition fabricates speeding.
+     */
+    internal fun speedingSummary(
+        times: List<Long>,
+        speeds: List<Double>,
+        limits: List<Double?>,
+        movingKmh: Double = MOVING_KMH,
+        overTol: Double = OVER_TOL_KMH,
+        sevTol: Double = SEV_TOL_KMH,
+        graceMs: Long = LIMIT_DROP_GRACE_MS,
+    ): Result {
+        val n = times.size
+        var covered = 0; var moving = 0; var speedingPts = 0; var maxOver = 0.0; var sevSum = 0.0
+        var lo = 0
+        for (i in 0 until n) {
+            if (speeds[i] < movingKmh) continue
+            moving++
+            val lim = limits[i] ?: continue
+            while (lo < i && times[lo] < times[i] - graceMs) lo++
+            var eff = lim
+            for (j in lo..i) { val lj = limits[j]; if (lj != null && lj > eff) eff = lj }
+            covered++
+            val over = speeds[i] - eff
+            if (over > overTol) { speedingPts++; if (over > maxOver) maxOver = over }
+            val exc = over - sevTol
+            if (exc > 0) sevSum += exc * exc
+        }
+        val coverage = if (moving > 0) covered.toDouble() / moving else 0.0
         val speedingPct = if (covered > 0) speedingPts.toDouble() / covered else 0.0
-        return Annotated(Result(speedingPct, maxOver, coverage), out)
+        val severity = if (covered > 0) sevSum / covered else 0.0
+        return Result(speedingPct, maxOver, coverage, severity)
     }
 
     private fun smoothIsolatedLimitMismatches(raw: List<Double?>): List<Double?> {

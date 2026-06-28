@@ -184,6 +184,9 @@ object SampleData {
             .coerceIn(0.0, 0.85)
         val maxOverLimitKmh = ((speedBias - 1.0) * 55.0).coerceIn(0.0, 35.0) + rng.nextDouble() * 5.0
         val limitCoverage = 0.85 + rng.nextDouble() * 0.15
+        // Rough demo value for the magnitude-weighted speeding metric (real trips compute it from points):
+        // mean(max(0, over-5)^2) ~ time-over x (typical excess)^2, with typical excess ~ maxOver/2.
+        val speedingSeverity = speedingPct * Math.pow(maxOf(0.0, maxOverLimitKmh / 2.0 - 5.0), 2.0)
         val jerkyPct = (sq * 0.045 + rng.nextDouble() * 0.01).coerceIn(0.0, 0.10)
         val maxJerk = 1.0 + aggression * 6.0 + rng.nextDouble() * 1.5
         val roughRoadPct = (rng.nextDouble() * 0.18).coerceIn(0.0, 0.30)
@@ -224,6 +227,7 @@ object SampleData {
                 speedingPct = speedingPct,
                 maxOverLimitKmh = maxOverLimitKmh,
                 limitCoverage = limitCoverage,
+                speedingSeverity = speedingSeverity,
                 maxJerk = maxJerk,
                 jerkyPct = jerkyPct,
                 isSample = true,

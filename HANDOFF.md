@@ -146,7 +146,7 @@ Pipeline: **record → analyze (offline) → persist → enrich → present.**
 | Recording | `record/RecordingService.kt` (FG service, GPS+sensors+GNSS+raw-GNSS; `ACTION_AUTO_ARM` = provisional record + 90 s motion-confirm by GPS **or** accelerometer vibration + discard; `ACTION_AUTO_STOP_GRACE` = retrospective-trim stop), `record/RecordingState.kt` (live state), `record/AutoStop.kt` (retrospective end-time, pure) |
 | Auto-record | **`record/AutoRecordWatchService.kt`** = persistent "armed" FGS, the reliable hands-free trigger (see note below); `record/AutoRecordController.kt` (decision dispatch → arm/stop), `record/AutoRecordPolicy.kt` (pure trigger logic, unit-tested), `record/AutoRecordPrefs.kt`, `record/AutoRecordLog.kt` (Diagnostics decision log), `record/BootReceiver.kt` (re-arm after reboot), `record/CompanionCarManager.kt` + `record/CarPresenceService.kt` (CompanionDeviceManager — secondary/unreliable for classic-BT cars), `record/GnssLoggingPrefs.kt` (raw-GNSS toggle). Dead: `record/PowerConnectionReceiver.kt` / `record/CarBluetoothReceiver.kt` (manifest registration removed in Rev AO) |
 | Analysis | `analysis/TripAnalyzer.kt` (Kalman/RTS speed+accel, events, metrics), `analysis/MotionFusion.kt` (potholes/rough-road/harsh-stops), `analysis/FusedEventDetector.kt` (magnitude-first sensor detector), `analysis/FuelEstimator.kt` (pure fuel/cost model), `analysis/GnssQuality.kt`, `analysis/SpeedTier.kt` |
-| Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema **v19** + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
+| Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema **v20** + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
 | Cloud | `cloud/SpeedLimits.kt` (OSM/Overpass + tile cache), `cloud/Tiles.kt`, `cloud/RoutesClient.kt` (Google Routes ETA), `cloud/TripSync.kt`/`SheetsClient.kt`/`GoogleAuth.kt` (Sheets) |
 | UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/TripKind.kt` (walk/non-drive guard), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref), `ui/Components.kt` (shared bits + Options sheet) |
 
@@ -328,7 +328,9 @@ Full detail in `REV_HISTORY.md`. Condensed:
 
 ---
 
-## 5. Data model & schema (Room v19)
+## 5. Data model & schema (Room v20)
+<!-- v20 (Rev BF): trips.speedingSeverity (magnitude-weighted speeding exposure for the Safety penalty). -->
+
 
 Tables: `trips`, `locations`, `motions`, `analysis_points`, `drive_events`, `cached_ways`,
 `cached_tiles`, `gnss_samples`, **`gnss_measurements`** (raw per-satellite GNSS, lane R&D). Migrations
@@ -388,7 +390,9 @@ to 0.35 g at speed (was a flat 0.28 g), so low-speed bumps/parking nudges stop b
 DISPLAY layer only; the detector/scoring thresholds (`HARD_BRAKE`/`HARD_LONG_G`) are unchanged.
 
 ### Speed limits / cache — `cloud/SpeedLimits.kt`, `cloud/Tiles.kt`
-`MATCH_RADIUS_M=35`, `OVER_TOL_KMH=3` (speeding stat tolerance), `CACHE_TTL_MS=30d`, `TILE_DEG=0.02`.
+`MATCH_RADIUS_M=35`, `OVER_TOL_KMH=3` (speeding stat tolerance), `SEV_TOL_KMH=5` (speeding-penalty
+forgiveness), `LIMIT_DROP_GRACE_MS=6000` (trailing-max limit window — forgives exit decel + lone misreads),
+`CACHE_TTL_MS=30d`, `TILE_DEG=0.02`.
 Route coloring tiers (`SpeedTier.kt`): yellow 0–10 km/h over, red ≥10 (`RED_OVER_KMH=10`).
 Speeding only counts in scoring when `limitCoverage ≥ 0.4`.
 
@@ -409,6 +413,10 @@ Safety/Comfort/Pace heuristics. Fused-detector trust ramps on **motion sample ra
 `fusedConfidence`. Peak-G uses `maxHorizGForce` (robust) when fused ran, else p99 `peakGForce`.
 **Safety hard-maneuver term (Rev L):** `gpsHardPenalty` (GPS exposure %, ×5/4.5/2) blended by
 `fusedTrust` with `fusedHardPenalty = min(28, (motionBrake·7 + motionAccel·3.5 + motionTurn·1.2)/max(2,km))`.
+**Safety speeding term (Rev BF):** `min(45, 0.8 × speedingSeverity)` where `speedingSeverity` (stored,
+schema v20) = mean over covered time of `max(0, over−5km/h)²` — magnitude-weighted + super-linear, with a
+6 s limit-drop/misread grace (see `SpeedLimits.speedingSummary`). Replaced the old magnitude-blind
+`speedingPct·0.8 + (maxOver−20)·0.5`. Peak-G uses `maxHorizGForce` (sustained peak, Rev BE) when fused ran.
 Comfort already blends GPS+fused event rate. Weights field-calibrated on trips 845/847 — re-tune here.
 The list/hero/Insights label the third score **"Pace"** (the You-vs-traffic `speed` score).
 

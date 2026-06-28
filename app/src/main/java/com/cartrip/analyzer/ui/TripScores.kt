@@ -39,6 +39,13 @@ data class TripScores(
     companion object {
         // Speeding only weighs in when OSM covered enough of the route to trust the number.
         private const val MIN_LIMIT_COVERAGE = 0.4
+        // Magnitude-weighted speeding penalty (Rev BF): penalty = min(cap, k * speedingSeverity), where
+        // speedingSeverity = mean over covered time of max(0, over-5)^2 (super-linear in how far over,
+        // small overages forgiven, transition-grace applied). Replaces the old magnitude-blind
+        // "% time over * 0.8 + (maxOver-20) * 0.5": being 1 km/h over no longer penalizes, while being a
+        // lot over hurts disproportionately. k/cap field-tuned on real trips (owner-chosen "balanced").
+        private const val SPEEDING_K = 0.8
+        private const val SPEEDING_CAP = 45.0
 
         fun from(trip: TripEntity): TripScores {
             val km = max(0.3, trip.distanceM / 1000.0)
@@ -55,8 +62,9 @@ data class TripScores(
             val turnPct = trip.aggressiveTurnPct * 100.0
             val accelPct = trip.hardAccelPct * 100.0
             val speedingApplies = trip.limitCoverage >= MIN_LIMIT_COVERAGE
-            val speedingPct = if (speedingApplies) trip.speedingPct * 100.0 else 0.0
-            val severeOver = if (speedingApplies) max(0.0, trip.maxOverLimitKmh - 20.0) else 0.0
+            // Magnitude-weighted speeding penalty (Rev BF). 0 when coverage is too low to trust.
+            val speedingPenalty =
+                if (speedingApplies) min(SPEEDING_CAP, SPEEDING_K * trip.speedingSeverity) else 0.0
 
             // Peak-G: the true horizontal spike when the fused detector ran (it captures the brief
             // hard brake/turn the GPS p99 misses), else the GPS p99 peak. Net leniently for mounts/bumps.
@@ -79,8 +87,7 @@ data class TripScores(
                 else gpsHardPenalty
             val safetyPenalty =
                 hardPenalty +
-                    speedingPct * 0.8 +
-                    severeOver * 0.5 +
+                    speedingPenalty +
                     max(0.0, peakG - 0.55) * 25.0 +
                     // Braking hard all the way to a stop is a safety signal (late/abrupt stops), not just
                     // a comfort one — penalize it on both axes (lighter here than the Comfort term).

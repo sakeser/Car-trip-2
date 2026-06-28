@@ -4,6 +4,28 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BF (2026-06-27) — magnitude-weighted speeding penalty (Safety) + limit-misread grace
+
+The Safety speeding term was **magnitude-blind**: it penalized *% of time over* the limit equally whether
+you were 4 or 40 km/h over (`speedingPct*0.8 + max(0,maxOver-20)*0.5`), so being 1 km/h over the whole trip
+tanked the score. Replaced with a **magnitude-weighted, distance/time-normalized, super-linear** penalty
+(owner-requested, owner-chose "balanced" strength).
+
+- New stored metric `trips.speedingSeverity` (schema **v20**, `MIGRATION_19_20`): the mean over covered
+  driving time of **`max(0, over - 5km/h)²`** — small overages forgiven (tolerance 5), big overages hurt
+  disproportionately (quadratic), normalized by time (the speeding analogue of per-km event rate). Computed
+  in the pure, unit-tested `SpeedLimits.speedingSummary` (+6 tests).
+- **Limit-drop / misread grace:** the effective limit is the **max matched limit in the trailing 6 s**, so
+  (a) exiting a highway, normal deceleration to the new lower limit isn't counted as speeding, and (b) a
+  lone bad OSM limit match is smoothed over. Field-confirmed on trip 1180: a spurious single-point limit of
+  40 (steady 84 km/h, 80 before/after) was inflating max-over to **+44**; the grace drops it to +28.
+- Safety penalty now `min(45, 0.8 × speedingSeverity)`, replacing the old two terms. Field-validated on
+  real drives: 1 km/h over → 0 penalty; recent trips re-score sensibly (1179→85, 1176→70, 1180→75, 1181→63;
+  1181 lowest because it was sustained 13-22 over, vs 1180's brief peaks). `speedingPct`/`maxOver` kept for
+  display.
+- **Existing trips show no speeding penalty until their speed limits are re-fetched** (severity defaults 0
+  after the migration; the recording flow computes it for new trips at finalize via `refreshForTrip`).
+
 ## Rev BE (2026-06-27) — speed-aware event threshold + truthful peak-G (from a big drive-day review)
 
 Two detector refinements from reviewing a day of real drives (trips 1176-1181), both field-validated by

@@ -49,9 +49,14 @@ data class TripEntity(
     val hardAccelPct: Double = 0.0,
     // Speeding vs OSM posted limits. speedingPct = fraction of covered moving time over the limit;
     // limitCoverage = fraction of the route we found a limit for (confidence in the speeding number).
+    // speedingSeverity = magnitude-weighted speeding exposure: mean over covered time of
+    // max(0, over - tol)^2 (super-linear in how far over, with a small-overage tolerance, after a
+    // limit-drop grace) — the basis of the Safety speeding penalty (Rev BF). speedingPct/maxOver are
+    // kept for display.
     val speedingPct: Double = 0.0,
     val maxOverLimitKmh: Double = 0.0,
     val limitCoverage: Double = 0.0,
+    val speedingSeverity: Double = 0.0,
     // Jerk = rate of change of acceleration (abruptness). maxJerk in m/s^3; jerkyPct = fraction of
     // moving time the ride was jerky. A jerky stab feels worse than a smooth firm brake of equal g.
     val maxJerk: Double = 0.0,
