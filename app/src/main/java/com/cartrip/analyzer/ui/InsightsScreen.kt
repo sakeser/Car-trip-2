@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.maps.model.LatLng
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.data.TripEntity
@@ -114,9 +115,10 @@ fun InsightsScreen(
         val best = windowTrips.maxByOrNull { it.smoothness }
         val worst = windowTrips.minByOrNull { it.smoothness }
         val longest = windowTrips.maxByOrNull { it.distanceM }
-        // Cross-trip recurring-event hotspots (grows with data; loaded off the main thread).
-        val hotspots by produceState(initialValue = emptyList<EventHotspots.Hotspot>()) {
-            value = runCatching { viewModel.loadEventHotspots() }.getOrDefault(emptyList())
+        // Cross-trip trouble spots — recurring hotspots + every rough spot (loaded off the main thread).
+        val trouble by produceState(initialValue = TripViewModel.TroubleSpots(emptyList(), emptyList())) {
+            value = runCatching { viewModel.loadTroubleSpots() }
+                .getOrDefault(TripViewModel.TroubleSpots(emptyList(), emptyList()))
         }
 
         LazyColumn(
@@ -160,10 +162,23 @@ fun InsightsScreen(
                 }
             }
 
-            if (hotspots.isNotEmpty()) {
+            if (trouble.hotspots.isNotEmpty() || trouble.roughSpots.isNotEmpty()) {
                 item {
-                    SectionTitle("Recurring spots")
-                    RecurringSpotsCard(hotspots.take(6))
+                    SectionTitle("Trouble spots")
+                    val roughLatLng = remember(trouble.roughSpots) {
+                        trouble.roughSpots.map { LatLng(it.first, it.second) }
+                    }
+                    TroubleSpotsMap(
+                        hotspots = trouble.hotspots,
+                        roughSpots = roughLatLng,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(280.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                }
+                if (trouble.hotspots.isNotEmpty()) {
+                    item { RecurringSpotsCard(trouble.hotspots.take(6)) }
                 }
             }
 

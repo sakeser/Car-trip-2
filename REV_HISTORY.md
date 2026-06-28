@@ -4,6 +4,20 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BO (2026-06-28) — trouble-spots map (hotspots + rough spots) in Insights
+
+Owner-requested: recurring hotspots + rough spots on a map. New `TroubleSpotsMap` (embedded in Insights,
+mirrors the dormant `TripHeatMap` setup — no new screen/nav): every individual **rough spot** is a small
+translucent circle so overlapping potholes darken into visible clusters ("how close together they are"),
+and each **recurring hotspot** is a labelled pin coloured by kind (braking=red, turn=violet, rough=orange,
+…). `TripViewModel.loadTroubleSpots` loads events+points once and returns both the hotspots (home/work/
+geocoded-tagged) and every located pothole. The "Trouble spots" section shows the map + the recurring-spots
+summary table beneath it. Reuses `boundsFor` + `MapUnavailable`; gated on a Maps API key.
+
+Rough spots are left **un-consolidated** (individual circles) per the owner's "let me see how close they
+are." Map not visually verified yet (built this session). Field data already had clear clusters (pothole at
+home, turn at the work entrance).
+
 ## Rev BN (2026-06-28) — fuel: spend buckets + smoothed $/km
 
 Owner-requested fuel additions. `FuelInsights.spend` totals gas cost over **last 1 / 7 / 30 days + all

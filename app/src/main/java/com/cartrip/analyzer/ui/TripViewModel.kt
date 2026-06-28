@@ -210,16 +210,23 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         dao.getAnalysisPointsSince(cutoff)
     }
 
+    /** Recurring-event hotspots + every individual rough spot, for the Insights map + table. */
+    data class TroubleSpots(
+        val hotspots: List<EventHotspots.Hotspot>,
+        val roughSpots: List<Pair<Double, Double>>,  // every located pothole (lat, lon) — to see clustering
+    )
+
     /**
-     * Cross-trip recurring-event hotspots (roadmap item 9): places where the same kind of event recurs
-     * across multiple drives. Each stored event is located via the nearest analysis point by time; walks
-     * and sample trips are excluded. See [EventHotspots].
+     * Cross-trip trouble spots (roadmap item 9): recurring-event hotspots (same kind across distinct trips)
+     * plus every individual rough spot. Each stored event is located via the nearest analysis point by time;
+     * walks and sample trips are excluded. Loads events+points once. See [EventHotspots].
      */
-    suspend fun loadEventHotspots(): List<EventHotspots.Hotspot> = withContext(Dispatchers.IO) {
+    suspend fun loadTroubleSpots(): TroubleSpots = withContext(Dispatchers.IO) {
         val drives = dao.getAllTrips().filter {
             it.endTime > 0 && !it.isSample && !TripKind.isLikelyNonDrive(it)
         }
         val evs = ArrayList<EventHotspots.Ev>()
+        val rough = ArrayList<Pair<Double, Double>>()
         for (t in drives) {
             val events = dao.getDriveEvents(t.id)
             if (events.isEmpty()) continue
@@ -230,13 +237,14 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
                 val p = pts.minByOrNull { kotlin.math.abs(it.t - e.t) } ?: continue
                 if (kotlin.math.abs(p.t - e.t) > 4000) continue   // no nearby fix -> can't place it
                 evs.add(EventHotspots.Ev(t.id, EventHotspots.kindOf(type), p.lat, p.lon))
+                if (type == EventType.POTHOLE) rough.add(p.lat to p.lon)
             }
         }
         // Tag each hotspot with a friendly location: home/work for free, else a reverse-geocoded
         // neighbourhood for the strongest few (budget caps live geocoder calls; cache makes refreshes free).
         val home = loadHome(getApplication()); val work = loadWork(getApplication())
         val budget = GeoNamer.Budget(8)
-        EventHotspots.find(evs).mapIndexed { i, h ->
+        val hotspots = EventHotspots.find(evs).mapIndexed { i, h ->
             val where = when {
                 HomeDetector.isHome(h.lat, h.lon, home) -> "near Home"
                 HomeDetector.isWork(h.lat, h.lon, work) -> "near Work"
@@ -245,6 +253,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             }
             h.copy(where = where)
         }
+        TroubleSpots(hotspots, rough)
     }
 
     /** Per-trip endpoints distilled from its track — start, end, and the farthest point (loop "via"). */
