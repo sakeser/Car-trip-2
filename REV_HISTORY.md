@@ -4,6 +4,21 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CK-CN (2026-06-28, v3.22) — past-trips polish, smart bar sizing, AI export
+
+Owner's new backlog, easiest/lowest-risk first.
+- **CK — Past-trips compaction + scroll affordance.** Recency chips replaced with custom compact chips
+  (shorter, smaller font, shifted up); a lightweight always-visible scrollbar thumb on the trip list shows
+  there's more to scroll. Device-verified.
+- **CL — Smarter you-vs-traffic bar.** Scales to a round-minute axis max ~25% above the largest value
+  (longest bar ~80% width, not edge-to-edge) with a 0..max minute scale beneath. General bar-sizing audit
+  for the other bars deferred (see `ROADMAP_NEW.md`).
+- **CN — "Share for AI insights."** Compact markdown summary (overview, averages incl. drive stress,
+  trouble spots, recent drives; no raw GPS) sharable into ChatGPT/Claude. Pure `ui/AiInsightsExport.kt` +3
+  tests; share button in Insights.
+- Recorded the owner's new items + assessment in `ROADMAP_NEW.md` (incl. CM POI-aware naming, CO encrypt-
+  at-rest + biometric — the next, harder items).
+
 ## Rev CJ (2026-06-28, v3.20) — Batch 4: Drive Stress Score
 
 Per-trip "how demanding was this drive" score (0-100, higher = more stressful; own green->red scale,
