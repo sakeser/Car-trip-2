@@ -143,6 +143,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private var gpsGapCount = 0
     private var gpsGapOpen = false
     private var stoppingNormally = false
+    // Battery: GPS is throttled to a heartbeat after a sustained stop; restored on motion (accelerometer).
+    private var locThrottled = false
+    private var lastMovingWall = 0L
 
     // GNSS quality accumulators (GnssStatus callback, main thread). Aggregated into a per-trip summary.
     private var gnssCallback: GnssStatus.Callback? = null
@@ -462,6 +465,8 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         startSpeedTrack.clear()
         startTrackOpen = true
         startTrackFirstT = 0L
+        locThrottled = false
+        lastMovingWall = 0L
         autoStopRequested = false
         lastMotionWrite = 0L
         motionSensorRegistered = false
@@ -711,23 +716,49 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private fun startFused() {
         val client = LocationServices.getFusedLocationProviderClient(this)
         fusedClient = client
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
-            .setMinUpdateIntervalMillis(LOCATION_FASTEST_INTERVAL_MS)
-            .setMinUpdateDistanceMeters(0f)
-            .setWaitForAccurateLocation(false)
-            .build()
         val cb = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 for (location in result.locations) handleLocation(location)
             }
         }
         locationCallback = cb
-        try {
+        if (!requestFused(LOCATION_INTERVAL_MS, LOCATION_FASTEST_INTERVAL_MS)) startGps()
+    }
+
+    /** (Re)request fused updates at the given cadence. Used for the normal fast rate and the battery-saving
+     *  throttled rate. Returns false if location access was revoked (caller falls back / stops). */
+    private fun requestFused(intervalMs: Long, fastestMs: Long): Boolean {
+        val client = fusedClient ?: return false
+        val cb = locationCallback ?: return false
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+            .setMinUpdateIntervalMillis(fastestMs)
+            .setMinUpdateDistanceMeters(0f)
+            .setWaitForAccurateLocation(false)
+            .build()
+        return try {
             client.requestLocationUpdates(request, cb, Looper.getMainLooper())
             usingFused = true
+            true
         } catch (_: SecurityException) {
-            startGps()
+            false
         }
+    }
+
+    /** Battery: while parked, slow GPS to a heartbeat (the accelerometer, always on, restores it the instant
+     *  motion resumes). Only the fused path is throttled; the raw-GPS fallback is left alone. */
+    private fun throttleLocation() {
+        if (locThrottled || !usingFused) return
+        val cb = locationCallback ?: return
+        runCatching { fusedClient?.removeLocationUpdates(cb) }
+        if (requestFused(GPS_THROTTLE_INTERVAL_MS, GPS_THROTTLE_INTERVAL_MS)) locThrottled = true
+    }
+
+    private fun restoreLocation() {
+        if (!locThrottled) return
+        val cb = locationCallback ?: return
+        runCatching { fusedClient?.removeLocationUpdates(cb) }
+        requestFused(LOCATION_INTERVAL_MS, LOCATION_FASTEST_INTERVAL_MS)
+        locThrottled = false
     }
 
     private fun startGps() {
@@ -742,13 +773,27 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private fun startTicker() {
         tickerJob = scope.launch {
             var counter = 0
+            lastMovingWall = System.currentTimeMillis()
             while (recording) {
                 delay(1000)
                 counter++
                 val now = System.currentTimeMillis()
                 val start = RecordingState.state.value.startTime
                 val elapsed = if (start > 0) (now - start) / 1000 else 0
-                val gpsSignalLost = lastLocationAtWall > 0L && now - lastLocationAtWall >= GPS_SIGNAL_LOST_MS
+                // Battery: slow GPS after a sustained stop (>= GPS_THROTTLE_AFTER_MS), restore the instant
+                // the accelerometer or a fix shows motion. 90 s threshold skips normal red lights.
+                if (usingFused) {
+                    val moving = liveSpeedKmh >= THROTTLE_SPEED_KMH || vibrationEma >= SENSOR_MOTION_VIB
+                    if (moving) {
+                        lastMovingWall = now
+                        if (locThrottled) withContext(Dispatchers.Main) { restoreLocation() }
+                    } else if (!locThrottled && now - lastMovingWall >= GPS_THROTTLE_AFTER_MS) {
+                        withContext(Dispatchers.Main) { throttleLocation() }
+                    }
+                }
+                // A throttled heartbeat isn't a "lost signal" — don't count it as a GPS gap.
+                val gpsSignalLost = !locThrottled && lastLocationAtWall > 0L &&
+                    now - lastLocationAtWall >= GPS_SIGNAL_LOST_MS
                 if (gpsSignalLost && !gpsGapOpen) {
                     gpsGapOpen = true
                     gpsGapCount++
@@ -1185,6 +1230,11 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         private const val MAX_SPEED = 75.0 // m/s (~270 km/h) plausibility cap
         private const val LOCATION_INTERVAL_MS = 500L
         private const val LOCATION_FASTEST_INTERVAL_MS = 250L
+        // Battery: after this long stationary, slow GPS to GPS_THROTTLE_INTERVAL_MS. 90 s is longer than
+        // a normal red light, so only real parks / the pre-auto-stop idle window throttle (no light churn).
+        private const val GPS_THROTTLE_AFTER_MS = 90_000L
+        private const val GPS_THROTTLE_INTERVAL_MS = 20_000L
+        private const val THROTTLE_SPEED_KMH = 3.0
         private const val RAW_SENSOR_RETENTION_MS = 30L * 24L * 60L * 60L * 1000L
         private const val GPS_SIGNAL_LOST_MS = 2L * 60L * 1000L
         private const val MOTION_STALL_RESTART_MS = 15L * 1000L

@@ -4,6 +4,21 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BK (2026-06-28) — battery: throttle GPS during sustained stops
+
+Owner-flagged concern; the cross-check showed GPS-on (~2 h) far exceeded active recording (~1 h), the gap
+being GPS held at full rate through stops / the ~6 min pre-auto-stop idle window. Fix: while recording, once
+the car has been stationary for `GPS_THROTTLE_AFTER_MS` (90 s — longer than a normal red light, so only real
+parks / the idle tail throttle, no light churn), the fused request drops to a `GPS_THROTTLE_INTERVAL_MS`
+(20 s) heartbeat. The **always-on accelerometer is the safety net**: the per-second ticker restores full
+rate the instant `vibrationEma >= SENSOR_MOTION_VIB` (engine/movement) or a fix shows speed — so a pull-away
+isn't missed. A throttled heartbeat is excluded from the GPS-gap counter (it's intentional, not lost signal).
+Only the fused path is throttled (raw-GPS fallback untouched). `requestFused(interval, fastest)` refactor.
+
+Conservative by design (no track loss while parked; fast accel-triggered restore). Battery impact needs
+over-several-days measurement on-device. Left the Rev BA re-arm accelerometer at 50 Hz — lowering its rate
+would shift the rate-specific jerk threshold and risk spurious arms, so it needs its own validation pass.
+
 ## Rev BJ (2026-06-28) — cross-trip recurring-event hotspots (Insights)
 
 Roadmap item 9 (owner-requested): as routes overlap, surface places where the *same kind* of event recurs
