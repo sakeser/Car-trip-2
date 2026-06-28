@@ -112,9 +112,6 @@ fun InsightsScreen(
         }.ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
         val averages = ScoreAverages.from(wScores)
-        val best = windowTrips.maxByOrNull { it.smoothness }
-        val worst = windowTrips.minByOrNull { it.smoothness }
-        val longest = windowTrips.maxByOrNull { it.distanceM }
         // Cross-trip trouble spots — recurring hotspots + every rough spot (loaded off the main thread).
         val trouble by produceState(initialValue = TripViewModel.TroubleSpots(emptyList(), emptyList())) {
             value = runCatching { viewModel.loadTroubleSpots() }
@@ -137,17 +134,6 @@ fun InsightsScreen(
             item {
                 SectionTitle("Score trends")
                 ScoreTrendsCard(wScores, window.label)
-            }
-
-            item { SectionTitle("Health metrics") }
-            items(miniStatSpecs(windowTrips, wScores).chunked(2)) { rowSpecs ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    rowSpecs.forEach { MiniStatCard(it, Modifier.weight(1f)) }
-                    if (rowSpecs.size == 1) Spacer(Modifier.weight(1f))
-                }
             }
 
             run {
@@ -179,21 +165,6 @@ fun InsightsScreen(
                 }
                 if (trouble.hotspots.isNotEmpty()) {
                     item { RecurringSpotsCard(trouble.hotspots.take(6)) }
-                }
-            }
-
-            item {
-                SectionTitle("Highlights")
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    best?.let {
-                        InsightTripCard("Best drive score", it, onClick = { onOpenTrip(it.id) })
-                    }
-                    worst?.let {
-                        InsightTripCard("Needs attention", it, onClick = { onOpenTrip(it.id) })
-                    }
-                    longest?.let {
-                        InsightTripCard("Longest drive", it, onClick = { onOpenTrip(it.id) })
-                    }
                 }
             }
         }
@@ -237,57 +208,17 @@ private data class ScoreAverages(
     }
 }
 
-private class StatSpec(
-    val title: String,
-    val value: String,
-    val caption: String,
-    val series: List<Float>,
-    val color: Color
-)
-
-private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>): List<StatSpec> {
-    fun avg(l: List<Float>) = if (l.isEmpty()) 0.0 else l.map { it.toDouble() }.average()
-    val overall = scores.map { it.overall.toFloat() }
-    val safety = scores.map { it.safety.toFloat() }
-    val comfort = scores.map { it.comfort.toFloat() }
-    val dist = trips.map { (it.distanceM / 1000.0).toFloat() }
-    val eventRate = trips.map {
-        val km = max(0.3, it.distanceM / 1000.0)
-        ((it.hardBrakeCount + it.hardAccelCount + it.hardCornerCount) / km * 100.0).toFloat()
+/** Trailing moving average over [window] (fewer at the start) — one point per input, a smooth trend. */
+private fun movingAverage(values: List<Float>, window: Int): List<Float> {
+    if (values.isEmpty()) return emptyList()
+    val out = ArrayList<Float>(values.size)
+    for (i in values.indices) {
+        val from = maxOf(0, i - window + 1)
+        var sum = 0f
+        for (j in from..i) sum += values[j]
+        out += sum / (i - from + 1)
     }
-    val paceVsGoogle = trips
-        .filter { it.googleEtaTrafficS > 0.0 && it.durationS > 0.0 && !TripKind.isLikelyNonDrive(it) }
-        .map { ((it.googleEtaTrafficS - it.durationS) / 60.0).toFloat() }
-    // Accelerometer-fusion trends.
-    val roughRoad = trips.map { (it.roughRoadPct * 100.0).toFloat() }
-    val potholesPer100 = trips.map { (it.potholeCount / max(0.3, it.distanceM / 1000.0) * 100.0).toFloat() }
-    val harshStops = trips.map { it.harshStopCount.toFloat() }
-    val peakG = trips.map { it.peakGForce.toFloat() }
-
-    val out = mutableListOf(
-        StatSpec("Drive score", avg(overall).roundToInt().toString(), "Blended trip health", overall, Color(0xFF0EA5E9)),
-        StatSpec("Safety", avg(safety).roundToInt().toString(), "Braking, turns, speed", safety, Color(0xFF10B981)),
-        StatSpec("Comfort", avg(comfort).roundToInt().toString(), "Smoothness and idle", comfort, Color(0xFF38BDF8)),
-        StatSpec("Distance / trip", String.format(Locale.US, "%.1f km", avg(dist)), "Average drive length", dist, Color(0xFF14B8A6)),
-        StatSpec("Hard events / 100 km", String.format(Locale.US, "%.1f", avg(eventRate)), "Lower is better", eventRate, Color(0xFFF59E0B)),
-        StatSpec("Rough road", String.format(Locale.US, "%.0f%%", avg(roughRoad)), "Bumpy / vibrating road", roughRoad, Color(0xFFF59E0B)),
-        StatSpec("Potholes / 100 km", String.format(Locale.US, "%.1f", avg(potholesPer100)), "Big bumps detected", potholesPer100, Color(0xFF78716C)),
-        StatSpec("Harsh stops / trip", String.format(Locale.US, "%.1f", avg(harshStops)), "Jerky stops", harshStops, Color(0xFFEF4444)),
-        StatSpec("Peak g-force", String.format(Locale.US, "%.2fg", avg(peakG)), "Strongest jolt", peakG, Color(0xFF8B5CF6))
-    )
-    if (paceVsGoogle.isNotEmpty()) {
-        val margin = avg(paceVsGoogle)
-        out += StatSpec(
-            "Pace vs traffic",
-            String.format(Locale.US, "%+.1f min", margin),
-            "Positive means faster",
-            paceVsGoogle,
-            if (margin >= 0.0) Color(0xFF22C55E) else Color(0xFFEF4444)
-        )
-    }
-    return listOf(
-        *out.toTypedArray()
-    )
+    return out
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -460,15 +391,19 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
-                // Diverging bars: each trip's minutes saved (green) or lost (red) vs Google, with the
-                // average as a dashed line.
-                DivergingBarChart(
-                    values = margins.map { it.toFloat() },
-                    average = avgMargin.toFloat(),
-                    minScale = 3f,        // don't exaggerate sub-3-min differences
-                    scalePercentile = 0.85f,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // A smoothed trend (trailing moving average of minutes vs Google) reads cleaner than a
+                // bar per trip — above the centre line = consistently beating traffic, below = slower.
+                val trend = movingAverage(margins.map { it.toFloat() }, window = 5)
+                if (trend.size >= 2) {
+                    TimeSeriesChart(
+                        title = "Trend: min vs traffic (5-trip avg)",
+                        values = trend,
+                        unit = "min",
+                        color = marginColor,
+                        zeroCentered = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Text(
                     String.format(Locale.US, "Avg %+.1f min/trip (%+.1f min/hr driven) vs Google", avgMargin, perHour),
                     style = MaterialTheme.typography.labelSmall,
@@ -644,22 +579,6 @@ private fun trendDelta(values: List<Float>): Int {
 }
 
 @Composable
-private fun MiniStatCard(spec: StatSpec, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(spec.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(spec.value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(spec.caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            MiniSparkline(values = spec.series, color = spec.color, modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
 private fun SectionTitle(text: String) {
     Text(
         text = text,
@@ -773,40 +692,6 @@ private fun RecurringSpotsCard(hotspots: List<EventHotspots.Hotspot>) {
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun InsightTripCard(title: String, trip: TripEntity, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.labelMedium)
-                Text(
-                    Format.dateTime(trip.startTime),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "${Format.distance(trip.distanceM)}  |  ${Format.duration(trip.durationS)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                trip.smoothness.toString(),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = TripStats.scoreColor(trip.smoothness)
-            )
         }
     }
 }

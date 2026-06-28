@@ -4,6 +4,16 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BR (2026-06-28) — Insights cleanup: drop stale sections, smooth you-vs-traffic
+
+Owner feedback on the Insights screen. Removed the **Highlights** section (best/worst/longest cards — not
+useful) and the **Health metrics** mini-stat grid (the per-metric sparkline cards weren't meaningful);
+deleted the now-dead `StatSpec`/`miniStatSpecs`/`MiniStatCard`/`InsightTripCard`. The **You vs traffic**
+card's per-trip diverging bar chart (too much info) is replaced with a **smoothed trend** — a trailing
+5-trip moving average of minutes-vs-Google as a zero-centred line (above = consistently beating traffic),
+keeping the "% beat traffic" headline + avg caption. (Re-presenting the dropped health metrics in a better
+form is left as a follow-up.)
+
 ## Rev BQ (2026-06-28) — REVERT the GPS throttle (it degraded walk tracks)
 
 Field regression: the Rev BK battery GPS-throttle got stuck during a slow, low-vibration trip (a walk),
