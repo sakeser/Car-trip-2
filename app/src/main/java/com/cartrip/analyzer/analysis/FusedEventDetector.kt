@@ -59,6 +59,9 @@ object FusedEventDetector {
     // threshold-crossing sample — a hard brake/turn keeps building after it first crosses the line
     // (a narrated 0.5 g brake was being stored as 0.28 g). Scan forward this far for the peak.
     private const val PEAK_WINDOW_MS = 1500L
+    // Peak-G must persist this many consecutive samples to count (rejects 1-2 sample handling spikes).
+    // At ~45-50 Hz this is ~150 ms — far shorter than a real ~1 s maneuver, far longer than a phone jolt.
+    private const val PEAK_SUSTAIN_SAMPLES = 7
 
     // Startup & plausibility guards (Rev AA, from field trip 1126): motion is logged before the first
     // GPS fix, and those early samples get a stale *extrapolated* speed, so phone-handling yaw fabricated
@@ -199,9 +202,9 @@ object FusedEventDetector {
             return pk
         }
 
-        // Collect horizontal-accel magnitudes so the peak is a high percentile, not the raw max — one
-        // phone bump or handling spike was setting a 1.1 g "peak" on otherwise calm drives (and that
-        // peak feeds the safety score directly). p99.5 keeps a true hard maneuver while rejecting lone outliers.
+        // Collect per-sample horizontal-accel magnitudes; the trip peak-G is the sustained max of these
+        // (see sustainedPeak at the end) so a lone phone/handling spike can't set the peak that feeds the
+        // safety score, while a genuine ~1 s hard maneuver is kept.
         val horizMagsG = ArrayList<Double>()
         var lastLong = Long.MIN_VALUE; var lastTurn = Long.MIN_VALUE; var lastSwerve = Long.MIN_VALUE
         val yawSamples = ArrayList<YawSample>()
@@ -256,15 +259,27 @@ object FusedEventDetector {
             turn++
         }
         events.sortBy { it.tMs }
-        return Result(events, brake, accel, turn, confidence, percentile(horizMagsG, 0.995))
+        // Peak horizontal G. p99.5 over *every* sample under-reports the trip's hardest maneuver: a real
+        // 0.4 g brake spans only ~1 s of the tens of thousands of calm cruising samples, so it sits far
+        // above p99.5 and gets washed out (calm and spirited drives both read ~0.13 g). Instead take the
+        // SUSTAINED peak — the highest horizontal-g level held for a short window (PEAK_SUSTAIN_SAMPLES).
+        // That rejects a lone 1-3 sample phone/handling spike (the reason p99.5 was used) while keeping a
+        // genuine ~1 s maneuver, so peak-G finally reflects the hardest real braking/cornering force.
+        val maxHorizG = sustainedPeak(horizMagsG, PEAK_SUSTAIN_SAMPLES)
+        return Result(events, brake, accel, turn, confidence, maxHorizG)
     }
 
-    /** High-percentile value of an unsorted list (robust "peak" that rejects lone outlier spikes). */
-    private fun percentile(values: List<Double>, p: Double): Double {
-        if (values.isEmpty()) return 0.0
-        val sorted = values.sorted()
-        val idx = (sorted.size * p).toInt().coerceIn(0, sorted.size - 1)
-        return sorted[idx]
+    /** Highest value held continuously across a window of [k] samples (max of the per-window minimum).
+     *  A brief 1..(k-1)-sample spike collapses to its low neighbours; a sustained maneuver survives. */
+    private fun sustainedPeak(values: List<Double>, k: Int): Double {
+        if (values.size < k) return values.maxOrNull() ?: 0.0
+        var best = 0.0
+        for (i in 0..values.size - k) {
+            var mn = Double.MAX_VALUE
+            for (j in i until i + k) if (values[j] < mn) mn = values[j]
+            if (mn > best) best = mn
+        }
+        return best
     }
 
     /**

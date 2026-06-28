@@ -46,6 +46,28 @@ class DisplayEventsTest {
         assertEquals(2, DisplayEvents.clean(ev, pts(20_000, 50.0)).size)
     }
 
+    // ---- Speed-aware longitudinal (brake/accel) threshold: more g required the slower you go ----
+
+    /** A moderate 0.36 g brake at a crawl (15 km/h) is usually a speed bump / parking nudge -> dropped. */
+    @Test fun lowSpeedModerateBrakeDropped() {
+        val b = DriveEvent(2000L, EventType.BRAKE, 0.36 * g, "gps", 1.0)
+        assertTrue(DisplayEvents.clean(listOf(b), pts(20_000, 15.0)).isEmpty())
+    }
+
+    /** The same 0.36 g brake at highway speed (60 km/h) is a genuine hard brake -> kept. */
+    @Test fun highSpeedModerateBrakeKept() {
+        val b = DriveEvent(2000L, EventType.BRAKE, 0.36 * g, "gps", 1.0)
+        assertEquals(1, DisplayEvents.clean(listOf(b), pts(20_000, 60.0)).size)
+    }
+
+    /** Mid-speed (35 km/h) ramped threshold (~0.385 g): 0.38 g drops, 0.40 g is kept. */
+    @Test fun midSpeedRampedLongitudinalThreshold() {
+        val weak = DriveEvent(2000L, EventType.BRAKE, 0.38 * g, "gps", 1.0)
+        val strong = DriveEvent(2000L, EventType.BRAKE, 0.40 * g, "gps", 1.0)
+        assertTrue(DisplayEvents.clean(listOf(weak), pts(20_000, 35.0)).isEmpty())
+        assertEquals(1, DisplayEvents.clean(listOf(strong), pts(20_000, 35.0)).size)
+    }
+
     /** A 0.26 g swerve at 20 km/h is not notable -> filtered out. */
     @Test fun lowSpeedWeakSwerveDropped() {
         val sw = DriveEvent(2000L, EventType.SWERVE, 0.26 * g, "fused", 0.7)
@@ -77,7 +99,7 @@ class DisplayEventsTest {
 
     /** High-conf accel on a bump but with flat GPS speed = the bump's horizontal shake -> dropped. */
     @Test fun highConfAccelOnBumpWithFlatSpeedDropped() {
-        val accel = DriveEvent(5000L, EventType.ACCEL, 0.36 * g, "fused", 0.90)
+        val accel = DriveEvent(5000L, EventType.ACCEL, 0.45 * g, "fused", 0.90)
         val bump = DriveEvent(5000L, EventType.POTHOLE, 0.40 * g, "motion", 1.0)
         val out = DisplayEvents.clean(listOf(accel, bump), pts(20_000, 50.0))
         assertTrue("flat-speed accel on a bump should be vetoed", out.none { it.type == EventType.ACCEL })
@@ -87,7 +109,7 @@ class DisplayEventsTest {
     /** Same setup but the GPS speed really climbs -> a genuine accel that happened over a bump is kept.
      *  (Weaker coincident pothole so the kept accel wins the cluster, as in the real field case.) */
     @Test fun highConfAccelOverBumpWithRisingSpeedKept() {
-        val accel = DriveEvent(5000L, EventType.ACCEL, 0.36 * g, "fused", 0.90)
+        val accel = DriveEvent(5000L, EventType.ACCEL, 0.45 * g, "fused", 0.90)
         val bump = DriveEvent(5000L, EventType.POTHOLE, 0.34 * g, "motion", 1.0)
         val out = DisplayEvents.clean(listOf(accel, bump), ramp(20_000, 30.0, 60.0))
         assertTrue("a real accel over a bump must survive", out.any { it.type == EventType.ACCEL })
@@ -95,7 +117,7 @@ class DisplayEventsTest {
 
     /** Low-confidence longitudinal on a bump is dropped regardless of slope (original behavior kept). */
     @Test fun lowConfAccelOnBumpDropped() {
-        val accel = DriveEvent(5000L, EventType.ACCEL, 0.36 * g, "fused", 0.40)
+        val accel = DriveEvent(5000L, EventType.ACCEL, 0.45 * g, "fused", 0.40)
         val bump = DriveEvent(5000L, EventType.POTHOLE, 0.40 * g, "motion", 1.0)
         val out = DisplayEvents.clean(listOf(accel, bump), ramp(20_000, 30.0, 60.0))
         assertTrue("low-conf accel on a bump is a bump echo", out.none { it.type == EventType.ACCEL })
@@ -103,14 +125,14 @@ class DisplayEventsTest {
 
     /** Away from any bump, a high-conf accel is never second-guessed by this veto, even if flat. */
     @Test fun flatAccelWithNoBumpKept() {
-        val accel = DriveEvent(5000L, EventType.ACCEL, 0.36 * g, "fused", 0.90)
+        val accel = DriveEvent(5000L, EventType.ACCEL, 0.45 * g, "fused", 0.90)
         val out = DisplayEvents.clean(listOf(accel), pts(20_000, 50.0))
         assertTrue("away from bumps the veto must not fire", out.any { it.type == EventType.ACCEL })
     }
 
     /** Bump-coincident but no GPS context to judge the slope -> fail open (keep the event). */
     @Test fun accelOnBumpKeptWhenNoGpsContext() {
-        val accel = DriveEvent(5000L, EventType.ACCEL, 0.36 * g, "fused", 0.90)
+        val accel = DriveEvent(5000L, EventType.ACCEL, 0.45 * g, "fused", 0.90)
         val bump = DriveEvent(5000L, EventType.POTHOLE, 0.34 * g, "motion", 1.0)
         val out = DisplayEvents.clean(listOf(accel, bump), pts(2_000, 50.0)) // no points near 5 s
         assertTrue("fail open when the speed track can't judge", out.any { it.type == EventType.ACCEL })

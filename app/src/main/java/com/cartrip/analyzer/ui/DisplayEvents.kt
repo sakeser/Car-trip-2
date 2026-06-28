@@ -28,6 +28,15 @@ object DisplayEvents {
     private const val TURN_MIN_G_LOW = 0.40   // 10-30 km/h
     private const val TURN_MIN_G_HIGH = 0.30  // >=30 km/h
 
+    // Speed/g gating for longitudinal events (brake/accel) — same idea as turns. At a crawl a 0.3 g blip
+    // is usually a speed bump / parking nudge / stop-start jerk (a false "event"), so require more g; at
+    // speed the same g is a genuine hard brake/accel, so a lower bar is fine. Ramped linearly between the
+    // two speeds so a trip hovering near the cutoff doesn't flip-flop. (Raised from the old flat 0.28 g.)
+    private const val LONG_LOW_SPEED_KMH = 20.0
+    private const val LONG_HIGH_SPEED_KMH = 50.0
+    private const val LONG_MIN_G_LOW = 0.42   // <=20 km/h
+    private const val LONG_MIN_G_HIGH = 0.35  // >=50 km/h
+
     fun clean(rawEvents: List<DriveEvent>, points: List<TrackPoint>): List<DriveEvent> {
         if (rawEvents.isEmpty()) return emptyList()
         val sorted = rawEvents.sortedBy { it.tMs }
@@ -105,7 +114,10 @@ object DisplayEvents {
         val g = event.magnitude / G
         return when (event.type) {
             EventType.BRAKE, EventType.ACCEL -> {
-                g >= 0.28 && !(event.source == "fused" && event.confidence < LOW_CONFIDENCE && g < 0.35)
+                val minG = longThreshold(speedKmh)
+                // A low-confidence fused longitudinal needs a touch more g to be shown.
+                val needG = if (event.source == "fused" && event.confidence < LOW_CONFIDENCE) minG + 0.05 else minG
+                g >= needG
             }
             EventType.CORNER, EventType.SWERVE -> turnNotable(g, speedKmh)
             EventType.POTHOLE -> g >= 0.33
@@ -119,6 +131,18 @@ object DisplayEvents {
         if (speedKmh < TURN_MIN_SPEED_KMH) return false
         val minG = if (speedKmh < TURN_MID_SPEED_KMH) TURN_MIN_G_LOW else TURN_MIN_G_HIGH
         return g >= minG
+    }
+
+    /** Speed-aware g threshold for brake/accel: [LONG_MIN_G_LOW] at a crawl easing to [LONG_MIN_G_HIGH]
+     *  at speed (linear ramp between [LONG_LOW_SPEED_KMH] and [LONG_HIGH_SPEED_KMH]). Unknown speed
+     *  (no GPS near the event) defaults to the lenient high-speed bar, matching [turnNotable]. */
+    private fun longThreshold(speedKmh: Double): Double = when {
+        speedKmh <= LONG_LOW_SPEED_KMH -> LONG_MIN_G_LOW
+        speedKmh >= LONG_HIGH_SPEED_KMH -> LONG_MIN_G_HIGH
+        else -> {
+            val f = (speedKmh - LONG_LOW_SPEED_KMH) / (LONG_HIGH_SPEED_KMH - LONG_LOW_SPEED_KMH)
+            LONG_MIN_G_LOW + (LONG_MIN_G_HIGH - LONG_MIN_G_LOW) * f
+        }
     }
 
     private fun isBumpEcho(event: DriveEvent, rawEvents: List<DriveEvent>, points: List<TrackPoint>): Boolean {

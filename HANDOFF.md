@@ -380,8 +380,12 @@ These are the knobs most likely to need tuning from field data. Values as of 2.5
 | `MAX_CLUSTER_SPAN_MS` | 8000 | hard cap on a cluster's total span (fixes the 31 s merge bug) |
 | `TURN_MIN_SPEED_KMH` | 10 | turns/swerves below this are never flagged |
 | `TURN_MIN_G_LOW` / `TURN_MIN_G_HIGH` | 0.40 / 0.30 | g needed for a turn at <30 / ≥30 km/h |
+| `LONG_MIN_G_LOW` / `LONG_MIN_G_HIGH` | 0.42 / 0.35 | g needed for a brake/accel at ≤20 / ≥50 km/h (Rev BE) |
+| `LONG_LOW_SPEED_KMH` / `LONG_HIGH_SPEED_KMH` | 20 / 50 | speed band the longitudinal threshold ramps across |
 
-Brake/accel display threshold is g≥0.28 (intentionally left untuned per the owner).
+Brake/accel display threshold is now **speed-aware** (Rev BE, owner-requested): ramps from 0.42 g at a crawl
+to 0.35 g at speed (was a flat 0.28 g), so low-speed bumps/parking nudges stop being flagged. This is the
+DISPLAY layer only; the detector/scoring thresholds (`HARD_BRAKE`/`HARD_LONG_G`) are unchanged.
 
 ### Speed limits / cache — `cloud/SpeedLimits.kt`, `cloud/Tiles.kt`
 `MATCH_RADIUS_M=35`, `OVER_TOL_KMH=3` (speeding stat tolerance), `CACHE_TTL_MS=30d`, `TILE_DEG=0.02`.
@@ -478,9 +482,13 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
   excellent (~46 Hz motion, clean 1 Hz GPS, GNSS now logged). Fixed the corner→longitudinal
   contamination (Rev K) and the GPS-detector score-blindness by promoting the fused detector into
   Safety (Rev L; the GPS detector reports `hardBrakeCount=0`/`hardCornerCount=0` at 1 Hz —
-  `maxBrake` 2.56–2.69 < 3.0, `maxLat` 3.14–3.42 < 3.5). **Refinements still open:** (a) fused event
-  **magnitudes under-report** (stored at first threshold-crossing sample, not the maneuver peak) — a
-  severity-weighted Safety term (vs the current count rate) is the natural next step; (b) a dedicated
+  `maxBrake` 2.56–2.69 < 3.0, `maxLat` 3.14–3.42 < 3.5). **Refinements still open:** (a) ~~fused event
+  **magnitudes under-report**~~ event magnitudes fixed in Rev M (windowed peak); **trip peak-G fixed in
+  Rev BE** — `maxHorizGForce` was p99.5 over *all* samples (diluted to ~0.13 g by calm cruising even when
+  the trip had a 0.5 g brake); now the **sustained** peak (`sustainedPeak`, highest level held ≥7 samples),
+  field-confirmed the old peak read 0.11–0.19 g while real maneuvers hit 0.37–0.51 g. **Old trips need
+  Re-analyze** to refresh the stored value. A severity-weighted Safety term is still a possible next step;
+  (b) a dedicated
   **severe-corner** count (≥~0.45 g) would let hard cornering hit Safety distinctly without penalizing
   normal city turns (needs a stored field). See memory `field-test-2026-06-24-trips-845-847`.
 - **O8 — Peak-over speeding. [DONE, Rev X]** The "+X over" peak now must sit within an over-limit run
@@ -620,12 +628,27 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
    **their own metrics** (steps/pace/elevation) vs. just suppressing driving ones; and whether to auto-set
    `userIsDrive=false` so they're consistently excluded everywhere. `TripKind.isLikelyNonDrive` (top speed
    0.1..12 km/h + manual override) is the gate. See memory `walk-non-drive-finding`.
-8. **Battery: GPS-on exceeds active recording (from Rev BD cross-check).** On a 3-walk day the OS attributed
-   ~2 h GPS vs ~1 h actually recorded. No background runaway (the watcher does no GPS — log showed only
-   no-op charger events; BT scanning 0), so the gap is the **~6 min pre-auto-stop idle window** (GPS stays
-   at full 1 Hz while confirming "still stopped") plus foreground auto-detect. Possible win: **drop GPS to a
-   low rate once stationary** for a bit (don't need 1 Hz to detect a continued stop), and/or shorten the idle
-   window. Coarse Android attribution, so treat as a hint, not a measurement. Revisit with O1 (1 Hz cap).
+8. **Battery optimization (owner-flagged 2026-06-27: "draining a bit too fast, ok for now").** GPS-on
+   exceeds active recording (Rev BD: ~2 h GPS vs ~1 h recorded). No background runaway (the watcher does no
+   GPS; BT scanning 0). Levers, in rough priority: (a) **drop GPS to a low rate once stationary** — don't
+   need 1 Hz to confirm a continued stop through the ~6 min pre-auto-stop idle window; (b) **discard a
+   never-confirmed provisional fast** instead of the 8 s grace + record, to cut per-bounce GPS/FGS spin-up
+   (the **charger-bounce** at mount-in fires 2-3 provisionals over ~45 s as contact makes/breaks in 8-13 s
+   stretches — handled correctly today, just wasteful; can't be cheaply debounced without delaying real
+   auto-starts, so fix it here at the spin-up cost, not with arm-timing); (c) the Rev BA re-arm accelerometer
+   watch runs `SENSOR_DELAY_GAME` (50 Hz) while armed-but-not-recording — fine while plugged in, but could
+   drop to a slower rate. Coarse Android attribution, so measure before/after. Revisit with O1 (1 Hz cap).
+9. **Cross-trip recurring-event hotspots (owner-requested 2026-06-27).** As trips accumulate and routes
+   overlap, surface places where the *same* event recurs — a turn taken hard every time, a pothole/rough
+   patch on the commute, a regular hard-brake spot. Sketch: load `drive_events` across all trips with their
+   map coords (each event maps to a location via nearest `locations`/`analysis_points` by time), **spatially
+   cluster** them (reuse a grid like `GeoNamer.cellKey`, or radius clustering like `HomeDetector`), and flag
+   a cluster as a hotspot when ≥N events of the same type from ≥M *distinct* trips coincide (distinct-trip
+   count guards against one bad drive). Surface in **Insights** ("You brake hard at X on most drives",
+   "Recurring rough patch on Y") and/or as map pins. Naturally grows with data — gate the card on having
+   enough overlapping trips. Should consume the **Rev BE** display thresholds so it clusters the same events
+   the user sees. Sizable feature → its own rev. Pairs with O9 (rough-stretch geometry) for rough-patch
+   hotspots, and item 4 (Insights depth / repeated-route comparison, which also needs per-trip coords).
 
 _Done recently: trip-detail/past-trips UI overhaul (Rev P–T), 8-item UI polish batch (Rev V),
 non-drive guard + privacy + dead-code (Rev W), daypart insights + speeding run-length guard (Rev X),

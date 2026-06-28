@@ -4,6 +4,32 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BE (2026-06-27) — speed-aware event threshold + truthful peak-G (from a big drive-day review)
+
+Two detector refinements from reviewing a day of real drives (trips 1176-1181), both field-validated by
+DB replay.
+
+1. **Speed-aware longitudinal (brake/accel) display threshold** (owner-requested — "the g threshold to tag
+   an event is a bit low"). `DisplayEvents` flagged brake/accel at a flat **0.28 g**; now it ramps like the
+   existing turn logic: **0.42 g at ≤20 km/h easing to 0.35 g at ≥50 km/h** (linear between). At a crawl a
+   0.3 g blip is usually a speed bump / parking nudge / stop-start jerk; at speed the same g is a real hard
+   brake. DISPLAY layer only — detector/scoring thresholds unchanged. Replay over the 5 drives: flagged
+   brake/accel markers **20 → 6** (the weak low-speed ones drop, the genuine ≥0.42 g ones stay). +3 tests.
+
+2. **Truthful peak-G** (owner-observed under-reporting). `maxHorizGForce` was the p99.5 of *every* motion
+   sample — diluted to ~0.13 g by the tens of thousands of calm cruising samples even when the trip had a
+   real 0.5 g brake (field: stored peak 0.11-0.19 g while the hardest detected maneuver was 0.37-0.51 g).
+   Now it's the **sustained** peak (`FusedEventDetector.sustainedPeak`: the highest horizontal-g level held
+   for ≥`PEAK_SUSTAIN_SAMPLES`=7 consecutive samples, ~150 ms) — rejects a lone 1-3 sample phone/handling
+   spike (the reason p99.5 was used) while keeping a genuine ~1 s maneuver. Removed the now-unused
+   `percentile`. **Existing trips need Re-analyze** to refresh the stored value; new trips get it
+   automatically. Calm-drive scores are unaffected (peaks still < the 0.55 g safety-penalty knee), but a
+   future genuinely hard maneuver (>0.55 g) will now correctly register instead of being washed out.
+
+Deferred to roadmap (HANDOFF §9): battery optimization (item 8, owner-flagged "ok for now"), and a new
+**cross-trip recurring-event hotspots** feature (item 9, owner-requested) — flag turns/bumps/brake-spots
+that recur across overlapping trips, growing with data.
+
 ## Rev BD (2026-06-27) — flag walks in the trip list (walk icon + moving-avg speed, no driving scores)
 
 Walks were recorded as trips but the past-trips card showed driving Safety/Comfort/Pace scores, which are
