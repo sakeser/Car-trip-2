@@ -85,6 +85,7 @@ fun InsightsScreen(
     val vehicle = VehiclePrefs.load(context)
     val scope = rememberCoroutineScope()
     var reanalyzing by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
     var mapTouched by remember { mutableStateOf(false) }
     val completed = trips
         .filter { it.analyzed && it.endTime > 0 }
@@ -278,26 +279,35 @@ fun InsightsScreen(
                 OutlinedButton(
                     onClick = {
                         // Resolve the geocoded "A -> B" labels first (suspend), so the AI summary names each
-                        // recent drive instead of falling back to a generic "Trip".
-                        scope.launch {
-                            val names = viewModel.loadTripLabels(completed)
-                            val text = AiInsightsExport.build(
-                                completed, names, vehicle, hotspots, System.currentTimeMillis()
-                            )
-                            val send = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_SUBJECT, "My driving summary")
-                                putExtra(Intent.EXTRA_TEXT, text)
-                            }
-                            runCatching {
-                                context.startActivity(Intent.createChooser(send, "Share driving summary for AI insights"))
+                        // recent drive instead of falling back to a generic "Trip". loadTripLabels intentionally
+                        // runs over the whole history (it also persists learned Home/Work) and is budget-capped +
+                        // cached, so it's not narrowed to the exported rows. The `sharing` guard stops a second
+                        // tap from launching a duplicate job / a second share sheet.
+                        if (!sharing) scope.launch {
+                            sharing = true
+                            try {
+                                val names = viewModel.loadTripLabels(completed)
+                                val text = AiInsightsExport.build(
+                                    completed, names, vehicle, hotspots, System.currentTimeMillis()
+                                )
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "My driving summary")
+                                    putExtra(Intent.EXTRA_TEXT, text)
+                                }
+                                runCatching {
+                                    context.startActivity(Intent.createChooser(send, "Share driving summary for AI insights"))
+                                }
+                            } finally {
+                                sharing = false
                             }
                         }
                     },
+                    enabled = !sharing,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Filled.Share, contentDescription = null)
-                    Text("  Share for AI insights")
+                    Text(if (sharing) "  Preparing share…" else "  Share for AI insights")
                 }
             }
         }

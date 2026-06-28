@@ -36,8 +36,10 @@ object ExportData {
         "DrawdownCount", "DrawdownSeverity", "StressScore", "StressBand",
         // Moving time + GNSS capture quality
         "Moving_min", "GnssAvgSats", "GnssAvgCn0", "GnssTopCn0", "GnssL5Seen", "GnssSampleCount",
-        // Labels
-        "TripName", "IsDrive"
+        // Labels. UserTripName = the user's manual rename only (blank for unnamed trips); the generated
+        // "A -> B" geocoded label is NOT exported here (it's an IO/Geocoder display-time value, kept out of
+        // this pure builder). A future GeneratedTripLabel column could add it via a label-aware path.
+        "UserTripName", "IsDrive"
     )
 
     val SAMPLE_HEADER = listOf(

@@ -173,7 +173,14 @@ fun AutoRecordScreen(onBack: () -> Unit) {
                 )
             }
 
-            ToggleRow("Auto-record drives", "Hands-free start/stop", enabled) {
+            // Enabling without background location is allowed on purpose: a foreground-only mode (auto-start
+            // only while the app is open) is the Play-compliant default, and the watcher degrades to it safely.
+            // So we don't hard-gate enablement — we label the limited state instead (the red card below adds
+            // the full disclosure + the "Allow all the time" CTA).
+            val autoSubtitle = if (enabled && !bgLocationGranted)
+                "Foreground-only until location is allowed \"all the time\""
+            else "Hands-free start/stop"
+            ToggleRow("Auto-record drives", autoSubtitle, enabled) {
                 enabled = it; AutoRecordPrefs.setEnabled(context, it)
                 // Start/stop the persistent armed watcher (the reliable background trigger).
                 if (it) AutoRecordWatchService.start(context) else AutoRecordWatchService.stop(context)

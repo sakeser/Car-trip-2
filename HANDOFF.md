@@ -1,7 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.23 (build 134)** (Rev CO) · Branch `main` (Rev CO **uncommitted** —
-prior arc pushed at `ccaff69`) · S25 still on 3.22 (build 133). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.23 (build 134)** (Rev CO) · Branch `main`, **all pushed** (origin at
+`041ca86`; Rev CO = `b4eccfd`) · S25 still on 3.22 (build 133). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -1154,7 +1154,7 @@ source** before acting (some Codex notes were stale or already-handled). Verdict
 | 6 | AI export empty labels; fuel "week" wording | **TRUE** — AI export now passes real labels; fuel wording corrected (logic is deliberately rolling-7-day, not calendar) | `InsightsScreen.kt`, `FuelInsights.kt` |
 | 7 | Commercialization/policy risks | **AGREE** (bg-location, Places pricing, export privacy); **User-Agent already set** (challenge); OSM attribution weak | `SpeedLimits.kt:288`, `GuideScreen.kt` |
 
-**Rev CO — shipped this pass (docs + low-risk correctness, 173 tests green):**
+**Rev CO — shipped this pass (docs + low-risk correctness, 176 tests green):**
 - Doc-truth pass (§1/§3/§7/§12.3 + README + `ROADMAP_NEW.md` frontier).
 - Sample GNSS cleanup: `deleteSampleGnssSamples`/`deleteSampleGnssMeasurements` + call site (defensive).
 - AI export labels: `InsightsScreen` "Share for AI insights" now resolves geocoded labels before building.
@@ -1179,6 +1179,33 @@ source** before acting (some Codex notes were stale or already-handled). Verdict
   file retention/disclosure** (XLSX/CSV/share files live outside any DB encryption), background-location
   review package + foreground-only default, API-key restrictions, billing guardrails, and **CO encrypt-at-
   rest + biometric** (the SQLCipher item, distinct from this "Rev CO" review pass — naming collision noted).
+
+### 14.1 Second re-review of Rev CO (2026-06-28) — verdicts + follow-ups
+
+A re-review (Codex) of the committed Rev CO. Verified each against source:
+
+| # | Finding | Verdict | Action |
+|---|---|---|---|
+| 1 | System-guide `.docx` is stale (2.86/build 97/Rev AV) | **TRUE** | Marked non-authoritative (banner + `ARCHIVE` rename) — not regenerated |
+| 2 | HANDOFF says CO "uncommitted"; 173-vs-176 test count | **TRUE** | Fixed (line 3 → pushed `041ca86`; §14 → 176) |
+| 3 | `AutoRecordScreen` lets you enable before bg-location granted | **TRUE, by design** | **Decision: don't hard-gate** — foreground-only is the Play-compliant default (§12.3). Added a state-aware "Foreground-only until…" subtitle so the limited state is explicit |
+| 4 | AI export `loadTripLabels(completed)` loads whole history but only 25 are printed | **PARTLY** | **Kept the full load on purpose** — it also persists learned Home/Work, so narrowing it would degrade detection; it's budget-capped + cached. Added a `sharing` guard so repeat taps can't launch duplicate jobs/share sheets |
+| 5 | Export `TripName` writes only `trip.name` (blank for unnamed) | **TRUE** | Renamed header → **`UserTripName`**; documented that the generated "A→B" label is intentionally not in the pure builder |
+| 6 | `ExportData` imports `ui.StressScore` (export→UI coupling) | **TRUE** | **Proposed for Rev CP** (refactor, not done this pass — see below) |
+
+**Added to Rev CP (P2 unless noted):**
+- **Decouple `StressScore`** — move the pure model + `from()`/`band()` + normalizer constants to
+  `analysis/` (or a non-UI `domain/`), leave only `color()`/rendering in `ui/`. Touches 4 callers
+  (`ExportData`, `TripDetailScreen`, `InsightsScreen`, `AiInsightsExport`) → import churn + a rebuild;
+  low logic risk but a real refactor, so plan/verify before doing. Removes the export→UI dependency.
+- **`GeneratedTripLabel` export column** (optional) — a label-aware export path that includes the geocoded
+  "A→B" name, not just the user rename. Needs IO/Geocoder at export time, so it's a deliberate design change
+  (the current builder is pure/sync); weigh against keeping export pure.
+- **⭐ Drive Stress Score depth (HIGH owner interest, 2026-06-28).** Surface it in the trip-detail **hero**
+  (not the compact line at `TripDetailScreen.kt`~966), add a **per-km normalized** read, and an Insights
+  **30-day trend** smoothed with an **EMA/trailing average** + an evolution sparkline (replacing the single
+  average `StressSummaryRow`). Own rev; pairs with the `StressScore` decouple (do the new pure logic in the
+  non-UI module). No schema change. Full spec in **`ROADMAP_NEW.md` → "Drive Stress Score — depth"**.
 
 ---
 
