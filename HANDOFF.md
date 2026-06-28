@@ -542,6 +542,23 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 >   front-end entry. **Shrink/move the Google-Sheets "Sync" button** (de-emphasize; it doesn't need prominence).
 > - **Re-present the removed "Health metrics"** in a better form (Rev BR removed the sparkline grid) — e.g. a
 >   compact "this window vs previous" delta strip, or just the 2–3 metrics that matter.
+> - **Past-trips map: recency filter.** Add a low-profile multi-toggle above the Past-Trips frozen map —
+>   **24 h / 3-day / 7-day / 30-day / all-time** — that filters which trips the map (and ideally the list)
+>   shows. **Default 24 h or 7-day so it loads faster** (the all-time map is heavy). Files: `ui/TripListScreen.kt`
+>   (the frozen-map preview + the trip list) and the dormant `ui/TripHeatMap.kt` (multi-route map) if that's
+>   what's rendered.
+> - **Fuel "Spend over time" chart isn't useful → make it spend *rate*.** Replace the cumulative-cost line
+>   with the **derivative: $/week over time**, smoothed with a **1–4 week trailing average**. And keep
+>   **cost-per-km smoothed** (Rev BN already does a trailing 5-drive moving average once ≥10 drives — make sure
+>   it reads as a smooth trend; consider time-based weeks rather than per-drive). Files: `ui/FuelInsights.kt`
+>   (`summarize` series — replace `cumulativeCost` with a weekly-rate series) + `ui/InsightsScreen.kt`
+>   (`FuelSection` chart).
+>
+> ### Bugs / polish
+> - **You-vs-traffic bar: white edge artifact.** On the trip-detail "You vs traffic" bar, the green vertical
+>   line that marks "you" across the Google-estimate bar has **white beside it** — clean it up so it's a crisp
+>   single line (drop the white halo/spacer). Files: `ui/TripDetailScreen.kt` (the You-vs-traffic / EtaCompare
+>   bar drawing).
 >
 > ### Analytics / scoring (high owner interest)
 > - **"Drawdowns" metric (unnecessary braking).** Detect when speed drops **>50%** while near the limit (esp.
