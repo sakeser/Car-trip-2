@@ -512,6 +512,20 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
+> **Status update (overnight autonomous session, 2026-06-28, Rev BG–BJ):**
+> - **DONE:** speeding-severity **backfill** for old trips (**BG**, on-device verified — 8 trips populated);
+>   **work detection** (**BH/BI** — learns a 2nd place beyond the home neighbourhood; validated it resolves
+>   to Speakman Dr, so names can read "Home → Work"; item 6 work part done); **cross-trip recurring-event
+>   hotspots** (**BJ**, item 9 — `EventHotspots` + Insights "Recurring spots" card; data-validated: recurring
+>   pothole at home, recurring turn at the work entrance). All built + unit-tested + pushed + installed
+>   (v3.00). Device was intermittently offline overnight (USB flaky).
+> - **NEEDS THE OWNER'S EYES (deferred — UI not visually verifiable while asleep):** the **"Recurring spots"
+>   Insights card** renders from validated logic but wasn't seen on-screen — eyeball it; possible follow-ups:
+>   map pins for hotspots + tap-to-open a representative trip, and reverse-geocode a neighbourhood name for
+>   non-home/work spots. **Work labels** ("Home → Work") only persist after opening Past Trips once.
+> - **STILL OPEN (left intentionally):** item 7 **walk handling on the trip-detail screen** (UI); item 8
+>   **battery optimization** (needs over-time device measurement); **user-settable home/work** (item 6 UI).
+>
 > **Status update (Rev AS–AV + design notes, 2026-06-26):**
 > - Shipped: Codex-review fixes (**AS**), Past-Trips **multi-select / batch delete (AT)**, trip-detail polish
 >   (**AU**: date eyebrow + short-trip fuel-chip suppression), **short-trip auto-discard (AV)** — a trip under
