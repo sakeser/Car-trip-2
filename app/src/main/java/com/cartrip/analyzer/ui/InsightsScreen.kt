@@ -1,5 +1,6 @@
 package com.cartrip.analyzer.ui
 
+import android.content.Intent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingFlat
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -268,6 +270,29 @@ fun InsightsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(if (reanalyzing) "Re-analyzing all trips…" else "Re-analyze all trips")
+                }
+            }
+
+            // Share a compact, AI-ready markdown summary (no raw GPS) for ChatGPT/Claude-style coaching.
+            item {
+                OutlinedButton(
+                    onClick = {
+                        val text = AiInsightsExport.build(
+                            completed, emptyMap(), vehicle, hotspots, System.currentTimeMillis()
+                        )
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "My driving summary")
+                            putExtra(Intent.EXTRA_TEXT, text)
+                        }
+                        runCatching {
+                            context.startActivity(Intent.createChooser(send, "Share driving summary for AI insights"))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = null)
+                    Text("  Share for AI insights")
                 }
             }
         }

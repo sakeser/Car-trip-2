@@ -18,8 +18,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -33,7 +39,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -80,6 +85,7 @@ fun TripListScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     // Recency window for the map + list. Default to a week so the all-time (heavy) map isn't the first load.
     var recency by remember { mutableStateOf(RecencyFilter.WEEK) }
+    val listState = rememberLazyListState()
     // System back exits selection mode before leaving the screen.
     BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
     val shownTrips = remember(trips, recency) {
@@ -160,7 +166,7 @@ fun TripListScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                         .height(264.dp)
                         .clip(RoundedCornerShape(16.dp))
                 ) {
@@ -201,8 +207,11 @@ fun TripListScreen(
                         )
                     }
                 }
+                val scrollbarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth().weight(1f)
+                        .drawVerticalScrollbar(listState, scrollbarColor),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp
                     ),
@@ -353,19 +362,34 @@ private enum class RecencyFilter(val label: String, val days: Int?) {
         }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RecencyFilterRow(selected: RecencyFilter, onSelect: (RecencyFilter) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         RecencyFilter.values().forEach { f ->
-            FilterChip(
-                selected = f == selected,
-                onClick = { onSelect(f) },
-                label = { Text(f.chip, style = MaterialTheme.typography.labelMedium) }
-            )
+            val on = f == selected
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    .clickable { onSelect(f) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    f.chip,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                    color = if (on) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -613,6 +637,31 @@ private fun HeaderCol(label: String) {
         )
     }
 }
+
+/**
+ * A lightweight always-visible scrollbar thumb on the right edge, shown only when the list overflows — so
+ * the user can see at a glance that there are more trips to scroll to (and roughly where they are).
+ */
+private fun Modifier.drawVerticalScrollbar(state: LazyListState, color: Color): Modifier =
+    drawWithContent {
+        drawContent()
+        val info = state.layoutInfo
+        val total = info.totalItemsCount
+        val visible = info.visibleItemsInfo
+        if (total == 0 || visible.size >= total) return@drawWithContent
+        val trackH = size.height
+        val thumbFrac = visible.size.toFloat() / total
+        val offFrac = visible.first().index.toFloat() / total
+        val thumbH = (trackH * thumbFrac).coerceAtLeast(24.dp.toPx())
+        val thumbY = (trackH * offFrac).coerceIn(0f, trackH - thumbH)
+        val w = 3.dp.toPx()
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(size.width - w - 1.dp.toPx(), thumbY),
+            size = Size(w, thumbH),
+            cornerRadius = CornerRadius(w / 2f, w / 2f)
+        )
+    }
 
 @Composable
 private fun MiniScore(value: Int?) {

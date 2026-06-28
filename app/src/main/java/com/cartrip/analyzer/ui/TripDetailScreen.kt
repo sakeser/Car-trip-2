@@ -1445,10 +1445,13 @@ private fun etaAnimalEmoji(deltaFrac: Double): String = when {
 @Composable
 private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, youColor: Color) {
     val hasFree = freeFlowS >= 1.0 && freeFlowS < typicalS
-    val maxV = maxOf(typicalS, actualS, freeFlowS) * 1.03
-    val fFree = (freeFlowS / maxV).toFloat().coerceIn(0f, 1f)
-    val fTyp = (typicalS / maxV).toFloat().coerceIn(0f, 1f)
-    val fYou = (actualS / maxV).toFloat().coerceIn(0f, 1f)
+    // Scale to a "nice" axis max ~25% above the largest value, so the longest bar fills ~80% of the width
+    // (not edge-to-edge) and the scale reads in round minutes.
+    val axisMaxMin = niceEtaAxisMaxMin(maxOf(typicalS, actualS, freeFlowS) / 60.0)
+    val axisMaxS = axisMaxMin * 60.0
+    val fFree = (freeFlowS / axisMaxS).toFloat().coerceIn(0f, 1f)
+    val fTyp = (typicalS / axisMaxS).toFloat().coerceIn(0f, 1f)
+    val fYou = (actualS / axisMaxS).toFloat().coerceIn(0f, 1f)
 
     var loaded by remember(freeFlowS, typicalS, actualS) { mutableStateOf(false) }
     LaunchedEffect(freeFlowS, typicalS, actualS) { loaded = true }
@@ -1521,7 +1524,30 @@ private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, you
                 )
             }
         }
+        // Minute scale (0..axisMax) so the bar lengths have a clear reference, evenly spaced under the bar.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            listOf(0.0, 0.25, 0.5, 0.75, 1.0).forEachIndexed { i, frac ->
+                Text(
+                    if (i == 4) "${(axisMaxMin * frac).roundToInt()} min" else "${(axisMaxMin * frac).roundToInt()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    maxLines = 1
+                )
+            }
+        }
     }
+}
+
+/** A round-number axis max ~25% above the largest ETA so the longest bar fills ~80% and ticks are tidy. */
+private fun niceEtaAxisMaxMin(dataMin: Double): Double {
+    val target = (dataMin * 1.25).coerceAtLeast(1.0)
+    val step = when {
+        target <= 10 -> 1.0
+        target <= 30 -> 5.0
+        target <= 120 -> 10.0
+        else -> 30.0
+    }
+    return kotlin.math.ceil(target / step) * step
 }
 
 private enum class EventFilter(val label: String) {
