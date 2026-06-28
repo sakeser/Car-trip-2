@@ -4,6 +4,20 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BL (2026-06-28) — Fuel & cost Insights section (history + trends)
+
+Owner-requested: a dedicated fuel section now there's enough data. New pure `FuelInsights.summarize` (per-trip
+`FuelEstimator` over the window's drives; excludes walks/zero-distance; +4 tests) feeds an Insights **"Fuel &
+cost"** section: headline tiles (total cost, fuel used, $/km, L/100km) + two `TimeSeriesChart`s — **cost per
+km** per drive and **cumulative spend over time** ($/km and L/100km are proportional under a single price, so
+the second chart is the distinct cumulative view). Respects the 30-day / 500-km / all-time window. Removed
+the now-redundant "Fuel / trip" + "Cost / trip" mini-stats (superseded by the richer section).
+
+Field-validated on real data (37 drives, 435 km): total ~$54, **$0.124/km**, **6.7 L/100km** (matches the
+Tucson Hybrid rating), $/km varying 0.119-0.168 — sane and insightful. Note: cost uses the vehicle's
+*current* price (historical pump prices aren't tracked), so the $/km trend reflects driving efficiency, not
+price swings. Card not visually verified yet (built this session). Owner's saved profile: 6.3 city / $1.60.
+
 ## Rev BK (2026-06-28) — battery: throttle GPS during sustained stops
 
 Owner-flagged concern; the cross-check showed GPS-on (~2 h) far exceeded active recording (~1 h), the gap

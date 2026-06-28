@@ -138,13 +138,23 @@ fun InsightsScreen(
             }
 
             item { SectionTitle("Health metrics") }
-            items(miniStatSpecs(windowTrips, wScores, vehicle).chunked(2)) { rowSpecs ->
+            items(miniStatSpecs(windowTrips, wScores).chunked(2)) { rowSpecs ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     rowSpecs.forEach { MiniStatCard(it, Modifier.weight(1f)) }
                     if (rowSpecs.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+
+            run {
+                val fuel = FuelInsights.summarize(windowTrips, vehicle)
+                if (fuel.hasData) {
+                    item {
+                        SectionTitle("Fuel & cost")
+                        FuelSection(fuel, vehicle)
+                    }
                 }
             }
 
@@ -218,7 +228,7 @@ private class StatSpec(
     val color: Color
 )
 
-private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>, vehicle: FuelEstimator.Vehicle): List<StatSpec> {
+private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>): List<StatSpec> {
     fun avg(l: List<Float>) = if (l.isEmpty()) 0.0 else l.map { it.toDouble() }.average()
     val overall = scores.map { it.overall.toFloat() }
     val safety = scores.map { it.safety.toFloat() }
@@ -236,11 +246,6 @@ private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>, veh
     val potholesPer100 = trips.map { (it.potholeCount / max(0.3, it.distanceM / 1000.0) * 100.0).toFloat() }
     val harshStops = trips.map { it.harshStopCount.toFloat() }
     val peakG = trips.map { it.peakGForce.toFloat() }
-    val fuelPerTrip = trips.map {
-        FuelEstimator.litres(it.distanceM / 1000.0, it.avgMovingSpeedMps * 3.6, it.idleS, vehicle).toFloat()
-    }
-    val costPerTrip = fuelPerTrip.map { (it * vehicle.pricePerL).toFloat() }
-    val totalCost = costPerTrip.sumOf { it.toDouble() }
 
     val out = mutableListOf(
         StatSpec("Drive score", avg(overall).roundToInt().toString(), "Blended trip health", overall, Color(0xFF0EA5E9)),
@@ -251,9 +256,7 @@ private fun miniStatSpecs(trips: List<TripEntity>, scores: List<TripScores>, veh
         StatSpec("Rough road", String.format(Locale.US, "%.0f%%", avg(roughRoad)), "Bumpy / vibrating road", roughRoad, Color(0xFFF59E0B)),
         StatSpec("Potholes / 100 km", String.format(Locale.US, "%.1f", avg(potholesPer100)), "Big bumps detected", potholesPer100, Color(0xFF78716C)),
         StatSpec("Harsh stops / trip", String.format(Locale.US, "%.1f", avg(harshStops)), "Jerky stops", harshStops, Color(0xFFEF4444)),
-        StatSpec("Peak g-force", String.format(Locale.US, "%.2fg", avg(peakG)), "Strongest jolt", peakG, Color(0xFF8B5CF6)),
-        StatSpec("Fuel / trip", String.format(Locale.US, "%.1f L", avg(fuelPerTrip)), "Est. for ${vehicle.label}", fuelPerTrip, Color(0xFF0EA5E9)),
-        StatSpec("Cost / trip", String.format(Locale.US, "$%.2f", avg(costPerTrip)), String.format(Locale.US, "$%.0f total this window", totalCost), costPerTrip, Color(0xFF22C55E))
+        StatSpec("Peak g-force", String.format(Locale.US, "%.2fg", avg(peakG)), "Strongest jolt", peakG, Color(0xFF8B5CF6))
     )
     if (paceVsGoogle.isNotEmpty()) {
         val margin = avg(paceVsGoogle)
@@ -647,6 +650,58 @@ private fun SectionTitle(text: String) {
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(bottom = 8.dp)
     )
+}
+
+@Composable
+private fun FuelSection(s: FuelInsights.Summary, v: FuelEstimator.Vehicle) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FuelStat(String.format(Locale.US, "$%,.0f", s.totalCost), "Total cost", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "%,.0f L", s.totalLitres), "Fuel used", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "$%.2f", s.avgCostPerKm), "per km", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "%.1f", s.avgL100), "L/100km", Modifier.weight(1f))
+            }
+            Text(
+                "Estimated for ${v.label} at " + String.format(Locale.US, "$%.2f/L", v.pricePerL) +
+                    " · ${s.drives} drives",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (s.costPerKm.size >= 2) {
+                TimeSeriesChart("Cost per km", s.costPerKm, "$/km", Color(0xFF22C55E))
+            }
+            if (s.cumulativeCost.size >= 2) {
+                TimeSeriesChart("Spend over time", s.cumulativeCost, "$", Color(0xFF0EA5E9))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FuelStat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
 }
 
 @Composable
