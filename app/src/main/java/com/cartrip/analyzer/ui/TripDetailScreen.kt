@@ -235,6 +235,9 @@ fun TripDetailScreen(
         val maxPointIndex = (a.points.size - 1).coerceAtLeast(0)
         val safeSelectedIndex = selectedIndex.coerceIn(0, maxPointIndex)
         val selectedPoint = a.points.getOrNull(safeSelectedIndex)
+        // Replay-follow is for walks only. Drives keep the original whole-route replay (no camera follow),
+        // since following + speed-zoom doesn't read well over a long, fast drive.
+        val isWalkTrip = trip?.let { TripKind.isLikelyNonDrive(it) } == true
         val rawEvents = remember(a) { (a.events + a.fusedEvents).sortedBy { it.tMs } }
         // Cleaned presentation events: raw GPS/motion/fused signals remain available in Advanced,
         // export and storage, but the main map/list should show one marker per real-world moment.
@@ -344,7 +347,7 @@ fun TripDetailScreen(
                         selectedPoint = selectedPoint,
                         focusKey = focusKey,
                         resetKey = cameraResetKey,
-                        replayFollow = replayPlaying && !mapTouched,
+                        replayFollow = replayPlaying && !mapTouched && isWalkTrip,
                         onEventClick = jumpToEvent,
                         onStartOpen = { startPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Start") } },
                         onStopOpen = { endPt?.let { TripActions.openInMaps(ctx, it.lat, it.lon, "Stop") } },
@@ -368,8 +371,9 @@ fun TripDetailScreen(
                     selectedIndex = safeSelectedIndex,
                     onSelectedIndex = { selectedIndex = it.coerceIn(0, maxPointIndex) },
                     onEventJump = jumpToEvent,
-                    // The map now follows the car during replay, so don't snap back to the whole route on play.
-                    onReplayStart = { },
+                    // Drives: reset to the whole route on play (original behavior). Walks: the map follows
+                    // the walker instead, so skip the reset.
+                    onReplayStart = { if (!isWalkTrip) cameraResetKey++ },
                     onPlayingChange = { replayPlaying = it }
                 )
                 // Filter chips sit below the scrubber: they gate which event markers show on the
