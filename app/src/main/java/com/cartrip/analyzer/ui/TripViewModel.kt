@@ -329,6 +329,18 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         TripFinalizer.reanalyzeTrip(dao, id) != null
     }
 
+    /**
+     * Re-analyze every (non-sample) completed trip with the current detectors — regenerates metrics +
+     * events, so threshold/algorithm changes apply retroactively. Only trips whose raw sensor data is
+     * still present (within the 30-day retention) can be redone. Returns (reanalyzed, total).
+     */
+    suspend fun reanalyzeAll(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        val all = dao.getAllTrips().filter { it.endTime > 0 && !it.isSample }
+        var ok = 0
+        for (t in all) if (TripFinalizer.reanalyzeTrip(dao, t.id) != null) ok++
+        ok to all.size
+    }
+
     fun renameTrip(id: Long, name: String) {
         viewModelScope.launch(Dispatchers.IO) { dao.renameTrip(id, name.trim()) }
     }

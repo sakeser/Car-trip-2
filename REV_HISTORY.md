@@ -4,6 +4,15 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BV (2026-06-28) — you-vs-traffic headline + avg line; re-analyze-all
+
+Finishes the batch. (#9) **You vs traffic**: the headline is now **net minutes ahead of traffic over the last
+30 days** (window-independent, green/up · red/down), with the win-rate demoted to a caption; the trend chart
+gains a dashed **average line** (`TimeSeriesChart` new `average` param) on top of its existing min/max labels
++ zero baseline. (#12) **"Re-analyze all trips"** button at the bottom of Insights → `reanalyzeAll`
+re-runs the current detectors over every non-sample completed trip with raw data still present (regenerates
+metrics + events so threshold/algorithm changes apply retroactively), reporting "re-analyzed N of M".
+
 ## Rev BU (2026-06-28) — trouble-spots: g slider + glyph pins; Google-blue routes
 
 Owner feedback (the 0.35 g default hid every hotspot — confirmed by replay: 0 at 0.35 g, 2 at 0.25 g, 3 at

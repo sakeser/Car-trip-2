@@ -32,7 +32,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.runtime.rememberCoroutineScope
+import com.cartrip.analyzer.cloud.CloudState
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +79,8 @@ fun InsightsScreen(
     val trips by viewModel.trips.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val vehicle = VehiclePrefs.load(context)
+    val scope = rememberCoroutineScope()
+    var reanalyzing by remember { mutableStateOf(false) }
     val completed = trips
         .filter { it.analyzed && it.endTime > 0 }
         .sortedBy { it.startTime }
@@ -145,7 +151,13 @@ fun InsightsScreen(
                 }
             }
 
-            item { GoogleVsYouHero(windowTrips) }
+            run {
+                // Net minutes ahead of typical traffic over the last 30 days (headline, window-independent).
+                val minutesAheadLast30 = completed
+                    .filter { it.startTime >= now - thirtyDays && it.googleEtaTrafficS > 0 && it.durationS > 0 && !TripKind.isLikelyNonDrive(it) }
+                    .sumOf { (it.googleEtaTrafficS - it.durationS) / 60.0 }
+                item { GoogleVsYouHero(windowTrips, minutesAheadLast30) }
+            }
 
             // Trouble spots — directly below the traffic comparison.
             item {
@@ -194,6 +206,25 @@ fun InsightsScreen(
             item {
                 SectionTitle("Score trends")
                 ScoreTrendsCard(wScores, window.label)
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = {
+                        if (!reanalyzing) scope.launch {
+                            reanalyzing = true
+                            val (ok, total) = viewModel.reanalyzeAll()
+                            reanalyzing = false
+                            CloudState.set {
+                                it.copy(lastMessage = "Re-analyzed $ok of $total trips with the latest detector.")
+                            }
+                        }
+                    },
+                    enabled = !reanalyzing,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (reanalyzing) "Re-analyzing all trips…" else "Re-analyze all trips")
+                }
             }
         }
     }
@@ -386,7 +417,7 @@ private fun scoreBand(score: Int): String = when {
 
 
 @Composable
-private fun GoogleVsYouHero(trips: List<TripEntity>) {
+private fun GoogleVsYouHero(trips: List<TripEntity>, minutesAheadLast30: Double) {
     val withEta = trips.filter { it.googleEtaTrafficS > 0 && it.durationS > 0 && !TripKind.isLikelyNonDrive(it) }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -410,15 +441,25 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                 val totalHours = withEta.sumOf { it.durationS } / 3600.0
                 val perHour = if (totalHours > 0) margins.sum() / totalHours else 0.0
                 val marginColor = if (avgMargin >= 0.0) Color(0xFF22C55E) else Color(0xFFEF4444)
+                // Headline: net minutes ahead of (or behind) typical traffic over the last 30 days.
+                val headColor = if (minutesAheadLast30 >= 0.0) Color(0xFF22C55E) else Color(0xFFEF4444)
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("$winRate%", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = marginColor)
                     Text(
-                        "of trips beat\nusual traffic",
+                        String.format(Locale.US, "%+.0f min", minutesAheadLast30),
+                        style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = headColor
+                    )
+                    Text(
+                        "ahead of traffic\nlast 30 days",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
+                Text(
+                    "$winRate% of trips beat usual traffic",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 // A smoothed trend (trailing moving average of minutes vs Google) reads cleaner than a
                 // bar per trip — above the centre line = consistently beating traffic, below = slower.
                 val trend = movingAverage(margins.map { it.toFloat() }, window = 5)
@@ -429,6 +470,7 @@ private fun GoogleVsYouHero(trips: List<TripEntity>) {
                         unit = "min",
                         color = marginColor,
                         zeroCentered = true,
+                        average = avgMargin.toFloat(),  // dashed reference line at the window average
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

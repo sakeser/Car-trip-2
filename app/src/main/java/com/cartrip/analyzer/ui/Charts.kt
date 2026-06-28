@@ -42,7 +42,8 @@ fun TimeSeriesChart(
     color: Color,
     modifier: Modifier = Modifier,
     zeroCentered: Boolean = false,
-    selectedIndex: Int? = null
+    selectedIndex: Int? = null,
+    average: Float? = null
 ) {
     Column(modifier = modifier) {
         Text(
@@ -92,6 +93,18 @@ fun TimeSeriesChart(
             if (minV < 0f && maxV > 0f) {
                 val y0 = yAt(0f)
                 drawLine(baselineColor, Offset(0f, y0), Offset(w, y0), 1.5f)
+            }
+
+            // Average reference line (dashed) — e.g. the mean pace-vs-traffic across the window.
+            average?.takeIf { it in minV..maxV }?.let { avg ->
+                val ya = yAt(avg)
+                drawLine(
+                    color = color.copy(alpha = 0.55f),
+                    start = Offset(0f, ya),
+                    end = Offset(w, ya),
+                    strokeWidth = 2f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                )
             }
 
             val path = Path()
