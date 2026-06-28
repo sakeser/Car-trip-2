@@ -4,6 +4,32 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CJ (2026-06-28, v3.20) — Batch 4: Drive Stress Score
+
+Per-trip "how demanding was this drive" score (0-100, higher = more stressful; own green->red scale,
+inverse of the green=good Safety/Comfort/Pace). Heuristic + DB-replay-calibrated, like TripScores.
+- `ui/StressScore.kt` (pure, +6 tests): weighted blend of forced-slowdown rate + severity (drawdowns),
+  hard-event rate, congestion vs free-flow ETA, speeding exposure, trip length, and a small rush-hour/
+  late-night load. Bands Calm / Moderate / Busy / High stress; scale x1.3 so real worst drives use the top.
+- Surfaced: "Drive stress: <band> (<score>)" in the trip-detail Driving card; an average-stress card in
+  Insights over the window.
+- Calibration (DB-replay, 42 trips): heavy stop-and-go highway drives ~70+, calm city hops near 0,
+  congested/hard drives between. UI not yet eyeballed on device (owner was using the phone) — logic is
+  unit-tested + calibrated.
+
+## Rev CI (2026-06-28, v3.19) — Batch 3: Drawdowns metric (schema v21)
+
+Foundational analytics. Detect "drawdowns": forced, unnecessary speed losses (cruising fast, then a >50%
+drop that later recovers — stop-and-go, not a destination stop). Feeds the Drive Stress Score.
+- `analysis/Drawdowns.kt` (pure, +6 tests): cruise >=60 km/h sustained, drop <50%, recover >=75% within
+  150 s; trims trip edges. Severity = sum of (km/h lost)^2.
+- Schema v21: `trips.drawdownCount` + `trips.drawdownSeverity` (MIGRATION_20_21). `TripFinalizer` computes
+  from the limit-annotated sampled track and persists; recomputed on re-analyze.
+- Trip detail: compact "Forced slowdowns: N" line.
+- Validation: DB-replay on 42 real trips gave sensible, well-separated results (0 on city/walks; 1-3 calm
+  highway; 11 and 17 on the two heavy stop-and-go drives). v21 migration verified on device
+  (user_version=21, both columns). After re-analyze-all, stored values match the replay exactly.
+
 ## Rev CE-CH (2026-06-28, v3.17) — Batch 2: UI consolidation & replay
 
 Second batch of the comprehensive revision plan. All built, unit-tested, installed and verified on the S25.
