@@ -557,6 +557,29 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 >   data**, places (the parking helper below), roads/speed — combined into insights users would **pay for**.
 >   Think premium tier. (Ties to commercialization below.)
 >
+> ### External data / Google APIs (owner-evaluated 2026-06-28)
+> - **Richer destination tagging via Places API (New) — top pick.** Replace/augment the on-device Geocoder
+>   (gives only a neighbourhood, "North York") with the actual POI at each trip endpoint → names become
+>   **"Home → Costco"** instead of "North York → North York". Query only the start/end (and loop "via")
+>   points; **cache by quantized cell** exactly like `GeoNamer`'s existing geocode cache (extend it). This is
+>   also the enabler for **find-my-car** (knowing you're *at* a store) and **destination analytics** (where
+>   you go, dwell, frequency) — strong **premium-tier** value. Use the *New* Places API, not legacy.
+> - **Roads API snap-to-roads** (2nd) — snap noisy GPS to the road for cleaner replay lines, tidier maps, and
+>   better-localized trouble spots. NB: its *speed-limit* feature is separately gated + expensive — keep OSM
+>   for limits, use snap-to-roads only.
+> - **Routes API (already used) — expand** its traffic data for the drawdowns / drive-stress / you-vs-traffic
+>   analytics.
+> - **Situational:** Maps **Elevation API** (clean terrain elevation → a "climb"/hilliness metric + fuel
+>   refinement + a stress factor; GPS altitude is too noisy); **Geocoding API** (server-side, only if the
+>   on-device Geocoder proves flaky — Places New largely supersedes it); **Street View Static API** (a
+>   thumbnail of a hotspot/endpoint — premium flavour, low priority).
+> - **Skip:** Geolocation (cell/wifi; app is GPS-centric), Route Optimization (multi-stop logistics), Places
+>   Aggregate (area stats, not point tagging), Street View **Publish** (uploading 360s).
+> - **⚠️ Cost/architecture caveat for ALL of these:** they're **paid, metered** APIs (unlike the current free
+>   on-device Geocoder + OSM). Needs billing + a keyed quota; cost scales with users → fold into the premium /
+>   commercialization plan; more location data leaves the device (relevant to secure-data). **Aggressive
+>   caching is mandatory** (endpoints only, cache by cell).
+>
 > ### New features
 > - **"Find my car" passive helper** (e.g. Costco/big-box). Auto-detect arrival + the **drive→walk
 >   transition**, high-precision pin the parking spot, track the user; when they leave range then return,
