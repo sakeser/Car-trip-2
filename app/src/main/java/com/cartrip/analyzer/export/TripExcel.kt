@@ -27,7 +27,32 @@ object TripExcel {
         return File(exportDir(context), name)
     }
 
+    /**
+     * Delete exported `.xlsx` files past the [ExportRetention] policy (age + count). Runs on each export so
+     * the folder self-maintains; fail-soft (a delete failure never blocks the export). Returns the count
+     * removed. These files are unencrypted app-private storage, so bounding them is a privacy measure.
+     */
+    fun pruneOldExports(context: Context, nowMs: Long = System.currentTimeMillis()): Int {
+        val files = exportDir(context).listFiles()?.filter { it.isFile && it.name.endsWith(".xlsx") }
+            ?: return 0
+        val entries = files.map { ExportRetention.Entry(it.name, it.lastModified()) }
+        val doomed = ExportRetention.toDelete(entries, nowMs).mapTo(HashSet()) { it.name }
+        var n = 0
+        files.forEach { if (it.name in doomed && runCatching { it.delete() }.getOrDefault(false)) n++ }
+        return n
+    }
+
+    /** Delete every exported `.xlsx` (user-initiated "clear exported files"). Returns the count removed. */
+    fun clearAllExports(context: Context): Int {
+        val files = exportDir(context).listFiles()?.filter { it.isFile && it.name.endsWith(".xlsx") }
+            ?: return 0
+        var n = 0
+        files.forEach { if (runCatching { it.delete() }.getOrDefault(false)) n++ }
+        return n
+    }
+
     fun write(context: Context, trip: TripEntity, a: TripAnalysis): File {
+        runCatching { pruneOldExports(context) }  // keep the export folder bounded; never block the write
         val file = fileFor(context, trip)
         FileOutputStream(file).use { os ->
             val wb = Workbook(os, "CarTripAnalyzer", "1.1")

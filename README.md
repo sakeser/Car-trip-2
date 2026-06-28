@@ -12,7 +12,7 @@ S25 (Android 14/15), minSdk 26.
 
 > **Note:** this README covers the original v1.x build flow + core concepts. The app has since grown
 > well past it (auto-record, fuel/cost, drawdowns, Drive Stress Score, Insights, Google Sheets sync).
-> See **HANDOFF.md** for the authoritative current state (source 3.26 / build 137, Room schema v21).
+> See **HANDOFF.md** for the authoritative current state (source 3.27 / build 138, Room schema v21).
 
 ---
 

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.LocalGasStation
@@ -64,6 +65,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cartrip.analyzer.export.TripExcel
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.record.AutoRecordLog
@@ -390,6 +392,27 @@ private fun OptionsSheet(
                 Icon(Icons.Filled.Storage, contentDescription = null)
                 Text("  Load sample data", style = MaterialTheme.typography.labelLarge)
             }
+
+            // Exported trip spreadsheets are saved unencrypted in app storage (and auto-pruned after 30 days);
+            // let the owner purge them on demand. Doubles as the in-app disclosure that these files exist.
+            var clearedMsg by remember { mutableStateOf<String?>(null) }
+            TextButton(
+                onClick = {
+                    val n = TripExcel.clearAllExports(context)
+                    clearedMsg = if (n > 0) "Deleted $n exported file${if (n == 1) "" else "s"}."
+                    else "No exported files to delete."
+                },
+                modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Icon(Icons.Filled.Delete, contentDescription = null)
+                Text("  Clear exported trip files", style = MaterialTheme.typography.labelLarge)
+            }
+            Text(
+                clearedMsg ?: "Trip Excel files are saved unencrypted in app storage; auto-deleted after 30 days.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp)
+            )
         }
     }
 }
