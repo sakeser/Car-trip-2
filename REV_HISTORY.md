@@ -4,6 +4,36 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CE-CH (2026-06-28, v3.17) — Batch 2: UI consolidation & replay
+
+Second batch of the comprehensive revision plan. All built, unit-tested, installed and verified on the S25.
+- **CE — events shown by default + event→map links.** The Driving card's "All events" tap-to-jump list is
+  now expanded by default and lists every cleaned event, decoupled from the map-marker filter chips (which
+  only gate markers on the map). Each row jumps the map to that moment via the existing `focusKey`/`jumpToEvent`
+  plumbing. Fix: `listEvents` now uses `shownEvents` (was `visibleEvents`, empty until a chip was selected).
+- **CF — dynamic replay camera.** While the replay plays, `TripMap` follows the car and sets zoom from speed
+  (zoom out ~13.5 on fast highway stretches, in ~16.5 for the slow last mile), sampled ~3×/s so it glides.
+  Pauses while a finger is on the map. New `replayFollow` param + `replayZoom`; `ReplayTimeline` reports
+  `onPlayingChange` only after the on-open settle so the initial whole-route fit isn't clobbered.
+- **CG — re-imagined "Health metrics."** A compact "this window vs previous" delta strip (`WindowDeltaStrip`)
+  under the Drive score: Drive/Safety/Comfort/Pace change, green=improved/red=worsened. Shown only when a
+  prior comparable window exists (30d→prev 30d, 500km→prev 500km; all-time has none). Dormant on the owner's
+  current data (all trips within ~1 week), like CC.
+- **CH — walk trip-detail hero.** A walk/non-drive now shows a walking indicator + moving-average speed
+  instead of the Safety/Comfort/Pace rings, mirroring the Past-trips list (fuel + traffic ETA were already
+  suppressed for non-drives).
+
+## Rev BY-CD (2026-06-28, v3.15) — Batch 1: Tier-1 quick wins
+
+First batch of the comprehensive revision plan (all owner-backlog Tier-1 items). Built, tested, installed and
+device-verified on the S25.
+- **BY** You-vs-traffic "you" marker: single crisp line + thin dark outline (removed the white-edge artifact).
+- **BZ** Moved "Load sample data" and the Google-Sheets card off Home into the Options sheet (de-emphasized).
+- **CA** Home-screen "Auto-record" quick toggle (flips the pref + starts/stops the watcher).
+- **CB** Past-trips recency filter (24h/3d/7d/30d/All, default 7d) driving the map + list.
+- **CC** Fuel "Spend over time" → smoothed **$/week spend-rate** series (needs ≥2 weeks of data to plot).
+- **CD** Persistent satellite/aerial (HYBRID) map toggle on all three maps via shared `MapControls` + `UiPrefs`.
+
 ## Rev BX (2026-06-28) — fix map-scroll freeze, trouble-spots zoom + list
 
 Follow-ups on Rev BW. (1) **Scroll-freeze fixed**: the `pointerInteropFilter` never saw ACTION_UP (the map's
