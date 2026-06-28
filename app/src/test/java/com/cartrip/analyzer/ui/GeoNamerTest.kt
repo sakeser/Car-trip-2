@@ -65,6 +65,8 @@ class GeoNamerTest {
     @Test fun composeHomeEndpointsReadCleanly() {
         assertEquals("Home $arrow Scarborough", GeoNamer.compose("Home", "Scarborough"))
         assertEquals("Scarborough $arrow Home", GeoNamer.compose("Scarborough", "Home"))
+        assertEquals("Home $arrow Work", GeoNamer.compose("Home", "Work"))
+        assertEquals("Work $arrow Home", GeoNamer.compose("Work", "Home"))
         assertEquals(
             "Home $arrow Vaughan $arrow back",
             GeoNamer.compose("Home", "Home", via = "Vaughan", roundTrip = true)

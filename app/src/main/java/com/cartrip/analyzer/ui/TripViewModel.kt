@@ -56,10 +56,28 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun saveHome(ctx: Application, home: HomeDetector.LatLon?) {
         val p = ctx.getSharedPreferences(HOME_PREFS, android.content.Context.MODE_PRIVATE)
-        if (home == null) { p.edit().clear().apply(); return }
+        if (home == null) { p.edit().remove("lat").remove("lon").apply(); return }
         p.edit()
             .putLong("lat", java.lang.Double.doubleToRawLongBits(home.lat))
             .putLong("lon", java.lang.Double.doubleToRawLongBits(home.lon))
+            .apply()
+    }
+
+    private fun loadWork(ctx: Application): HomeDetector.LatLon? {
+        val p = ctx.getSharedPreferences(HOME_PREFS, android.content.Context.MODE_PRIVATE)
+        if (!p.contains("work_lat")) return null
+        return HomeDetector.LatLon(
+            java.lang.Double.longBitsToDouble(p.getLong("work_lat", 0)),
+            java.lang.Double.longBitsToDouble(p.getLong("work_lon", 0))
+        )
+    }
+
+    private fun saveWork(ctx: Application, work: HomeDetector.LatLon?) {
+        val p = ctx.getSharedPreferences(HOME_PREFS, android.content.Context.MODE_PRIVATE)
+        if (work == null) { p.edit().remove("work_lat").remove("work_lon").apply(); return }
+        p.edit()
+            .putLong("work_lat", java.lang.Double.doubleToRawLongBits(work.lat))
+            .putLong("work_lon", java.lang.Double.doubleToRawLongBits(work.lon))
             .apply()
     }
 
@@ -79,10 +97,11 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         val end = points.lastOrNull()
         val via = farthestFrom(points)
         val home = loadHome(getApplication())
+        val work = loadWork(getApplication())
         val geo = if (start != null && end != null) {
             GeoNamer.nameTrip(
                 getApplication(), start.lat, start.lon, end.lat, end.lon,
-                GeoNamer.Budget(3), home, via?.lat, via?.lon
+                GeoNamer.Budget(3), home, via?.lat, via?.lon, work
             )
         } else null
         geo ?: Format.relativeDay(trip.startTime)
@@ -210,31 +229,35 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             val points = dao.getAnalysisPoints(trip.id)
             trip.id to TripEnds(points.firstOrNull(), points.lastOrNull(), farthestFrom(points), TripLabeler.label(trip, points))
         }
-        // Learn home from every trip's endpoints; persist it so the single-trip title path can use it.
-        val home = HomeDetector.detect(
-            ends.values.flatMap { listOfNotNull(it.start, it.end) }.map { HomeDetector.LatLon(it.lat, it.lon) }
-        )
-        if (home != null) saveHome(ctx, home)
-        // Pass 2: compose each label (home-aware, with a loop "via"). Only unnamed trips spend a geocode.
+        // Learn home + work from every trip's endpoints; persist so the single-trip title path can use them.
+        val endpoints = ends.values.flatMap { listOfNotNull(it.start, it.end) }
+            .map { HomeDetector.LatLon(it.lat, it.lon) }
+        val home = HomeDetector.detect(endpoints)
+        val work = HomeDetector.detectWork(endpoints, home)
+        if (home != null) { saveHome(ctx, home); saveWork(ctx, work) }
+        // Pass 2: compose each label (home/work-aware, with a loop "via"). Only unnamed trips geocode.
+        val effHome = home ?: loadHome(ctx)
+        val effWork = if (home != null) work else loadWork(ctx)
         trips.associate { trip ->
             val e = ends.getValue(trip.id)
             val label = if (trip.name.isNotBlank()) e.static
-            else geocodedLabel(ctx, e, home ?: loadHome(ctx), budget) ?: e.static
+            else geocodedLabel(ctx, e, effHome, effWork, budget) ?: e.static
             trip.id to label
         }
     }
 
-    /** Reverse-geocoded label for a trip's stored route (home-aware, loop-via), or null to fall back. */
+    /** Reverse-geocoded label for a trip's stored route (home/work-aware, loop-via), or null to fall back. */
     private fun geocodedLabel(
         ctx: Application,
         e: TripEnds,
         home: HomeDetector.LatLon?,
+        work: HomeDetector.LatLon?,
         budget: GeoNamer.Budget,
     ): String? {
         val start = e.start ?: return null
         val end = e.end ?: return null
         return GeoNamer.nameTrip(
-            ctx, start.lat, start.lon, end.lat, end.lon, budget, home, e.via?.lat, e.via?.lon
+            ctx, start.lat, start.lon, end.lat, end.lon, budget, home, e.via?.lat, e.via?.lon, work
         )
     }
 

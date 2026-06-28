@@ -57,6 +57,37 @@ class HomeDetectorTest {
         assertEquals(ctr.lon, h.lon, 0.0008)
     }
 
+    /** Work = the most frequent endpoint that isn't home, well clear of home. */
+    @Test fun detectsWorkAsSecondCluster() {
+        val eps = ArrayList<LatLon>()
+        repeat(8) { eps += LatLon(43.7597 + it * 0.0001, -79.4106) } // home cluster (8)
+        repeat(5) { eps += LatLon(43.5160 + it * 0.0001, -79.6712) } // work cluster (5), ~34 km away
+        eps += downtown; eps += scarborough                          // one-offs
+        val home = HomeDetector.detect(eps)
+        val work = HomeDetector.detectWork(eps, home)
+        assertNotNull(work)
+        assertEquals(43.5160, work!!.lat, 0.001)
+        assertEquals(-79.6712, work.lon, 0.001)
+    }
+
+    /** No second place stands out (only home recurs) → no work. */
+    @Test fun nullWorkWhenNoSecondCluster() {
+        val eps = ArrayList<LatLon>()
+        repeat(8) { eps += LatLon(43.7597 + it * 0.0001, -79.4106) }
+        eps += downtown; eps += scarborough; eps += vaughan  // all one-offs
+        val home = HomeDetector.detect(eps)
+        assertNull(HomeDetector.detectWork(eps, home))
+    }
+
+    /** A frequent second spot too close to home is home spillover, not work. */
+    @Test fun nullWorkWhenSecondClusterIsNearHome() {
+        val eps = ArrayList<LatLon>()
+        repeat(8) { eps += LatLon(43.7597, -79.4106) }
+        repeat(6) { eps += LatLon(43.7601, -79.4150) } // ~360 m away — under WORK_MIN_FROM_HOME_M
+        val home = HomeDetector.detect(eps)
+        assertNull(HomeDetector.detectWork(eps, home))
+    }
+
     @Test fun isHomeWithinRadius() {
         // ~100 m north of home -> home
         assertTrue(HomeDetector.isHome(43.7597 + 0.0009, -79.4106, home))

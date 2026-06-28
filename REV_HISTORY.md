@@ -4,6 +4,17 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BH (2026-06-28) — learn Work too (names read "Home -> Work")
+
+Extends the Rev BC home learning to a second regular place. `HomeDetector.detectWork` = the most frequent
+endpoint cluster that **isn't** home, provided it recurs enough (>=4) and is well clear of home (>1 km, so
+it's not home parking spillover). `GeoNamer` labels endpoints at the learned work "Work" (free, no geocode),
+so a commute reads "Home -> Work" / "Work -> Home". Work is detected + persisted alongside home in
+`loadTripLabels` (SharedPreferences `cartrip_home`, `work_lat`/`work_lon`) and used by the single-trip
+title. Pure + unit-tested (+3 `HomeDetectorTest`, +1 `GeoNamerTest`). The owner's workplace is the recurring
+~34 km Speakman Dr cluster; on-device naming validation pending the next reconnect. Roadmap item 6 (work
+detection) done; user-settable home/work still open.
+
 ## Rev BG (2026-06-27) — backfill speeding severity for older trips
 
 Rev BF's `speedingSeverity` defaulted to 0 on existing trips (the migration can't recompute it), so their

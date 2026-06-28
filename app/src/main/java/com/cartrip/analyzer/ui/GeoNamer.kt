@@ -173,14 +173,19 @@ object GeoNamer {
         home: HomeDetector.LatLon? = null,
         viaLat: Double? = null,
         viaLon: Double? = null,
+        work: HomeDetector.LatLon? = null,
     ): String? {
         if (!Geocoder.isPresent()) return null
         val geocoder = Geocoder(context, Locale.getDefault())
         val prefs = context.getSharedPreferences(CACHE, Context.MODE_PRIVATE)
-        val from = if (HomeDetector.isHome(startLat, startLon, home)) HOME
-            else endpointName(geocoder, prefs, startLat, startLon, budget)
-        val to = if (HomeDetector.isHome(endLat, endLon, home)) HOME
-            else endpointName(geocoder, prefs, endLat, endLon, budget)
+        // A learned place (Home/Work) names an endpoint for free; otherwise reverse-geocode it.
+        fun place(lat: Double, lon: Double): String? = when {
+            HomeDetector.isHome(lat, lon, home) -> HOME
+            HomeDetector.isWork(lat, lon, work) -> WORK
+            else -> endpointName(geocoder, prefs, lat, lon, budget)
+        }
+        val from = place(startLat, startLon)
+        val to = place(endLat, endLon)
         val roundTrip = GeoUtils.haversine(startLat, startLon, endLat, endLon) <= LOOP_RADIUS_M
         // Only resolve a "via" when both endpoints share a name (the case that would read "X loop") and
         // the farthest point is meaningfully away from the start -- spends a geocode only when useful.
@@ -188,12 +193,12 @@ object GeoNamer {
         val via = if (sameName && viaLat != null && viaLon != null &&
             GeoUtils.haversine(startLat, startLon, viaLat, viaLon) >= MIN_VIA_M
         ) {
-            if (HomeDetector.isHome(viaLat, viaLon, home)) HOME
-            else endpointName(geocoder, prefs, viaLat, viaLon, budget)
+            place(viaLat, viaLon)
         } else null
         return compose(from, to, via, roundTrip)
     }
 
-    /** Display name for an endpoint at the learned home. */
+    /** Display names for endpoints at the learned home / work. */
     private const val HOME = "Home"
+    private const val WORK = "Work"
 }

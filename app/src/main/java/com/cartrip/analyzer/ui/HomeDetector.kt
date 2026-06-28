@@ -11,6 +11,9 @@ import kotlin.math.roundToInt
  * Pure and Android-free (frequency clustering over (lat, lon) endpoints) so it is unit-testable; the
  * caller collects endpoints and persists/uses the result. Frequency-learned rather than hardcoded
  * (roadmap O6) -- it works for any driver, not just the original GTA owner.
+ *
+ * [detectWork] (Rev BH) finds the *second* regular place (a workplace / school / gym) as the most frequent
+ * endpoint that isn't home, so names can read "Home -> Work".
  */
 object HomeDetector {
 
@@ -48,7 +51,31 @@ object HomeDetector {
         return centroid(cluster)
     }
 
+    /** A learned place (home or work) is labelled when an endpoint is within this radius. */
+    const val WORK_RADIUS_M = 250.0
+    /** Work must be at least this far from home to count as a distinct second place (not home spillover). */
+    private const val WORK_MIN_FROM_HOME_M = 1_000.0
+    /** Work needs to recur at least this many times (you visit work less often than you're home). */
+    const val MIN_WORK_HITS = 4
+
+    /**
+     * Detect the driver's second regular place ("work") from the endpoints that AREN'T home — the most
+     * frequent remaining cluster, provided it's well clear of home ([WORK_MIN_FROM_HOME_M]) and recurs
+     * enough ([minHits]). Returns null when home is unknown or no distinct second place stands out.
+     */
+    fun detectWork(endpoints: List<LatLon>, home: LatLon?, minHits: Int = MIN_WORK_HITS): LatLon? {
+        if (home == null) return null
+        val away = endpoints.filter { GeoUtils.haversine(it.lat, it.lon, home.lat, home.lon) > HOME_RADIUS_M }
+        val work = detect(away, minHits) ?: return null
+        if (GeoUtils.haversine(work.lat, work.lon, home.lat, home.lon) < WORK_MIN_FROM_HOME_M) return null
+        return work
+    }
+
     /** Is this point at the learned home (within [HOME_RADIUS_M])? False when home is unknown. */
     fun isHome(lat: Double, lon: Double, home: LatLon?): Boolean =
         home != null && GeoUtils.haversine(lat, lon, home.lat, home.lon) <= HOME_RADIUS_M
+
+    /** Is this point at the learned work (within [WORK_RADIUS_M])? False when work is unknown. */
+    fun isWork(lat: Double, lon: Double, work: LatLon?): Boolean =
+        work != null && GeoUtils.haversine(lat, lon, work.lat, work.lon) <= WORK_RADIUS_M
 }
