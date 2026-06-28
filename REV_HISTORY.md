@@ -4,6 +4,17 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BQ (2026-06-28) — REVERT the GPS throttle (it degraded walk tracks)
+
+Field regression: the Rev BK battery GPS-throttle got stuck during a slow, low-vibration trip (a walk),
+starving it of fixes. Morning walk 1182 got **416 coarse fixes (median 14 m, p90 28 m, max 88 m)** vs a
+typical pre-BK walk's ~2400 fixes at 6–7 m — and the jumpy coarse positions inflated top speed to 18 km/h,
+which pushed it past the 12 km/h walk threshold so the trip-card walk flag (icon + avg speed) disappeared.
+Data quality > the battery saving, so the throttle is reverted: GPS again runs full-rate for the whole trip.
+(The `requestFused` refactor is kept; the throttle/activation/constants are gone.) Battery optimization
+returns to the roadmap needing a fundamentally safer trigger — speed+vibration can't tell a slow walk from a
+park. Already-recorded 1182 can be marked a walk via the trip's walk/non-drive toggle.
+
 ## Rev BP (2026-06-28) — auto-update gas price (Toronto weekly average) + toggle
 
 Owner-requested dynamic gas price. Found a free, official, **current weekly** source — Ontario's fuel-price
