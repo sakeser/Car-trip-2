@@ -1,4 +1,4 @@
-package com.cartrip.analyzer.ui
+package com.cartrip.analyzer.analysis
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

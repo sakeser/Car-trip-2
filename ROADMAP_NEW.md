@@ -28,9 +28,9 @@ easiest/least-risk first"). Rev letters continue from CJ.
   (rise = red). Pure `series`/`trailingAvg` helpers, unit-tested.
 
 ### ⏳ Still open (CP follow-ups)
-- **Decouple `StressScore` out of `ui`** (this rev deepened it — `series`/`kmWeightedAvg`/`trailingAvg` were
-  added to `ui.StressScore`, and `export/ExportData` imports it). Move the pure logic to `analysis/`, leave
-  only `color()` in `ui/`. A real multi-file refactor (~5 callers) — propose the plan + risk before doing it.
+- **Decouple `StressScore` out of `ui` — ✅ DONE (v3.26/build 137).** `StressScore` + `TripKind` (both pure)
+  now live in `analysis/`; `color()` is `ui/StressColors`; `export/ExportData` imports `analysis.StressScore`
+  (export→ui dependency removed). Tests moved to the `analysis` package; 179 green.
 - **EMA vs trailing-average tuning** + per-user re-calibration as data grows (the trend currently uses a
   5-trip trailing average; an EMA may read smoother). Re-validate calibration by DB-replay.
 - **(Optional) a true per-distance "burden" metric** — if we actually want stress *per km* (not a weighted

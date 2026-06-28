@@ -1,4 +1,4 @@
-package com.cartrip.analyzer.ui
+package com.cartrip.analyzer.analysis
 
 import com.cartrip.analyzer.data.TripEntity
 import org.junit.Assert.assertEquals

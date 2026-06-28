@@ -10,6 +10,7 @@ import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.GeoUtils
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.analysis.TripAnalyzer
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.cloud.RoutesClient
 import com.cartrip.analyzer.cloud.RoutesConfig

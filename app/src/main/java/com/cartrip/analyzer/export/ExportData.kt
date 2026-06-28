@@ -1,8 +1,8 @@
 package com.cartrip.analyzer.export
 
+import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.data.TripEntity
-import com.cartrip.analyzer.ui.StressScore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

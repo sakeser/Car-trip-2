@@ -1,6 +1,5 @@
-package com.cartrip.analyzer.ui
+package com.cartrip.analyzer.analysis
 
-import androidx.compose.ui.graphics.Color
 import com.cartrip.analyzer.data.TripEntity
 import java.util.Calendar
 import kotlin.math.max
@@ -9,12 +8,14 @@ import kotlin.math.roundToInt
 /**
  * Drive Stress Score (Rev CJ): a per-trip "how demanding/stressful was this drive" rating, 0-100 where
  * **higher = more stressful** (the inverse of the green=good Safety/Comfort/Pace scores, so it gets its own
- * green->red scale). Heuristic + calibrated on the owner's real trips (DB-replay), like [TripScores] — not
+ * green->red scale). Heuristic + calibrated on the owner's real trips (DB-replay), like TripScores — not
  * regressed against ground truth.
  *
  * Factors (each normalized 0..1, then weighted): forced-slowdown rate + severity (drawdowns, the core
  * stop-and-go signal), hard-event rate, congestion vs free-flow (Routes), speeding exposure, trip length,
  * and a small time-of-day load (rush hour / late night). Pure + unit-testable from stored aggregates.
+ *
+ * Pure domain logic — lives in analysis, not ui. The green->red colour for rendering is `ui.StressColors`.
  */
 object StressScore {
     data class Result(val score: Int, val band: String)
@@ -95,14 +96,6 @@ object StressScore {
         score < 45 -> "Moderate"
         score < 65 -> "Busy"
         else -> "High stress"
-    }
-
-    /** Green (calm) -> amber -> red (stressful) — the inverse of TripScores.color. */
-    fun color(score: Int): Color = when {
-        score < 25 -> Color(0xFF22C55E)
-        score < 45 -> Color(0xFF84CC16)
-        score < 65 -> Color(0xFFF59E0B)
-        else -> Color(0xFFEF4444)
     }
 
     private fun timeOfDayLoad(startTime: Long): Double {

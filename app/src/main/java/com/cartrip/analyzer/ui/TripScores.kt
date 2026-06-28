@@ -1,6 +1,7 @@
 package com.cartrip.analyzer.ui
 
 import androidx.compose.ui.graphics.Color
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.data.TripEntity
 import kotlin.math.max
 import kotlin.math.min

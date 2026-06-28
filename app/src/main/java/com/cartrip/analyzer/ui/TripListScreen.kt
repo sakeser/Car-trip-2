@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.analysis.TrackPoint
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.TripEntity
 

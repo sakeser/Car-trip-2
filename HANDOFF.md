@@ -1,8 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.25 (build 136)** (Rev CP + review-fix pass) · Branch `main`,
-**all pushed** · S25 installed **3.24 (build 135)** (3.25 is wording/chart fixes only — reinstall when convenient).
-Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.26 (build 137)** (Rev CP + StressScore decouple) · Branch `main`,
+**all pushed** · S25 installed **3.26 (build 137)**. Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -174,10 +173,10 @@ Pipeline: **record → analyze (offline) → persist → enrich → present.**
 |---|---|
 | Recording | `record/RecordingService.kt` (FG service, GPS+sensors+GNSS+raw-GNSS; `ACTION_AUTO_ARM` = provisional record + 90 s motion-confirm by GPS **or** accelerometer vibration + discard; `ACTION_AUTO_STOP_GRACE` = retrospective-trim stop), `record/RecordingState.kt` (live state), `record/AutoStop.kt` (retrospective end-time, pure) |
 | Auto-record | **`record/AutoRecordWatchService.kt`** = persistent "armed" FGS, the reliable hands-free trigger (see note below); `record/AutoRecordController.kt` (decision dispatch → arm/stop), `record/AutoRecordPolicy.kt` (pure trigger logic, unit-tested), `record/AutoRecordPrefs.kt`, `record/AutoRecordLog.kt` (Diagnostics decision log), `record/BootReceiver.kt` (re-arm after reboot), `record/CompanionCarManager.kt` + `record/CarPresenceService.kt` (CompanionDeviceManager — secondary/unreliable for classic-BT cars), `record/GnssLoggingPrefs.kt` (raw-GNSS toggle). Dead: `record/PowerConnectionReceiver.kt` / `record/CarBluetoothReceiver.kt` (manifest registration removed in Rev AO) |
-| Analysis | `analysis/TripAnalyzer.kt` (Kalman/RTS speed+accel, events, metrics), `analysis/MotionFusion.kt` (potholes/rough-road/harsh-stops), `analysis/FusedEventDetector.kt` (magnitude-first sensor detector), `analysis/FuelEstimator.kt` (pure fuel/cost model), `analysis/GnssQuality.kt`, `analysis/SpeedTier.kt` |
+| Analysis | `analysis/TripAnalyzer.kt` (Kalman/RTS speed+accel, events, metrics), `analysis/MotionFusion.kt` (potholes/rough-road/harsh-stops), `analysis/FusedEventDetector.kt` (magnitude-first sensor detector), `analysis/FuelEstimator.kt` (pure fuel/cost model), `analysis/Drawdowns.kt`, `analysis/StressScore.kt` (Drive Stress Score — pure; Rev CP-decoupled from ui), `analysis/TripKind.kt` (walk/non-drive guard — pure), `analysis/GnssQuality.kt`, `analysis/SpeedTier.kt` |
 | Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema **v21** + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
 | Cloud | `cloud/SpeedLimits.kt` (OSM/Overpass + tile cache + pure `speedingSummary` w/ magnitude-weighted severity + limit-drop grace), `cloud/Tiles.kt`, `cloud/RoutesClient.kt` (Google Routes ETA), `cloud/GasPrice.kt` (auto fuel price from Ontario weekly Toronto CSV), `cloud/TripSync.kt`/`SheetsClient.kt`/`GoogleAuth.kt` (Sheets) |
-| UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/TripKind.kt` (walk/non-drive guard), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref + event-g threshold), `ui/Components.kt` (shared bits + Options sheet), `ui/HomeDetector.kt` (frequency-learned home/work), `ui/EventHotspots.kt` (cross-trip recurring-event clustering), `ui/TroubleSpotsMap.kt` (hotspot map + tap-to-instance sheet), `ui/FuelInsights.kt` (fuel history/spend/$-per-km), `ui/TripHeatMap.kt` (dormant route heatmap) |
+| UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/StressColors.kt` (stress green->red scale; logic is `analysis/StressScore`), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref + event-g threshold), `ui/Components.kt` (shared bits + Options sheet), `ui/HomeDetector.kt` (frequency-learned home/work), `ui/EventHotspots.kt` (cross-trip recurring-event clustering), `ui/TroubleSpotsMap.kt` (hotspot map + tap-to-instance sheet), `ui/FuelInsights.kt` (fuel history/spend/$-per-km), `ui/TripHeatMap.kt` (dormant route heatmap) |
 
 Speed/accel are estimated with a **constant-acceleration Kalman filter + RTS smoother** (offline,
 zero-lag) with ZUPT at stops. The GPS detector drives scoring; the sensor-fused detector is
@@ -1191,13 +1190,14 @@ A re-review (Codex) of the committed Rev CO. Verified each against source:
 | 3 | `AutoRecordScreen` lets you enable before bg-location granted | **TRUE, by design** | **Decision: don't hard-gate** — foreground-only is the Play-compliant default (§12.3). Added a state-aware "Foreground-only until…" subtitle so the limited state is explicit |
 | 4 | AI export `loadTripLabels(completed)` loads whole history but only 25 are printed | **PARTLY** | **Kept the full load on purpose** — it also persists learned Home/Work, so narrowing it would degrade detection; it's budget-capped + cached. Added a `sharing` guard so repeat taps can't launch duplicate jobs/share sheets |
 | 5 | Export `TripName` writes only `trip.name` (blank for unnamed) | **TRUE** | Renamed header → **`UserTripName`**; documented that the generated "A→B" label is intentionally not in the pure builder |
-| 6 | `ExportData` imports `ui.StressScore` (export→UI coupling) | **TRUE** | **Proposed for Rev CP** (refactor, not done this pass — see below) |
+| 6 | `ExportData` imports `ui.StressScore` (export→UI coupling) | **TRUE** | **✅ DONE (v3.26/build 137):** `StressScore` + `TripKind` (both pure) moved to `analysis/`; `color()` split into `ui/StressColors`; `ExportData` now imports `analysis.StressScore` — export→ui dependency removed |
 
 **Added to Rev CP (P2 unless noted):**
-- **Decouple `StressScore`** — move the pure model + `from()`/`band()` + normalizer constants to
-  `analysis/` (or a non-UI `domain/`), leave only `color()`/rendering in `ui/`. Touches 4 callers
-  (`ExportData`, `TripDetailScreen`, `InsightsScreen`, `AiInsightsExport`) → import churn + a rebuild;
-  low logic risk but a real refactor, so plan/verify before doing. Removes the export→UI dependency.
+- ~~**Decouple `StressScore`**~~ **✅ DONE (v3.26/build 137).** `analysis/StressScore.kt` (pure model +
+  `from`/`band`/`kmWeightedAvg`/`series`/`trailingAvg`) + `analysis/TripKind.kt` (it had to move too — the
+  stress score depends on it and it's pure domain); `color()` is now `ui/StressColors`. All callers
+  (`ExportData`, `TripDetailScreen`, `InsightsScreen`, `AiInsightsExport`, `FuelInsights`, `TripListScreen`,
+  `TripViewModel`, `TripScores`) re-imported; tests moved to the `analysis` test package. 179 tests green.
 - **`GeneratedTripLabel` export column** (optional) — a label-aware export path that includes the geocoded
   "A→B" name, not just the user rename. Needs IO/Geocoder at export time, so it's a deliberate design change
   (the current builder is pure/sync); weigh against keeping export pure.
@@ -1207,9 +1207,9 @@ A re-review (Codex) of the committed Rev CO. Verified each against source:
   `StressScore.series`/`trailingAvg` (pure, tested) feeding an Insights **`StressTrendCard`** — km-weighted
   headline + a trailing-average-smoothed `TimeSeriesChart` (its dashed reference = the mean of the plotted
   smoothed series) + a delta vs the previous window (replaced the single-average `StressSummaryRow`). No schema
-  change. Spec in **`ROADMAP_NEW.md` → "Drive Stress Score — depth"**. **Still open:** the `StressScore`
-  **decouple** below (deepened by this rev — `series`/`kmWeightedAvg`/`trailingAvg` were added to
-  `ui.StressScore`), EMA-vs-trailing tuning + per-user re-calibration, and an optional true per-distance metric.
+  change. Spec in **`ROADMAP_NEW.md` → "Drive Stress Score — depth"**. The `StressScore` **decouple is now
+  ✅ DONE** (v3.26 — see finding #6 above). **Still open:** EMA-vs-trailing tuning + per-user re-calibration,
+  and an optional true per-distance metric.
 
 ---
 

@@ -1,6 +1,8 @@
 package com.cartrip.analyzer.ui
 
 import com.cartrip.analyzer.analysis.FuelEstimator
+import com.cartrip.analyzer.analysis.StressScore
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.data.TripEntity
 import java.text.SimpleDateFormat
 import java.util.Date

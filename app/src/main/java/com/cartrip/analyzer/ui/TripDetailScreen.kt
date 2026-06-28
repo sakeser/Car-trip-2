@@ -104,8 +104,10 @@ import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.EventType
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.analysis.SpeedTier
+import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.data.TripEntity
 import kotlinx.coroutines.delay
@@ -566,7 +568,7 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
  */
 @Composable
 private fun StressHeroPill(s: StressScore.Result) {
-    val color = StressScore.color(s.score)
+    val color = StressColors.color(s.score)
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(50))

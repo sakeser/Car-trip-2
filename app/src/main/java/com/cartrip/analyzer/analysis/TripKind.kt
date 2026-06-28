@@ -1,4 +1,4 @@
-package com.cartrip.analyzer.ui
+package com.cartrip.analyzer.analysis
 
 import com.cartrip.analyzer.data.TripEntity
 
@@ -9,6 +9,9 @@ import com.cartrip.analyzer.data.TripEntity
  * Used to suppress the (driving) traffic comparison and keep non-drives out of drive-centric
  * Insights aggregates. From field data 2026-06-24 two walks (max ~5 km/h) were still given a ~4 min
  * *driving* ETA and a 0.65 g "peak" from gait. See memory walk-non-drive-finding.
+ *
+ * Pure domain logic (operates on [TripEntity] only) — lives in analysis, not ui, so non-ui callers
+ * (e.g. the stress score) can use it without depending on the UI layer.
  */
 object TripKind {
     /** A real drive almost always crosses this top speed somewhere; a walk does not. */

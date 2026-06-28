@@ -1,6 +1,7 @@
 package com.cartrip.analyzer.ui
 
 import com.cartrip.analyzer.analysis.FuelEstimator
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.data.TripEntity
 
 /**

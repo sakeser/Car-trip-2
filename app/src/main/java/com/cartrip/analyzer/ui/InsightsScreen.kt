@@ -68,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.analysis.FuelEstimator
+import com.cartrip.analyzer.analysis.StressScore
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.data.TripEntity
 import java.util.Locale
 import kotlin.math.max
@@ -395,7 +397,7 @@ private fun StressTrendCard(
     drives: Int,
     windowLabel: String
 ) {
-    val color = StressScore.color(kmAvgScore)
+    val color = StressColors.color(kmAvgScore)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
