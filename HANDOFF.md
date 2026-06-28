@@ -801,6 +801,92 @@ the owner's on-device drive test._
 
 ---
 
+## 11. Design deep-dives & build plan (for the §9 backlog)
+
+Turning the owner backlog into actionable specs. These are blueprints + analysis, **not yet built**.
+
+### 11.0 Recommended build sequence (value × effort, dependency-aware)
+
+**Tier 1 — quick wins (low effort, visible, low risk). Do these first.**
+- You-vs-traffic "you" line white-edge bug (polish).
+- Hide "Load sample data" from the UI; shrink/de-emphasize the Sheets "Sync" button.
+- Home-screen "Auto-record on" toggle (the pref already exists — just surface it).
+- Past-trips recency filter (24h/3d/7d/30d/all, default short) — also a perf win.
+- Fuel "Spend over time" → spend-rate ($/week, trailing avg).
+- Satellite/aerial `MapType` toggle.
+Each is a self-contained rev; ship + verify individually.
+
+**Tier 2 — foundational data (unlocks the high-value analytics/features).**
+- **Places API (New) destination tagging** → unlocks find-my-car + destination analytics + better names. (§11.4)
+- **Drawdowns metric** (per-point speed analysis + stored aggregates) → unlocks the stress score. (§11.2)
+  Pairs with a schema bump + re-analyze-all.
+
+**Tier 3 — marquee features (build on Tier 2).**
+- **Drive Stress Score** (consumes drawdowns + new factors). (§11.1)
+- **Find-my-car** passive helper (consumes Places + motion). (§11.3)
+- Consolidate Driving+Events tabs (event→map hyperlink); dynamic replay zoom.
+
+**Tier 4 — productization (large, do when the above are proven).**
+- Commercialization: secure-at-rest (SQLCipher) + replace Sheets with proper Google-account storage; premium tier (the Google-API analytics are the paid value).
+
+**Dependencies:** drawdowns → stress score · Places → find-my-car + destination analytics · secure-data → commercialization. **Cross-cutting:** anything touching detector thresholds or new per-point aggregates wants a **schema bump + re-analyze-all** (the button exists, Rev BV) and re-validation by **DB-replay** (pull DB, replay the pure logic in Python — the method used all through Rev BB–BX).
+
+### 11.1 Drive Stress Score — design
+
+Goal: a per-trip "how stressful was this drive" score/grade (0–100 or A–F), surfaced on the trip + an Insights trend. Heuristic + calibrated, like `TripScores` (not regressed against ground truth).
+
+Candidate factors (all per-trip, normalized 0–1 then weighted):
+- **Drawdown rate** — drawdowns per 10 min (or per km). The core traffic-stress signal (§11.2).
+- **Stop-and-go density** — speed accel↔decel cycles per km, or fraction of moving time with frequent sign changes in acceleration. High = creeping traffic.
+- **Speed variance** — stdev of speed (or of speed/limit). Smooth cruise = low; lurching = high.
+- **No-rest load** — longest continuous driving stretch with no >1-min stop (owner's idea), and/or fraction of the trip in continuous motion. Long unbroken driving = fatigue.
+- **Hard-event rate** — brakes+accels+turns per km (already stored).
+- **Congestion ratio** — actual duration ÷ free-flow ETA (Routes API gives traffic vs free-flow; being far slower than free-flow = congested = stressful). Distinct from the *traffic-beating* You-vs-traffic metric.
+- **Duration & time-of-day** — long trips + night/rush-hour add load (mild weights).
+
+Formula sketch: `stress = Σ wᵢ·fᵢ` → scale to 0–100 (higher = more stressful), or invert to a "calm" grade to match the existing green=good convention. Calibrate weights on real trips (a relaxed highway cruise should score low; a rush-hour stop-and-go crawl high). **Data:** most needs per-point speed (`analysis_points`) → compute in a new analyzer pass, store aggregates (schema bump), re-analyze. Validate by DB-replay across the owner's trips before wiring the UI.
+
+### 11.2 Drawdowns — detection algorithm
+
+Definition (owner): a **forced, unnecessary** speed reduction — cruising near the limit, then having to brake hard/long (>50% speed loss), **not** a normal stop-sign/light/destination stop. The signature traffic-quality event.
+
+Algorithm over the per-point speed track (with matched speed limit where available):
+1. Find segments where speed was "cruising" — speed ≥ ~70% of the posted limit (or ≥ ~70 km/h if no limit), sustained a few seconds.
+2. Detect a **drop**: speed falls > 50% (or below an absolute floor) within a short window after cruising.
+3. **Recovery test** to distinguish from a real stop: the drawdown *recovers* — speed returns toward the prior level within N minutes (you got going again). A destination stop ends the trip; a controlled-intersection stop is brief/expected and often at lower-limit roads.
+4. **Characterize each:** `v0` (pre-drop cruise speed), `v1` (trough), `Δv`, decel duration, `fullStop?`, `timeToRecover` (to ~v0), location, road limit.
+5. **Edge cases (suppress):** highway exits (legit decel — reuse the Rev BF limit-drop grace idea), merges, toll booths, trip start/end.
+
+Store: `drawdownCount` + a severity aggregate (e.g. Σ Δv² or Σ Δv·duration) + optionally per-drawdown rows (could be a new `EventType` so they map/cluster like other events → also feed trouble-spots). Strong input to the stress score. Validate by DB-replay on highway trips (where "cruise then forced slow" is unambiguous).
+
+### 11.3 Find-my-car — state machine
+
+Passive parking helper (e.g. Costco). State machine:
+`IDLE → DRIVING (recording) → ARRIVED (drive→walk transition: sustained speed≈0 + walking activity, or car-BT disconnect/unplug) → PARKED (capture a high-precision pin = centroid of the last stationary GPS cluster; optionally confirm the venue via Places, §11.4) → AWAY (user > radius R from pin) → RETURNING (re-enters R, or heading back) → NAVIGATE (auto-launch Google Maps walking directions to the pin + notification/haptic) → CLEARED (back at car / driving resumes).`
+
+Signals: accelerometer activity (in-vehicle vs walking), GPS speed, car-BT ACL connect/disconnect, charger. Precision: the parking pin should come from the last few stationary fixes before the walk began (not the first post-stop fix). Battery: only active around the arrival/return window (geofence-style), not continuous. Reuses the existing motion pipeline + `AutoRecordWatchService` + `CompanionDeviceManager` + `GeoNamer`/Places. Privacy: a parked-location pin is sensitive — store locally, clear on return.
+
+### 11.4 Places API (New) enrichment — architecture & cost
+
+- New `cloud/Places.kt` (sibling of `GasPrice.kt`/`SpeedLimits.kt`): given lat/lng, a **Nearby Search (rank by distance)** or place-from-location → the top POI (name, type, distance). Fail-soft (null on error/over-budget).
+- **Caching is mandatory:** extend the existing `GeoNamer` cell cache (`cartrip_geocache`, ~110 m cells) → store the resolved place name per cell. Only query trip **endpoints** (+ loop "via"); most resolve from cache on refresh.
+- **Naming:** prefer the Place name over the neighbourhood when a POI is within ~50 m of the endpoint and confidence is high → "Home → Costco"; else fall back to the current `GeoNamer` neighbourhood, then `TripLabeler`.
+- **Cost:** Places Nearby is ~$0.03/call (verify current pricing). With caching, a personal user is pennies/month; at scale it scales with new endpoints → meter it, cap with the per-refresh `Budget` pattern already in `GeoNamer`, and gate premium analytics behind the paid tier.
+- **Unlocks:** find-my-car (venue confirmation), destination analytics (where/how often/dwell), richer trip names.
+
+### 11.5 Consolidated tech-debt / risks (for the next agent)
+
+- **GPS is effectively 1 Hz** on this device (O1) — the analysis ceiling; sub-1 Hz would need raw GNSS.
+- **`EventHotspots` uses a raw grid** (~55 m cells) → events near a cell boundary can split. `HomeDetector` solved the same with a radius-refinement; apply that to hotspots if boundary-splitting shows up.
+- **`confidence` (fused events, 0.4–0.9) is computed but never gates** — an opportunity to weight/filter events (vs the current display-only g-force slider).
+- **"Light events" are by design, not relics** — swerves gate on yaw-rate so their stored *lateral* g is low (~0.13 g); brake/accel fire at ≥0.25 g. If the stress/scoring work wants only strong events, **raise the detector thresholds** (a deliberate scoring change → re-validate + re-analyze), don't just filter at display.
+- **Battery:** the GPS throttle was reverted (Rev BQ); GPS-on still exceeds active recording. A *safe* optimization needs a trigger that can't mistake a slow walk for a park (charging-gated, or post-auto-stop-idle only).
+- **Raw retention is 30 days** → re-analyze-all only rebuilds trips whose raw `locations`/`motions` survive.
+- **Test gaps:** pure logic is well-covered; **no instrumented/Compose/Room-migration tests**, and network paths (Overpass, Routes, Places, GasPrice fetch) are verified manually/on-device only.
+- **Process:** OneDrive build-relocation workaround is mandatory (§2.1); **bump version before the final assemble** (§1); validate detector/scoring changes by **DB-replay** before shipping.
+
+---
+
 _Questions a fresh agent should be able to answer from this doc: how to build (§2.1), where the APK
 lands (§2.1), how to read the real DB (§2.4), what every detector threshold means (§6), what's broken
-or capped (§8), and what to do next (§9)._
+or capped (§8), what to do next + the owner backlog (§9), and how to build the marquee features (§11)._
