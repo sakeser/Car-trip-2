@@ -4,6 +4,16 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BN (2026-06-28) — fuel: spend buckets + smoothed $/km
+
+Owner-requested fuel additions. `FuelInsights.spend` totals gas cost over **last 1 / 7 / 30 days + all
+time** (fixed recency windows across all drives, independent of the Insights selector). And `$/km` is now
+**smoothed** (trailing 5-drive moving average) once there are >= `SMOOTH_MIN_DRIVES` (10) drives, so the
+trend reads clearly instead of bouncing per trip; below that it shows the raw per-drive line. Fuel section
+now shows a "Spent on gas" row (today/7d/30d/all) + window stats (fuel, $/km, L/100km, distance) + the
+smoothed cost-per-km and cumulative-spend charts. +2 tests. (Dynamic daily gas price is still pending a data
+source — no known free Canadian daily retail-price API; see the open question.)
+
 ## Rev BM (2026-06-28) — hotspots show real place names
 
 Follow-up to Rev BJ: the "Recurring spots" card only labelled home/work spots; others were blank. New

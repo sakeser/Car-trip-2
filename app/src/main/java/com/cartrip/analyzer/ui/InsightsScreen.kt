@@ -151,9 +151,11 @@ fun InsightsScreen(
             run {
                 val fuel = FuelInsights.summarize(windowTrips, vehicle)
                 if (fuel.hasData) {
+                    // Spend buckets are fixed recency windows over ALL drives, not the selected window.
+                    val spend = FuelInsights.spend(completed, vehicle, now)
                     item {
                         SectionTitle("Fuel & cost")
-                        FuelSection(fuel, vehicle)
+                        FuelSection(fuel, spend, vehicle)
                     }
                 }
             }
@@ -653,7 +655,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun FuelSection(s: FuelInsights.Summary, v: FuelEstimator.Vehicle) {
+private fun FuelSection(s: FuelInsights.Summary, spend: FuelInsights.Spend, v: FuelEstimator.Vehicle) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -663,20 +665,34 @@ private fun FuelSection(s: FuelInsights.Summary, v: FuelEstimator.Vehicle) {
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Money spent on gas over fixed recency windows (all drives, not the selector window).
+            Text("Spent on gas", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FuelStat(String.format(Locale.US, "$%,.0f", s.totalCost), "Total cost", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "$%,.0f", spend.day), "Today", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "$%,.0f", spend.week), "7 days", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "$%,.0f", spend.month), "30 days", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "$%,.0f", spend.allTime), "All time", Modifier.weight(1f))
+            }
+            // Window stats (follow the selector above).
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FuelStat(String.format(Locale.US, "%,.0f L", s.totalLitres), "Fuel used", Modifier.weight(1f))
                 FuelStat(String.format(Locale.US, "$%.2f", s.avgCostPerKm), "per km", Modifier.weight(1f))
                 FuelStat(String.format(Locale.US, "%.1f", s.avgL100), "L/100km", Modifier.weight(1f))
+                FuelStat(String.format(Locale.US, "%,.0f km", s.totalKm), "Distance", Modifier.weight(1f))
             }
             Text(
                 "Estimated for ${v.label} at " + String.format(Locale.US, "$%.2f/L", v.pricePerL) +
-                    " · ${s.drives} drives",
+                    " · ${s.drives} drives in view",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (s.costPerKm.size >= 2) {
-                TimeSeriesChart("Cost per km", s.costPerKm, "$/km", Color(0xFF22C55E))
+            val smoothed = s.costPerKmSmoothed.isNotEmpty()
+            val perKm = if (smoothed) s.costPerKmSmoothed else s.costPerKm
+            if (perKm.size >= 2) {
+                TimeSeriesChart(
+                    if (smoothed) "Cost per km (smoothed)" else "Cost per km",
+                    perKm, "$/km", Color(0xFF22C55E)
+                )
             }
             if (s.cumulativeCost.size >= 2) {
                 TimeSeriesChart("Spend over time", s.cumulativeCost, "$", Color(0xFF0EA5E9))

@@ -13,6 +13,10 @@ import com.cartrip.analyzer.data.TripEntity
  */
 object FuelInsights {
 
+    /** Below this many drives, a moving-average $/km trend isn't meaningful — show the raw per-drive line. */
+    const val SMOOTH_MIN_DRIVES = 10
+    private const val SMOOTH_WINDOW = 5
+
     data class Summary(
         val drives: Int,
         val totalKm: Double,
@@ -20,17 +24,52 @@ object FuelInsights {
         val totalCost: Double,
         val avgCostPerKm: Double,   // total cost / total km
         val avgL100: Double,        // total litres / total km * 100
-        val costPerKm: List<Float>,       // $/km, per drive, chronological
-        val l100: List<Float>,            // L/100km, per drive
-        val cumulativeCost: List<Float>,  // running total $ across drives
+        val costPerKm: List<Float>,         // $/km, per drive, chronological
+        val costPerKmSmoothed: List<Float>, // $/km trailing moving average (empty until enough drives)
+        val l100: List<Float>,              // L/100km, per drive
+        val cumulativeCost: List<Float>,    // running total $ across drives
     ) {
         val hasData: Boolean get() = drives > 0
+    }
+
+    /** Total fuel cost spent over fixed recency buckets (independent of the Insights window selector). */
+    data class Spend(val day: Double, val week: Double, val month: Double, val allTime: Double)
+
+    private const val DAY_MS = 24L * 60L * 60L * 1000L
+
+    /** Money spent on gas in the last 1 / 7 / 30 days and since inception, across all driving trips. */
+    fun spend(trips: List<TripEntity>, v: FuelEstimator.Vehicle, nowMs: Long): Spend {
+        var d = 0.0; var w = 0.0; var m = 0.0; var all = 0.0
+        for (t in trips) {
+            if (t.distanceM <= 0.0 || TripKind.isLikelyNonDrive(t)) continue
+            val cost = FuelEstimator.cost(
+                FuelEstimator.litres(t.distanceM / 1000.0, t.avgMovingSpeedMps * 3.6, t.idleS, v), v
+            )
+            all += cost
+            val age = nowMs - t.startTime
+            if (age <= DAY_MS) d += cost
+            if (age <= 7 * DAY_MS) w += cost
+            if (age <= 30 * DAY_MS) m += cost
+        }
+        return Spend(d, w, m, all)
+    }
+
+    /** Trailing moving average of [series] over [window], for the points that have a full window behind them. */
+    private fun smooth(series: List<Float>, window: Int): List<Float> {
+        if (series.size < window) return emptyList()
+        val out = ArrayList<Float>(series.size - window + 1)
+        for (i in window - 1 until series.size) {
+            var sum = 0f
+            for (j in i - window + 1..i) sum += series[j]
+            out += sum / window
+        }
+        return out
     }
 
     /** [trips] should be chronological (oldest first). Non-drives (walks) and zero-distance are excluded. */
     fun summarize(trips: List<TripEntity>, v: FuelEstimator.Vehicle): Summary {
         val drives = trips.filter { it.distanceM > 0.0 && !TripKind.isLikelyNonDrive(it) }
-        if (drives.isEmpty()) return Summary(0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), emptyList(), emptyList())
+        if (drives.isEmpty()) return Summary(0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), emptyList(), emptyList(), emptyList())
 
         var totalKm = 0.0; var totalLitres = 0.0; var totalCost = 0.0
         val costPerKm = ArrayList<Float>(drives.size)
@@ -53,6 +92,7 @@ object FuelInsights {
             avgCostPerKm = if (totalKm > 0) totalCost / totalKm else 0.0,
             avgL100 = if (totalKm > 0) totalLitres / totalKm * 100.0 else 0.0,
             costPerKm = costPerKm,
+            costPerKmSmoothed = if (drives.size >= SMOOTH_MIN_DRIVES) smooth(costPerKm, SMOOTH_WINDOW) else emptyList(),
             l100 = l100,
             cumulativeCost = cumulative,
         )

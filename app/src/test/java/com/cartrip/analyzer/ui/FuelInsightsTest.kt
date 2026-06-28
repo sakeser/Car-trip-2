@@ -56,4 +56,33 @@ class FuelInsightsTest {
     @Test fun emptyHasNoData() {
         assertFalse(FuelInsights.summarize(emptyList(), v).hasData)
     }
+
+    private fun driveAt(startMs: Long, km: Double = 10.0) = TripEntity(
+        startTime = startMs, endTime = startMs + 1,
+        distanceM = km * 1000.0, avgMovingSpeedMps = 50.0 / 3.6, maxSpeedMps = 80.0 / 3.6,
+    )
+
+    @Test fun spendBucketsByRecency() {
+        val now = 100L * 24 * 3600 * 1000
+        val day = 24L * 3600 * 1000
+        val trips = listOf(
+            driveAt(now - 2 * 3600 * 1000),   // today
+            driveAt(now - 3 * day),           // within 7d
+            driveAt(now - 20 * day),          // within 30d
+            driveAt(now - 60 * day),          // older (all-time only)
+        )
+        val s = FuelInsights.spend(trips, v, now)
+        val each = FuelEstimator.cost(FuelEstimator.litres(10.0, 50.0, 0.0, v), v)
+        assertEquals(each, s.day, 1e-6)
+        assertEquals(2 * each, s.week, 1e-6)
+        assertEquals(3 * each, s.month, 1e-6)
+        assertEquals(4 * each, s.allTime, 1e-6)
+    }
+
+    @Test fun smoothedSeriesOnlyWhenEnoughDrives() {
+        val few = (0 until 4).map { drive(10.0, 50.0) }
+        assertTrue(FuelInsights.summarize(few, v).costPerKmSmoothed.isEmpty())
+        val many = (0 until FuelInsights.SMOOTH_MIN_DRIVES + 2).map { drive(10.0, 50.0) }
+        assertTrue(FuelInsights.summarize(many, v).costPerKmSmoothed.isNotEmpty())
+    }
 }
