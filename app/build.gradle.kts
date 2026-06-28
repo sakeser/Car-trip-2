@@ -100,4 +100,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    // Android's org.json is stubbed in local unit tests (returns null); a real impl lets us test JSON parsers.
+    testImplementation("org.json:json:20231013")
 }

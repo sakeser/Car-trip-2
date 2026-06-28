@@ -1,6 +1,6 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.27 (build 138)** (CR export retention) · Branch `main`,
+_Last updated: 2026-06-28 · Source **3.27 (build 138)** (CR export retention + migration foundation + Places scaffold) · Branch `main`,
 **all pushed** · S25 installed **3.27 (build 138)**. Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
@@ -53,13 +53,12 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - **Single workspace = the repo root `C:\Users\sinan\OneDrive\Desktop\cartrip`** on **`main`** (the only
   branch). The `cartrip-main` linked worktree and the stale `ux-redesign-v1` / `rev-g-functional` branches
   were removed on 2026-06-26; the old UX redesign is preserved as tags `archive/ux-redesign-v1-wip` +
-  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev CN** (pushed; a **Rev
-  CO** doc/correctness pass is in progress — see §14); verify with `git log origin/main..main`. Pushing to
-  `main` needs explicit per-turn user authorization.
-- Source + **S25 installed = 3.24 (build 135)** (Rev CP, Drive Stress Score depth). Device auto-locks fast; for a
+  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is current/pushed; verify with
+  `git log origin/main..main`. Pushing to `main` needs explicit per-turn user authorization.
+- Source + **S25 installed = 3.27 (build 138)**. Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
-- Unit tests all green (**183 tests**, all pure-JVM). Room schema **v21**: v18 `trips.userIsDrive` (walk
+- Unit tests all green (**187 tests**, all pure-JVM). Room schema **v21**: v18 `trips.userIsDrive` (walk
   override); v19 per-fix GPS accuracy + `gnss_measurements` (lane R&D); v20 `trips.speedingSeverity`
   (magnitude-weighted speeding for Safety); **v21 `trips.drawdownCount`/`drawdownSeverity`** (forced
   slowdowns — feeds the Drive Stress Score).
@@ -466,7 +465,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (183 tests)
+## 7. Test suite (187 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -484,14 +483,15 @@ pure-JVM (no Robolectric/instrumented).
 
 Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (5), `AiInsightsExportTest` (3),
 `EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
-`GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard). Count is
-**183** (`grep -rc '@Test'` across `app/src/test`).
+`GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard),
+`ExportRetentionTest` (4), `PlacesTest` (4). Count is **187** (`grep -rc '@Test'` across `app/src/test`).
 
 Gaps: **no Compose/UI tests, no instrumented tests.** Room migrations: **schema export is now on** (v3.27 —
 `exportSchema=true` + `app/schemas/.../21.json`), so Room validates migrations at compile time and v21+ is a
 captured baseline for future `MigrationTestHelper` tests; retroactive 1→20 step tests aren't feasible (historical
 schemas were never captured — validated by real on-device upgrades instead). See §14.1 CP. Network paths
-(Overpass, Routes, Sheets, GasPrice) and the GnssStatus reading are not unit-tested (verified manually/on-device).
+(Overpass, Routes, Sheets, GasPrice fetch, live Places fetch) and the GnssStatus reading are not unit-tested
+(verified manually/on-device).
 
 ---
 
@@ -1178,8 +1178,15 @@ source** before acting (some Codex notes were stale or already-handled). Verdict
   + a `MigrationTestHelper` androidTest for v21→v22 (both schemas will then exist) — needs an emulator/device
   run. Also open: shared bar/chart scale component (the queued "bar-sizing audit"), Trip Detail reset-to-auto
   override, Past Trips open affordance, a visible **OSM "© OpenStreetMap contributors (ODbL)"** attribution credit.
-- **CQ (P2, gated on owner's Places go/no-go):** Places API (New) prototype behind a feature flag — caching,
-  field masks, cost telemetry, Geocoder fallback (§13.4).
+- **CQ (P2, gated on owner's Places go/no-go):** **SCAFFOLD DONE (v3.27, inert):** `cloud/Places.kt`
+  (Nearby Search New: pure `topPlaceName` parser + `cellKey` cache key, both unit-tested; `nearbyName` fetch
+  with `X-Goog-FieldMask=places.displayName`, ~60 m radius, rank-by-distance; `placeNameCached` caches by
+  ~110 m cell incl. misses) + `cloud/PlacesPrefs` flag **defaulting OFF**. Reuses `RoutesConfig` for the key +
+  X-Android headers. **Not wired into the live naming path and no UI toggle yet** (deliberate — it's a paid,
+  metered API; flag-off = zero cost + zero behaviour change). **To activate (the real CQ rev):** owner enables
+  "Places API (New)" + billing on the Maps key; then add the UI toggle + call `Places.placeNameCached` in
+  `TripViewModel.loadTripLabels`/`GeoNamer` to prefer the POI over the neighbourhood, Geocoder as fallback.
+  NB: a real `org.json` was added to `testImplementation` so JSON parsers are unit-testable (Android's is stubbed).
 - **CR (pre-launch, P1):** commercialization hardening — privacy policy, Data Safety inventory, ~~export
   file retention/disclosure~~ **✅ DONE (v3.27/build 138):** `export/ExportRetention` (pure: age 30d + count
   cap 50, unit-tested) auto-prunes the unencrypted per-trip `.xlsx` files on each export (`TripExcel`), plus
