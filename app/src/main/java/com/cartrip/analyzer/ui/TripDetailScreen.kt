@@ -963,6 +963,15 @@ private fun SafetyFactorsCard(
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Driving", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            // Drive Stress Score (Rev CJ): composite of forced slowdowns, hard events, congestion, etc.
+            StressScore.from(trip)?.let { s ->
+                Text(
+                    "Drive stress: ${s.band} (${s.score})",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = StressScore.color(s.score)
+                )
+            }
             if (eventSummaries.isEmpty()) {
                 Text(
                     "No major braking, acceleration, or turn events detected.",

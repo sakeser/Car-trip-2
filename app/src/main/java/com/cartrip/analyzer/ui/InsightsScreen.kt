@@ -161,6 +161,15 @@ fun InsightsScreen(
                 item { WindowDeltaStrip(averages, prevAverages, window.label) }
             }
 
+            // Drive Stress Score (Rev CJ): average over the window.
+            run {
+                val stresses = windowTrips.mapNotNull { StressScore.from(it) }
+                if (stresses.isNotEmpty()) {
+                    val avg = stresses.map { it.score }.average().roundToInt()
+                    item { StressSummaryRow(avg, stresses.size) }
+                }
+            }
+
             // Fuel & cost — directly below the drive score.
             run {
                 val fuel = FuelInsights.summarize(windowTrips, vehicle)
@@ -325,6 +334,38 @@ private fun WindowSelector(selected: InsightWindow, onSelect: (InsightWindow) ->
                 onClick = { onSelect(w) },
                 label = { Text(w.label) }
             )
+        }
+    }
+}
+
+/** Average Drive Stress Score over the window — a calm/busy read of how demanding the driving has been. */
+@Composable
+private fun StressSummaryRow(avgScore: Int, drives: Int) {
+    val color = StressScore.color(avgScore)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "$avgScore",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Drive stress", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    "${StressScore.band(avgScore)} on average - $drives drives (higher = more demanding)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
