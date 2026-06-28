@@ -1,15 +1,32 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · App version **3.14 (build 125)** · Branch `main`, all pushed · S25 installed 3.14.
-Schema **v20**. **Recent arc (Rev BA–BX, 2026-06-28):** auto-record re-arm-on-motion (BA) + START-side trip
+_Last updated: 2026-06-28 · App version **3.22 (build 133)** · Branch `main`, **all pushed** (origin at
+`ccaff69`) · S25 installed 3.22. Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
+"you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
+auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
+time" → **smoothed $/week spend-rate**; **satellite/aerial map toggle** (shared `MapControls` + `UiPrefs`).
+**Batch 2 (CE–CH):** Driving card shows **all events by default** with tap-to-map; **dynamic replay camera**
+(then **revised in v3.18 to walk-only** — drives keep the whole-route replay, owner feedback); Insights
+**"this window vs previous" delta strip** (re-imagined Health metrics); **walk trip-detail hero** mirrors the
+list. **Batch 3 (CI, schema v21):** **Drawdowns** metric — forced cruise→slow→recover events
+(`analysis/Drawdowns.kt`), DB-replay-validated; `trips.drawdownCount`/`drawdownSeverity`. **Batch 4 (CJ):**
+**Drive Stress Score** (`ui/StressScore.kt`) — composite of drawdowns + hard events + congestion + speeding +
+load, calibrated by DB-replay. **CK–CN:** compact past-trips filter + **list scrollbar affordance**; smarter
+**you-vs-traffic bar sizing** (nice axis, ~80% fill, minute scale); **"Share for AI insights"** export
+(`ui/AiInsightsExport.kt`) — compact markdown summary for ChatGPT/Claude. **Skipped this session:** Places API
+(paid — owner exploring), CM POI naming (depends on Places), CO encrypt+biometric (queued). See
+`REV_HISTORY.md` for per-rev detail, **`ROADMAP_NEW.md`** for the new backlog, **§13** for this session's
+lessons, and the **owner backlog at the top of §9**._
+
+_Prior arc (Rev BA–BX, 2026-06-28): auto-record re-arm-on-motion (BA) + START-side trip
 trim (BB); **magnitude-weighted speeding penalty** for Safety + limit-misread grace (BF) and a backfill (BG);
 **frequency-learned Home (BC) + Work (BH)** for trip names; **Fuel & cost Insights** with spend buckets +
 smoothed $/km (BL/BN); **auto gas price** from Ontario's weekly Toronto average (BP); **walk flagging** in
 trip cards (BD); **cross-trip trouble-spots map** with g-force slider, glyph pins, tap-to-instance detail,
 list cards (BJ/BO/BT/BU/BX); Insights cleanup + you-vs-traffic 30-day headline (BR/BV); **re-analyze-all** (BV);
 Google-blue routes + **single-finger map pan** (BW/BX). **Reverted** the Rev BK GPS battery-throttle (BQ) — it
-degraded walk GPS. See `REV_HISTORY.md` for per-rev detail and the **owner backlog at the top of §9** for
-what's queued next._
+degraded walk GPS._
 
 _Earlier (Rev AL–AZ): hands-free auto-record via the persistent watcher; pothole-cluster + bump-echo fixes._
 **Hands-free auto-record now works** via a persistent "armed" watcher (Rev AO); **Rev AP** fixed the
@@ -338,15 +355,17 @@ Full detail in `REV_HISTORY.md`. Condensed:
 
 ---
 
-## 5. Data model & schema (Room v20)
-<!-- v20 (Rev BF): trips.speedingSeverity (magnitude-weighted speeding exposure for the Safety penalty). -->
+## 5. Data model & schema (Room v21)
+<!-- v20 (Rev BF): trips.speedingSeverity. v21 (Rev CI): trips.drawdownCount + trips.drawdownSeverity. -->
 
 
 Tables: `trips`, `locations`, `motions`, `analysis_points`, `drive_events`, `cached_ways`,
 `cached_tiles`, `gnss_samples`, **`gnss_measurements`** (raw per-satellite GNSS, lane R&D). Migrations
-`1→19` are all present in `AppDatabase.kt` and verified on-device. **v18** = `trips.userIsDrive`
+`1→21` are all present in `AppDatabase.kt` and verified on-device. **v18** = `trips.userIsDrive`
 (nullable walk/non-drive override); **v19** = `locations.bearingAccuracy/speedAccuracy/verticalAccuracy`
-+ the `gnss_measurements` table.
++ the `gnss_measurements` table; **v20** = `trips.speedingSeverity`; **v21 (Rev CI)** =
+`trips.drawdownCount` + `trips.drawdownSeverity` (forced cruise→slow→recover events — feeds the Drive
+Stress Score; computed in `TripFinalizer` from the limit-annotated track, recomputed on re-analyze).
 
 - **Raw retention:** `locations`/`motions`/`gnss_samples`/`gnss_measurements` for completed trips are
   purged after **30 days** (`RAW_SENSOR_RETENTION_MS`). Re-analysis only works while raw data survives.
@@ -523,7 +542,14 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 ## 9. Roadmap / next steps (prioritized)
 
 > ## ⭐ OWNER BACKLOG (2026-06-28) — read this first
-> Future enhancements the owner has asked for, **not yet built**. Grouped by area; each is enough to start cold.
+> Future enhancements the owner has asked for. Grouped by area; each is enough to start cold.
+>
+> **⚠️ STATUS (Rev BY–CN, v3.22):** much of this list is now **DONE** — Tier-1 quick wins, consolidate
+> Driving+Events, dynamic replay (walk-only), re-presented Health metrics, walk handling, Drawdowns, Drive
+> Stress Score, past-trips compaction + scroll affordance, you-vs-traffic bar sizing, and an AI-insights
+> export. See **§13.3 for the per-item done/queued/blocked status** and `ROADMAP_NEW.md` for the owner's
+> newest items (POI naming CM — blocked on Places; encrypt+biometric CO; bar-sizing audit for the rest of
+> the app). The items below are kept for context; cross-reference §13.3 before starting any of them.
 >
 > ### UI / UX
 > - **Consolidate Driving + Events tabs.** Fold the "All events" tab (currently collapsed-by-default) INTO the
@@ -887,6 +913,227 @@ Signals: accelerometer activity (in-vehicle vs walking), GPS speed, car-BT ACL c
 
 ---
 
+## 12. Commercialization assessment & roadmap (Play Store, for-profit)
+
+Framing (owner advisor, 2026-06-28): treat this as a **scalable driving-intelligence platform**, not "an app" —
+design so 1 user and 100k users cost ~the same *per active user*. The good news below: the app already
+embodies most of the cost-critical architecture; the gaps are the **commercial/operational/compliance** layer.
+
+### 12.1 Verdict
+**Architecturally ~70% ready, and it's the expensive 70%.** The hard, retrofit-costly parts (offline-first
+processing, caching, the raw→summary data model, reliability, privacy-by-architecture) are **done**. What's
+missing is productization: accounts + billing, Play compliance (esp. background location), battery, polish,
+and the premium analytics that justify a subscription. None of those require re-architecting the engine.
+
+### 12.2 Scorecard vs the 14 commercialization principles
+| # | Principle | Status | Evidence / gap |
+|---|---|---|---|
+| 1 | Offline-first | ✅ Strong | All analysis on-device (`TripAnalyzer`, `FusedEventDetector`, `MotionFusion`, `FuelEstimator`, `TripScores`, `GeoNamer` on-device, `EventHotspots`, `HomeDetector`). Cloud only: cached OSM limits, per-trip Routes ETA, daily gas price, optional Sheets. |
+| 2 | Cache everything | ✅ Strong | Speed-limit `cached_ways`/`cached_tiles` (30-day TTL), geocode cell cache (`cartrip_geocache`), daily-throttled gas price. Extend to Places/elevation (§11.4). |
+| 3 | Design around API cost | ✅ Mostly | No continuous-while-driving calls; ETA + limits batched post-trip + cached. Gap: Routes ETA is 1 paid call/trip (scales w/ trips → cache/gate); Places not yet. |
+| 4 | Battery as a feature | ⚠️ Gap | Recording uses GPS + 50 Hz sensors (needed); persistent auto-record FGS; the idle GPS-throttle was **reverted** (Rev BQ). No Android **Activity Recognition**, no adaptive sampling. Owner-flagged "drains too fast." Highest pre-launch eng item. |
+| 5 | Unreliable connectivity | ✅ Strong | Fully offline-capable; all network paths fail-soft (record never blocks on network); history is local. |
+| 6 | Modular pipeline | ✅ Good | Staged record→analyze→persist→enrich→present with pure, unit-tested components. |
+| 7 | Lean cloud | ✅ by default / ⚠️ for product | Currently the only "cloud" is the user's *own* Google Sheet. No server storing GPS. Good — but the Sheets-per-user hack must be replaced by a real account/sub backend for a product. |
+| 8 | Subscriptions | ❌ Not built | No Play Billing, no tiers/gating. |
+| 9 | Privacy as a selling point | ✅ Arch / ❌ Formal | `allowBackup=false` (Rev W), local-first, no sale. But **no privacy policy, no Play Data Safety form**. |
+| 10 | AI cost control | ✅ Foundation | The app already emits compact metrics/events — ideal for sending tiny structured summaries to an LLM (not raw logs). No AI yet. |
+| 11 | Plan for scale | ✅ Mostly | Offline-first ⇒ near-zero marginal compute/storage per user; bounded API cost via cache. Sheets approach is the non-scaling piece. |
+| 12 | Polish | ⚠️ Partial | Lots of Compose UI + dark mode + charts/maps done; onboarding, empty states, permission rationale, loading states need a pass. |
+| 13 | Optimize data model | ✅ Strong | Already: 30-day raw retention (`RAW_SENSOR_RETENTION_MS`) → long-term summaries. Exactly the recommended model; could add user-opt-in extended retention. |
+| 14 | Extensible | ✅ Good | Modular pure components + auto-record abstraction → OBD-II / Android Auto / Wear / fleet are additive. |
+
+### 12.3 Play Store compliance readiness
+| Area | Status | Notes |
+|---|---|---|
+| **Performance** | ⚠️ | Trips start fast, UI smooth, schema stable. **Battery** is the weak point (§12.2 #4). |
+| **Reliability** | ✅ Strong | Handles GPS loss (`gpsGapCount`), reboot (`BootReceiver`), permission revocation (caught), app updates (migrations 1→20), service-kill (PARTIAL/`APP_RECOVERY`). See the failure-mode matrix (§3). |
+| **Privacy & Compliance** | ❌ Gaps | Need: a published **privacy policy** URL; the Play **Data Safety** form; **location-permission rationale** UX (partly there); **subscription policy** compliance. |
+| **Business Operations** | ❌ Gaps | Need: Play **Billing** + subscription management; **crash reporting** (Crashlytics/Sentry); analytics; a feedback channel; staged rollout; a bug/feature triage process. |
+
+**⚠️ The single biggest compliance risk — background location.** Auto-record relies on
+`ACCESS_BACKGROUND_LOCATION` + a persistent `location` foreground service. Google Play **manually reviews**
+background-location use: it requires a *prominent in-app disclosure*, a compelling justification, and often a
+**demo video**, and rejects many submissions. Plan: (a) make auto-record/background **opt-in** with an
+explicit disclosure screen; (b) ship a **foreground-only mode** (record only while the app/Activity is
+visible) as the default-compliant path so the app is approvable even if background review stalls; (c) prepare
+the justification + video. Also justify the **FGS types** (`location`, `specialUse` — declared Rev AQ) per
+Android 14 requirements.
+
+### 12.4 Cost model & scale
+Per-active-user marginal cost is already **low and bounded**: offline processing/storage ≈ free; map APIs are
+cached so repeat-route drivers cost ≈ $0, and only new-area driving spends calls. The two linear-with-trips
+costs to watch: the **per-trip Routes ETA** and any future **Places** lookups — cache aggressively, batch
+post-trip, and gate the heavy/premium analytics behind the paid tier. A real backend (below) adds a small
+fixed per-user cost (auth + a few KB of summary sync), not per-drive cost — consistent with the "1 vs 100k"
+goal. Conclusion: the architecture supports profitable scale; the work is wiring the commercial layer without
+breaking offline-first.
+
+### 12.5 Phased roadmap to a profitable launch
+- **Phase 0 — Foundation (DONE):** offline-first, caching, raw→summary data model, reliability, privacy-by-arch.
+- **Phase 1 — Pre-launch hardening:** safe **battery** optimization (Activity Recognition–gated sampling, sensors off when parked — the *safe* version of the reverted throttle); **onboarding + empty states + permission rationale**; **crash reporting + analytics**; remove dev-only bits (hide "Load sample data", de-emphasize Sheets sync — already in §9); the §9 Tier-1 quick wins.
+- **Phase 2 — Compliance:** **privacy policy** + **Data Safety** form; **background-location** disclosure + foreground-only fallback (§12.3); FGS justification; Play Console listing/assets.
+- **Phase 3 — Monetization infra:** real **account system** + **subscription/backup backend** (e.g. Firebase Auth + Firestore for account/subscription-status/opt-in summary backup, or a lean serverless API) **replacing** the Google-Sheets sync; **Play Billing** subscriptions; free vs premium **gating**.
+- **Phase 4 — Premium value (the hook):** the **driving-intelligence dashboard** — drawdowns (§11.2), **drive-stress score** (§11.1), Places **destination analytics** (§11.4), cohort/vehicle **comparisons** (needs backend aggregates), **AI coaching** from compact summaries (§ principle 10), long-term trends, exports.
+- **Phase 5 — Launch ops:** staged rollout, feedback loop, crash triage, iterate.
+
+### 12.6 Positioning & premium mapping
+Niche: not navigation / insurance / dashcam, but a **personal driving-intelligence platform**. The example
+premium insights map onto existing or near-term work:
+- "3 intersections = 42% of your hard braking" → **trouble-spots** (already built).
+- "You waste ~$23/month accelerating harder than necessary" → **drawdowns** + fuel model (§11.2 + `FuelEstimator`).
+- "Leave 12 min earlier and your commute is faster" → Routes traffic-by-time + home/work + departure patterns.
+- "Top 15% fuel economy for your vehicle" / "31 kg CO₂ saved" → **cohort aggregates** (needs the backend) + fuel model.
+- "18% smoother over 3 months" → score trends (already have score history).
+Suggested free vs premium split is in the advisor notes (free = recording + basic score + heatmap + 30-day
+history; premium $3.99–4.99/mo = AI coaching, lifetime history, trends, comparisons, fuel analytics, exports,
+cloud backup). Principle: premium = **deeper insight**, never gating basic recording.
+
+---
+
+## 13. Session log Rev BY–CN (2026-06-28) + lessons for the next agent
+
+This session executed a **comprehensive batch revision plan** against the §9 backlog. Everything below is
+built, unit-tested, installed on the S25, committed, and **pushed** to `origin/main` (`ccaff69`).
+
+### 13.1 What shipped (file map)
+| Rev | Version | Area | Key files |
+|---|---|---|---|
+| BY–CD | 3.15 | Tier-1 UI quick wins | `ui/TripDetailScreen.kt` (EtaCompare you-line), `ui/HomeScreen.kt` (Options sheet + auto-record quick toggle), `ui/TripListScreen.kt` (recency filter), `ui/FuelInsights.kt` (weekly spend-rate), `ui/MapControls.kt` (new, satellite toggle) + `ui/UiPrefs.kt` |
+| CE–CH | 3.17 | Consolidation & replay | `ui/TripDetailScreen.kt` (events-by-default, walk hero, replay wiring), `ui/TripMap.kt` (replay follow), `ui/InsightsScreen.kt` (delta strip) |
+| (CF fix) | 3.18 | Replay follow → walk-only | `ui/TripDetailScreen.kt`, `ui/TripMap.kt` |
+| CI | 3.19 | **Drawdowns** (schema v21) | `analysis/Drawdowns.kt` (new), `data/Entities.kt`, `data/AppDatabase.kt`, `data/TripFinalizer.kt` |
+| CJ | 3.20 | **Drive Stress Score** | `ui/StressScore.kt` (new), surfaced in `ui/TripDetailScreen.kt` + `ui/InsightsScreen.kt` |
+| CK–CN | 3.22 | Filter compaction + scrollbar, bar sizing, **AI export** | `ui/TripListScreen.kt`, `ui/TripDetailScreen.kt`, `ui/AiInsightsExport.kt` (new), `ui/InsightsScreen.kt` |
+
+New tests: `DrawdownsTest`, `StressScoreTest`, `AiInsightsExportTest`; `FuelInsightsTest` updated for the
+weekly-spend series. All green.
+
+### 13.2 Lessons learned this session (hard-won — read before you build)
+- **The build pipe hides Gradle failures.** `gradlew ... | tail` returns `tail`'s exit code (0) even when the
+  build FAILED. **Never trust the exit-code/notification — grep the output for `BUILD SUCCESSFUL`/`BUILD
+  FAILED`.** (Caught a `const val` forward-reference error that the "exit 0" notification masked.)
+- **`const val` cannot forward-reference another `const val`** declared later in the same object — Kotlin
+  evaluates them in source order (`WEEK_MS = 7 * DAY_MS` failed because `DAY_MS` was below it). Inline the
+  literal or order them.
+- **DB-replay is the right way to validate a new detector/score before shipping** and it cross-checks the
+  Kotlin: porting `Drawdowns` to Python and running it on the pulled DB gave counts that **matched the
+  on-device finalizer exactly** after re-analyze (trip 1180 = 17/83771). Always: pull WAL-inclusive DB →
+  replay in Python → **delete the DB** (personal location data) → ship.
+- **`StressScore`/`Drawdowns` are dormant on the owner's current data in some views** — e.g. the Insights
+  "vs previous window" strip and the weekly spend-rate need ≥2 periods/weeks, and all 42 trips are within ~1
+  week / 435 km. The logic is correct; it "grows with data." Don't mistake an empty card for a bug.
+- **The trip-detail map swallows vertical drags** (page scroll is paused while a finger is on the map —
+  `mapTouched`). To script-scroll the page, drag on a **non-map** region (hero/cards). Tapping trip rows is
+  fiddly because selecting a row **adds a detail line and shifts the list** — the "open" tap then misses.
+- **Respect the owner's live phone.** Mid-session the screen showed the owner's **personal Messages**; a
+  polling screenshot loop captured it. Lesson: before any `screencap`, check the foreground app
+  (`dumpsys window | grep mCurrentFocus`); if it's not our app/launcher, **do not screenshot**, delete any
+  that captured personal content, and defer device verification. Install silently (`-r`) without launching.
+- **The map-marker filter chips are NOT the event list filter.** `visibleEvents` (chip-gated) is for map
+  markers only; the Driving "All events" list must use the full `shownEvents` (fixed in CE).
+- **Replay camera UX:** following + speed-zoom reads poorly on long drives but well on walks — gate camera
+  behaviour on `TripKind.isLikelyNonDrive`. For smooth following use a per-frame `camera.move`
+  (`withFrameNanos`), not a sampled `animate` loop (which stutters: animate-duration + delay per step).
+- **Mojibake trap still applies** (§1): keep new source ASCII; the UI delta arrows were done as `+N`/`-N`
+  text, not Unicode triangles.
+
+### 13.3 Detailed backlog status (every item — done / queued / blocked)
+**DONE this session** (was in §9 / §11): you-vs-traffic white-edge bug; hide sample-data + de-emphasize
+Sheets; Home auto-record toggle; past-trips recency filter; fuel spend-rate; satellite map toggle;
+consolidate Driving+Events (events default + event→map); dynamic replay (walk-only); re-presented "Health
+metrics" as the delta strip; walk trip-detail handling; **Drawdowns** (§11.2); **Drive Stress Score**
+(§11.1, first cut); past-trips compaction + **scroll affordance**; you-vs-traffic **bar sizing**; **AI
+export** (novel — principle 10).
+
+**QUEUED / improved next steps:**
+- **Bar-sizing audit (rest of the app).** CL fixed you-vs-traffic (nice axis, ~80% fill, minute scale).
+  Apply the same judgment to `SpeedingShareBar`, `PeakLimitBar` (`ui/TripDetailScreen.kt`), the Insights
+  `TimeSeriesChart`/`DivergingBarChart` (`ui/Charts.kt`), and `DurationBar` (`ui/TripListScreen.kt`): pick a
+  "nice" max with headroom, enforce a **minimum** visible bar, label the scale, avoid edge-to-edge and
+  near-zero degenerate lengths.
+- **CM — POI endpoint naming.** See §13.4. **Blocked on the owner's Places decision.** The free on-device
+  `Geocoder` (`ui/GeoNamer.kt`) rarely returns business names; a confidence-gated `featureName` best-effort
+  is possible but won't reliably catch "IKEA/Tim Hortons." Places API (New) is the reliable path.
+- **CO — encrypt-at-rest + biometric.** Highest-value privacy item, highest-risk. Plan: **SQLCipher** for
+  the Room DB (key in the Android **Keystore**, unlocked via **BiometricPrompt**), a one-time migration of
+  the existing plaintext `cartrip.db` to an encrypted copy (export→re-import or `sqlcipher_export`), and a
+  graceful fallback (device without biometrics → device-credential). Its own focused, carefully-verified rev;
+  pairs with the commercialization "secure the data" item. **Do not rush at the end of a session.**
+- **Drive Stress Score v2.** First cut is calibrated on the owner only. Refinements: add **speed-variance**
+  and **no-rest-load** factors (need per-point data → either a schema aggregate like drawdowns, or compute in
+  a new analyzer pass), an Insights **trend** (not just the average card), and per-user re-calibration as data
+  grows. Re-validate by DB-replay.
+- **Drawdowns v2.** Use the **speed limit** when present (cruise = ≥70% of limit) to better separate forced
+  slowdowns from normal arterial light-stops; consider a `DRAWDOWN` `EventType` so they map/cluster in
+  trouble-spots. Needs re-analyze.
+- **Still open from earlier §9:** safe battery optimization (Activity-Recognition-gated; the naive throttle
+  was reverted Rev BQ); two-stage auto-record trigger (BT=arm, charging=start); user-settable Home/Work;
+  find-my-car (needs a drive test + Places for venue confirmation); rough-stretch mapping (O9); lane-detection
+  offline algorithm.
+
+### 13.4 Places API (New) — cost analysis for this owner (CM enabler)
+**Why CM needs it:** the free on-device `Geocoder` returns neighbourhoods/streets, not reliable business
+names. **Places API (New) "Nearby Search" (rank-by-distance)** at each trip endpoint returns the actual POI
+("IKEA", "Tim Hortons") with types + distance → enables "Home → IKEA → Home", find-my-car venue confirmation,
+and destination analytics.
+
+**Cost estimate for a user like the owner (~6 drives/day ≈ ~180 trips/month):**
+- Worst case = 2 endpoint lookups/trip = **~360 calls/month**.
+- **With mandatory caching** (extend `GeoNamer`'s ~110 m cell cache to store the resolved place per cell):
+  home/work/regular stores resolve from cache after the first visit, so only **new/rare destinations** cost a
+  call — realistically **~40–100 calls/month**.
+- Nearby Search (New), "Pro" field tier (name/location/types) ≈ **~$0.032/call** → **~$1.30–$3.20/month** at
+  list price for this volume.
+- **Google's free monthly per-SKU allowance** (the universal $200/mo credit was replaced in 2025 by per-SKU
+  free tiers) almost certainly covers a single personal user → **effectively $0/month** in practice.
+- **Scaling caveat:** cost grows ~linearly with *new* endpoints across the user base. Keep caching aggressive,
+  query **endpoints only** (+ loop "via" points), cap per-refresh with the existing `Budget` pattern, and
+  **gate destination analytics behind the premium tier**. (⚠️ Verify current pricing + free caps in the Google
+  Cloud console — Maps pricing changes; treat the numbers above as an order-of-magnitude.)
+- **Setup when the owner is ready:** enable *Places API (New)* + billing on the Cloud project, restrict the
+  key (Android app + API restriction), add it to `local.properties` (gitignored, like `MAPS_API_KEY`), then a
+  new `cloud/Places.kt` (sibling of `GasPrice.kt`) + extend the `GeoNamer` cell cache (§11.4).
+
+### 13.5 Commercialization & Google Play launch roadmap (premium-tier plan)
+Builds on §12. Goal: a **paid, scalable driving-intelligence app** on Play with a free tier + subscription.
+The engine is ~70% there (§12.1); the work is the commercial/compliance/polish layer.
+
+**Phase 1 — Pre-launch hardening (engineering):**
+- **Battery (highest priority, §12.2 #4):** Activity-Recognition-gated sampling, sensors off when parked, the
+  *safe* version of the reverted idle GPS-throttle. Owner-flagged "drains too fast."
+- **Encrypt-at-rest + biometric (CO, §13.3)** — privacy is the headline selling point; ship it before launch.
+- Onboarding, empty states, permission rationale, loading states; crash reporting (Crashlytics/Sentry) +
+  lightweight analytics; finish the bar-sizing/polish audit.
+- **AI insights (CN) → premium "AI coaching"**: the share-export already produces the compact summary; a
+  premium tier can call an LLM directly (send the same tiny structured summary, never raw logs — principle 10).
+
+**Phase 2 — Compliance (the gating risk):**
+- **Background location** is the #1 Play rejection risk (§12.3): ship a **foreground-only default** mode so
+  the app is approvable, make auto-record/background **opt-in with a prominent disclosure screen**, prepare
+  the justification + demo video; justify the FGS types (`location`, `specialUse`).
+- Published **privacy policy** URL; Play **Data Safety** form; subscription-policy compliance.
+
+**Phase 3 — Monetization infra:**
+- Replace the **Google-Sheets sync hack** with a real **account + backend** (e.g. Firebase Auth + Firestore,
+  or a lean serverless API) storing **only compact summaries** (not raw GPS) for cross-device + cohort
+  features. **Play Billing** subscriptions; free-vs-premium **gating**.
+
+**Phase 4 — Premium value (the hook):** the driving-intelligence dashboard — Drawdowns + **Drive Stress
+Score** trends (now built), Places **destination analytics** (needs CM), **cohort/vehicle comparisons** (needs
+backend aggregates), **AI coaching** from the CN summary, lifetime history, exports.
+
+**Suggested tiers (from advisor notes, §12.6):** *Free* = recording + basic Safety/Comfort/Pace + heatmap +
+30-day history. *Premium ($3.99–4.99/mo)* = AI coaching, lifetime history, score/stress trends, comparisons,
+fuel + destination analytics, exports, cloud backup. **Principle: premium = deeper insight; never gate basic
+recording.** Per-active-user marginal cost stays low/bounded because processing is offline and map/Places
+calls are cached + endpoint-only (§12.4).
+
+---
+
 _Questions a fresh agent should be able to answer from this doc: how to build (§2.1), where the APK
 lands (§2.1), how to read the real DB (§2.4), what every detector threshold means (§6), what's broken
-or capped (§8), what to do next + the owner backlog (§9), and how to build the marquee features (§11)._
+or capped (§8), what to do next + the owner backlog (§9), how to build the marquee features (§11), the
+commercialization/Play-Store roadmap (§12), and **what shipped + the hard-won lessons of the latest
+session, the detailed backlog status, the Places cost analysis, and the launch roadmap (§13)**.
+Also see `ROADMAP_NEW.md` for the owner's newest item list with per-item assessment._

@@ -3,33 +3,37 @@
 New items from the owner, assessed + ordered by value × (1/risk). Worked top-down ("clear the log,
 easiest/least-risk first"). Rev letters continue from CJ.
 
-## Tier A — easy, low risk (UI polish) — DO FIRST
-- **CK — Past-trips filter compaction + scroll affordance.** Make the recency chips shorter/smaller font,
-  shift the whole screen up (less white space). Add a visible scrollbar/affordance on the trip list so the
-  user knows there's more below. Files: `ui/TripListScreen.kt`.
-- **CL — Smart bar sizing across the app.** You-vs-traffic bar shouldn't always run to the screen edge:
-  auto-size to ~80% with a sensible **minimum**, and show the scale better. Audit the other bars
-  (speeding share, peak-vs-limit, fuel/insights charts, duration bars) for intelligent sizing that uses
-  meter space well and avoids extreme/edge-case lengths. Files: `ui/TripDetailScreen.kt` (EtaCompare,
-  SpeedingShareBar, PeakLimitBar), `ui/Charts.kt`, `ui/TripListScreen.kt` (DurationBar).
+## Tier A — easy, low risk (UI polish)
+- **CK — Past-trips filter compaction + scroll affordance. ✅ DONE (v3.22).** Custom compact chips + an
+  always-visible list scrollbar thumb. `ui/TripListScreen.kt`.
+- **CL — Smart bar sizing. ✅ PARTIAL (v3.22).** You-vs-traffic now scales to a nice round-minute axis
+  (~80% fill, minute scale). **Still TODO:** apply the same to `SpeedingShareBar`, `PeakLimitBar`
+  (`ui/TripDetailScreen.kt`), `ui/Charts.kt` (`TimeSeriesChart`/`DivergingBarChart`), and `DurationBar`
+  (`ui/TripListScreen.kt`) — nice max + headroom + **minimum** bar + scale labels, no edge-to-edge / near-zero.
+- **CN — AI-readable export + share. ✅ DONE (v3.22).** `ui/AiInsightsExport.kt` builds a compact markdown
+  summary (no raw GPS) shared via the Insights "Share for AI insights" button.
 
 ## Tier B — medium (analysis / value), low–medium risk
-- **CM — POI-aware endpoint naming (free tier).** Use the on-device `Geocoder`'s feature/premises name to
-  tag obvious destinations ("Home → IKEA → Tim Hortons → Home") when confidence is high; fall back to the
-  neighbourhood when not. Confidence-gated: pick the most specific label only when confident, else generic.
-  This is a free approximation of the (skipped, paid) Places API — extend `ui/GeoNamer.kt`. NB: Android
-  Geocoder POI quality is uneven; treat as best-effort with a confidence gate. Places API (New) remains the
-  high-accuracy upgrade if/when billing is enabled.
-- **CN — AI-readable export + share ("ask an AI about your driving").** Generate a compact, structured
-  (JSON or markdown) summary of trips/metrics/trouble-spots/stress that the user can share into
-  ChatGPT/Claude for generic insights. Builds on the existing export. Innovative, low backend cost (the app
-  already emits compact metrics — principle 10). Add a "Share for AI insights" action + a copy-to-clipboard.
+- **CM — POI-aware endpoint naming. ⏸ PAUSED — owner exploring the paid Google option.** The free on-device
+  `Geocoder` rarely returns business names ("IKEA"), so a free version is best-effort only. The reliable path
+  is **Places API (New)**. **Cost for a user like the owner: ~$0–3/month** (likely $0 within Google's free
+  per-SKU allowance) with endpoint-only queries + aggressive cell caching — full analysis in **HANDOFF §13.4**.
+  When enabled: new `cloud/Places.kt` + extend the `GeoNamer` cell cache (HANDOFF §11.4).
 
 ## Tier C — larger, higher risk (do deliberately, verify carefully)
-- **CO — Encrypt-at-rest + biometric lock.** SQLCipher-encrypt the local DB (location history is sensitive)
-  and gate app access behind biometric (BiometricPrompt). Needs a one-time encrypted-DB migration of the
-  existing plaintext DB, a key in the Android Keystore, and a graceful fallback. Pairs with the
-  commercialization "secure the data" item. Higher risk (DB layer + key management) — its own focused rev.
+- **CO — Encrypt-at-rest + biometric lock. ⏸ PAUSED — queued for a focused rev.** SQLCipher-encrypt the
+  local DB (location history is sensitive) and gate app access behind BiometricPrompt. Needs a one-time
+  encrypted-DB migration of the existing plaintext `cartrip.db`, a key in the Android Keystore, and a graceful
+  fallback (device-credential when no biometrics). Pairs with the commercialization "secure the data" item and
+  is a **pre-launch** privacy headline. Higher risk (DB layer + key management) — full plan in **HANDOFF
+  §13.3 / §13.5**. Do not rush; verify the migration on-device.
+
+## Commercialization / Play Store launch
+Detailed phased roadmap + premium tiers in **HANDOFF §12 and §13.5**: pre-launch hardening (battery, CO
+encryption, polish, AI coaching from the CN export), compliance (background-location disclosure +
+foreground-only default, privacy policy, Data Safety), monetization infra (replace Sheets with a real
+account/backend storing only compact summaries; Play Billing), and the premium dashboard (stress/drawdown
+trends — built; Places destination analytics; cohort comparisons; AI coaching).
 
 ## Cross-cutting principle (owner): always look for novel, innovative ways to present and add value/analysis.
 Examples to fold in opportunistically: AI coaching from the CN export; stress/drawdown trends over time;
