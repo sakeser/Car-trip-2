@@ -1,9 +1,17 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-26 · App version **2.90 (build 101)** · Branch `main` (Rev AL–AZ; AY pushed, AZ local).
-S25 installed **2.90** (Rev AZ). Field test 2026-06-26 confirmed auto-on works end-to-end; event audit led to
-Rev AY (bump-echo veto for high-conf longitudinals) + Rev AZ (cluster potholes separately so bumps can't
-bridge maneuvers)._
+_Last updated: 2026-06-28 · App version **3.14 (build 125)** · Branch `main`, all pushed · S25 installed 3.14.
+Schema **v20**. **Recent arc (Rev BA–BX, 2026-06-28):** auto-record re-arm-on-motion (BA) + START-side trip
+trim (BB); **magnitude-weighted speeding penalty** for Safety + limit-misread grace (BF) and a backfill (BG);
+**frequency-learned Home (BC) + Work (BH)** for trip names; **Fuel & cost Insights** with spend buckets +
+smoothed $/km (BL/BN); **auto gas price** from Ontario's weekly Toronto average (BP); **walk flagging** in
+trip cards (BD); **cross-trip trouble-spots map** with g-force slider, glyph pins, tap-to-instance detail,
+list cards (BJ/BO/BT/BU/BX); Insights cleanup + you-vs-traffic 30-day headline (BR/BV); **re-analyze-all** (BV);
+Google-blue routes + **single-finger map pan** (BW/BX). **Reverted** the Rev BK GPS battery-throttle (BQ) — it
+degraded walk GPS. See `REV_HISTORY.md` for per-rev detail and the **owner backlog at the top of §9** for
+what's queued next._
+
+_Earlier (Rev AL–AZ): hands-free auto-record via the persistent watcher; pothole-cluster + bump-echo fixes._
 **Hands-free auto-record now works** via a persistent "armed" watcher (Rev AO); **Rev AP** fixed the
 charger-trigger (stale-sticky→broadcast-edge); **Rev AQ** fixed a background crash — a `location` FGS started
 from the background on Android 14 needs **`ACCESS_BACKGROUND_LOCATION` ("Allow all the time")**, which the
@@ -31,13 +39,15 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
   `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev AT** (pushed); verify
   with `git log origin/main..main` (should be empty). Pushing to `main` needs explicit per-turn user
   authorization.
-- Installed on the Samsung **S25 (SM_S931W)** as **2.84/95** (Rev AT). Device auto-locks fast; for a
+- Installed on the Samsung **S25 (SM_S931W)** as **3.14 (build 125)**. Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
-- **95 unit tests**, all green. Room schema **v19** (unchanged in Rev AP): v18 added the walk/non-drive override
-  (`trips.userIsDrive`, nullable); v19 added per-fix GPS accuracy estimates (`locations.bearing/speed/
-  verticalAccuracy`) + a raw **`gnss_measurements`** table (carrier phase + Doppler, toggle-gated) for
-  the lane-detection R&D.
+- Unit tests all green (record/analysis/ui + cloud `SpeedingSummaryTest`, `GasPriceTest`, `FuelInsightsTest`,
+  etc.). Room schema **v20**: v18 `trips.userIsDrive` (walk override); v19 per-fix GPS accuracy +
+  `gnss_measurements` (lane R&D); **v20 `trips.speedingSeverity`** (magnitude-weighted speeding for Safety).
+- **Process note (learned the hard way):** bump `versionName`/`versionCode` in `app/build.gradle.kts`
+  **before** the final `assembleDebug`, or the installed APK keeps the *old* version label (happened twice).
+  Verify with `dumpsys package ... | grep versionName` after install.
 - **Recent arc:** Rev K–M = field-test calibration; **Rev N** = fuel/cost; **Rev O** = geocoded names;
   **Rev P–T** = trip-detail/past-trips **UI overhaul** + polish + hybrid fuel; **Rev U** =
   **auto-recording trigger first cut** (charging/Bluetooth → provisional record + motion-confirm +
@@ -147,8 +157,8 @@ Pipeline: **record → analyze (offline) → persist → enrich → present.**
 | Auto-record | **`record/AutoRecordWatchService.kt`** = persistent "armed" FGS, the reliable hands-free trigger (see note below); `record/AutoRecordController.kt` (decision dispatch → arm/stop), `record/AutoRecordPolicy.kt` (pure trigger logic, unit-tested), `record/AutoRecordPrefs.kt`, `record/AutoRecordLog.kt` (Diagnostics decision log), `record/BootReceiver.kt` (re-arm after reboot), `record/CompanionCarManager.kt` + `record/CarPresenceService.kt` (CompanionDeviceManager — secondary/unreliable for classic-BT cars), `record/GnssLoggingPrefs.kt` (raw-GNSS toggle). Dead: `record/PowerConnectionReceiver.kt` / `record/CarBluetoothReceiver.kt` (manifest registration removed in Rev AO) |
 | Analysis | `analysis/TripAnalyzer.kt` (Kalman/RTS speed+accel, events, metrics), `analysis/MotionFusion.kt` (potholes/rough-road/harsh-stops), `analysis/FusedEventDetector.kt` (magnitude-first sensor detector), `analysis/FuelEstimator.kt` (pure fuel/cost model), `analysis/GnssQuality.kt`, `analysis/SpeedTier.kt` |
 | Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema **v20** + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
-| Cloud | `cloud/SpeedLimits.kt` (OSM/Overpass + tile cache), `cloud/Tiles.kt`, `cloud/RoutesClient.kt` (Google Routes ETA), `cloud/TripSync.kt`/`SheetsClient.kt`/`GoogleAuth.kt` (Sheets) |
-| UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/TripKind.kt` (walk/non-drive guard), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref), `ui/Components.kt` (shared bits + Options sheet) |
+| Cloud | `cloud/SpeedLimits.kt` (OSM/Overpass + tile cache + pure `speedingSummary` w/ magnitude-weighted severity + limit-drop grace), `cloud/Tiles.kt`, `cloud/RoutesClient.kt` (Google Routes ETA), `cloud/GasPrice.kt` (auto fuel price from Ontario weekly Toronto CSV), `cloud/TripSync.kt`/`SheetsClient.kt`/`GoogleAuth.kt` (Sheets) |
+| UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/TripKind.kt` (walk/non-drive guard), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref + event-g threshold), `ui/Components.kt` (shared bits + Options sheet), `ui/HomeDetector.kt` (frequency-learned home/work), `ui/EventHotspots.kt` (cross-trip recurring-event clustering), `ui/TroubleSpotsMap.kt` (hotspot map + tap-to-instance sheet), `ui/FuelInsights.kt` (fuel history/spend/$-per-km), `ui/TripHeatMap.kt` (dormant route heatmap) |
 
 Speed/accel are estimated with a **constant-acceleration Kalman filter + RTS smoother** (offline,
 zero-lag) with ZUPT at stops. The GPS detector drives scoring; the sensor-fused detector is
@@ -512,6 +522,63 @@ GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ## 9. Roadmap / next steps (prioritized)
 
+> ## ⭐ OWNER BACKLOG (2026-06-28) — read this first
+> Future enhancements the owner has asked for, **not yet built**. Grouped by area; each is enough to start cold.
+>
+> ### UI / UX
+> - **Consolidate Driving + Events tabs.** Fold the "All events" tab (currently collapsed-by-default) INTO the
+>   Driving tab so events are shown **by default**. Each event in the Driving tab should **hyperlink to the
+>   map**, scrolling to + zooming the map on that event (the trip-detail map already supports `focusKey` +
+>   `onEventClick=jumpToEvent` → reuse that). Goal: one place, events visible, every event tap → map at the
+>   right zoom. Files: `ui/TripDetailScreen.kt` (Driving card + the events list + the map `focusKey` plumbing).
+> - **Dynamic replay zoom/pan.** During replay, zoom/pan to suit the moment — zoom **out** on long highway
+>   stretches (fast, sparse), zoom **in** for the slow "last mile" so detail shows. Concept; tune from speed.
+>   Files: `ui/TripMap.kt` replay camera (currently fixed bounds + a focus/reset key).
+> - **Satellite/aerial overlay toggle** on the maps (`MapType.SATELLITE`/`HYBRID` via a small toggle).
+>   `MapProperties(mapType=…)` is already how `TripMap`/`TripHeatMap`/`TroubleSpotsMap` set type.
+> - **"Auto-record on" toggle on the Home screen** (in addition to the Auto-record screen) for quick access
+>   (it costs battery, so the owner wants to flip it easily). Pref: `AutoRecordPrefs.enabled`.
+> - **Hide "Load sample data" from the UI** (enough real data now) — keep `SampleData.kt` code, just remove the
+>   front-end entry. **Shrink/move the Google-Sheets "Sync" button** (de-emphasize; it doesn't need prominence).
+> - **Re-present the removed "Health metrics"** in a better form (Rev BR removed the sparkline grid) — e.g. a
+>   compact "this window vs previous" delta strip, or just the 2–3 metrics that matter.
+>
+> ### Analytics / scoring (high owner interest)
+> - **"Drawdowns" metric (unnecessary braking).** Detect when speed drops **>50%** while near the limit (esp.
+>   highway: cruising ~100 → forced down to ~50 or a stop) — distinct from a normal stop-sign/light stop.
+>   Characterize each: time, v0, v1, full-stop?, time-to-next-peak. A strong **traffic-quality** signal
+>   (stop-and-go). Needs per-point speed (`analysis_points`), so compute in `TripAnalyzer`/a new analyzer and
+>   store aggregates (schema bump) — pairs with re-analyze-all.
+> - **Drive Stress Score** (composite "stress cost/load/grade" per trip). Inputs to consider: drawdown count
+>   /severity, **time since last at-rest >1 min** (sustained no-break driving), stop-and-go density, hard-event
+>   rate, speeding exposure, trip duration vs distance (congestion), time-of-day. Brainstorm + weight; surface
+>   per-trip + an Insights trend. (Owner explicitly wants this; drawdowns feed it.)
+> - **Novel use of Google APIs for premium value.** Beyond the existing Routes ETA: live/historical **traffic
+>   data**, places (the parking helper below), roads/speed — combined into insights users would **pay for**.
+>   Think premium tier. (Ties to commercialization below.)
+>
+> ### New features
+> - **"Find my car" passive helper** (e.g. Costco/big-box). Auto-detect arrival + the **drive→walk
+>   transition**, high-precision pin the parking spot, track the user; when they leave range then return,
+>   auto-launch **Google Maps walking nav** to the pinned spot + notification/haptic; auto-clear on return.
+>   Confirm via car BT / wireless / GPS (multiple options). Builds on the existing motion + auto-record +
+>   `CompanionDeviceManager` machinery.
+>
+> ### Commercialization / hardening (for an app-store version)
+> - **Secure the data properly.** Replace the Google-Sheets sync approach with the standard secure pattern for
+>   storing a user's data under their Google account; **encrypt at rest** (SQLCipher — see O-list). Plan a
+>   path to a shippable, privacy-respecting app-store build.
+>
+> ### Already-queued (from earlier this session, still open)
+> - **User-settable Home/Work** (item 6) — detection works but is a guess when two clusters are near-equal; a
+>   "set home/work" control removes the guess. (Home BC + Work BH detection already shipped.)
+> - **Safer battery optimization** (item 8) — the naive GPS throttle was reverted (Rev BQ, degraded walks);
+>   needs a trigger that can't mistake a slow walk for a park (e.g. charging-gated, or post-auto-stop idle only).
+> - **Raise swerve/corner detector thresholds** so weak turns (yaw-gated swerves storing ~0.13 g lateral)
+>   aren't recorded at all (vs. the current display-only g-force slider). Affects scoring → re-validate + re-analyze.
+>
+> ---
+>
 > **Status update (overnight autonomous session, 2026-06-28, Rev BG–BJ):**
 > - **DONE:** speeding-severity **backfill** for old trips (**BG**, on-device verified — 8 trips populated);
 >   **work detection** (**BH/BI** — learns a 2nd place beyond the home neighbourhood; validated it resolves
