@@ -4,6 +4,17 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BI (2026-06-28) — work detection skips the home neighbourhood
+
+Field replay of Rev BH exposed a flaw: the owner has several frequent spots *within ~1 km of home* (the
+shuffle found in Rev BC), so "the most frequent non-home cluster" was a near-home spot (0.7 km away) that
+got rejected by the post-check — leaving the real workplace (Speakman Dr, 34 km, fewer endpoints) never
+surfaced. Fix: `detectWork` now **pre-filters** to endpoints beyond the home neighbourhood
+(`WORK_MIN_FROM_HOME_M` 1 km -> 1.5 km) *before* picking the most frequent, so the distant recurring
+workplace wins. Re-validated on real data: WORK now resolves to Speakman Dr (43.516,-79.671), 34.5 km from
+home, 6 endpoints. (A workplace closer than 1.5 km won't auto-detect — covered by the user-settable
+home/work roadmap item.)
+
 ## Rev BH (2026-06-28) — learn Work too (names read "Home -> Work")
 
 Extends the Rev BC home learning to a second regular place. `HomeDetector.detectWork` = the most frequent

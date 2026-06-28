@@ -53,22 +53,25 @@ object HomeDetector {
 
     /** A learned place (home or work) is labelled when an endpoint is within this radius. */
     const val WORK_RADIUS_M = 250.0
-    /** Work must be at least this far from home to count as a distinct second place (not home spillover). */
-    private const val WORK_MIN_FROM_HOME_M = 1_000.0
+    /** Work must be beyond the home *neighbourhood* — a driver often has several frequent spots near home
+     *  (errands, a relative's place); only a recurring place this far out is plausibly a workplace. */
+    private const val WORK_MIN_FROM_HOME_M = 1_500.0
     /** Work needs to recur at least this many times (you visit work less often than you're home). */
     const val MIN_WORK_HITS = 4
 
     /**
-     * Detect the driver's second regular place ("work") from the endpoints that AREN'T home — the most
-     * frequent remaining cluster, provided it's well clear of home ([WORK_MIN_FROM_HOME_M]) and recurs
-     * enough ([minHits]). Returns null when home is unknown or no distinct second place stands out.
+     * Detect the driver's second regular place ("work") as the most frequent recurring cluster **beyond
+     * the home neighbourhood** ([WORK_MIN_FROM_HOME_M]). Pre-filtering by distance (rather than picking the
+     * overall 2nd-most-frequent and rejecting it) matters when a driver has several frequent spots near
+     * home — those would otherwise win and mask the real, farther workplace. Returns null when home is
+     * unknown or no distant place recurs enough ([minHits]).
      */
     fun detectWork(endpoints: List<LatLon>, home: LatLon?, minHits: Int = MIN_WORK_HITS): LatLon? {
         if (home == null) return null
-        val away = endpoints.filter { GeoUtils.haversine(it.lat, it.lon, home.lat, home.lon) > HOME_RADIUS_M }
-        val work = detect(away, minHits) ?: return null
-        if (GeoUtils.haversine(work.lat, work.lon, home.lat, home.lon) < WORK_MIN_FROM_HOME_M) return null
-        return work
+        val away = endpoints.filter {
+            GeoUtils.haversine(it.lat, it.lon, home.lat, home.lon) >= WORK_MIN_FROM_HOME_M
+        }
+        return detect(away, minHits)
     }
 
     /** Is this point at the learned home (within [HOME_RADIUS_M])? False when home is unknown. */
