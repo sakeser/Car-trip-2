@@ -8,32 +8,36 @@ easiest/least-risk first"). Rev letters continue from CJ.
 > v21; sample GNSS cleanup; AI-export labels; quick-toggle background-location gate; export-schema refresh;
 > fuel-week wording). A **second re-review** then produced small follow-ups (system-guide `.docx` marked
 > non-authoritative; HANDOFF "uncommitted"/test-count fixed; auto-record "foreground-only" label; export
-> `UserTripName` rename; share guard) **plus Rev CP additions** (decouple `StressScore` out of `ui`; optional
-> `GeneratedTripLabel` export column). **The authoritative plan for what's next (CP migration tests +
-> StressScore decouple / CQ Places / CR commercialization) now lives in `HANDOFF.md` §14 / §14.1** — read
-> that first. The Tier A–C items below are still valid backlog; cross-reference §14 + §13.3 before starting.
+> `UserTripName` rename; share guard). **Rev CP (v3.24/build 135) then shipped the Drive Stress Score depth**
+> (hero pill, km-weighted average, Insights smoothed trend — see the section just below for shipped-vs-open).
+> **Still open** (not yet built): the `StressScore` **decouple** out of `ui`, Room **migration tests**, an
+> optional `GeneratedTripLabel` export column, then **CQ** Places / **CR** commercialization. **The
+> authoritative plan lives in `HANDOFF.md` §14 / §14.1** — read that first. The Tier A–C items below are still
+> valid backlog; cross-reference §14 + §13.3 before starting.
 
-## ⭐ Drive Stress Score — depth (owner-requested 2026-06-28, HIGH interest)
-The owner wants the Drive Stress Score made far more prominent and trended over time. Scope (own rev,
-pairs with the **`StressScore` decouple** in HANDOFF §14.1 — do the new pure logic in the non-UI module):
+## ⭐ Drive Stress Score — depth (owner-requested, HIGH interest)
 
-- **Trip hero placement.** Surface stress in the **trip-detail top hero**, not the compact line lower down
-  (`ui/TripDetailScreen.kt` ~L966-972). Show band + score with `StressScore.color` (green→red). ⚠️ It's the
-  **inverse** of Safety/Comfort/Pace (higher = worse), so style it distinctly so the green=good convention
-  isn't confused (e.g. a labeled "stress" chip/ring, not a 4th score ring).
-- **Stress normalized by km.** Add a per-km stress read so a long highway cruise and a short crawl compare
-  fairly (the composite is currently per-trip, partly duration-weighted). Add e.g. `StressScore.perKm(trip)`
-  (pure, unit-tested) or a normalized field; decide whether the hero shows the composite, the per-km, or both.
-- **Insights trend over time (last 30 days).** Replace/augment the single average `StressSummaryRow`
-  (`ui/InsightsScreen.kt:383`) with a **time series** of stress per trip/day over the window, **smoothed with
-  an EMA or trailing average** (mirror `FuelInsights` weekly trailing-avg + `ui/Charts.kt`
-  `TimeSeriesChart`/`MiniSparkline`). Goal: "how has my driving stress evolved?"
-- **Evolution visual + delta.** A sparkline/trend chip on the Insights stress card and the full chart, plus a
-  "this window vs previous" delta (reuse the Rev CE delta-strip pattern).
+### ✅ Shipped in Rev CP (v3.24/build 135)
+- **Trip hero placement.** `StressHeroPill` headlines the trip-detail hero — a labeled pill on the green→red
+  stress scale (NOT a 4th green=good ring, since higher = worse). Replaced the old compact "Drive stress:" line.
+- **Km-weighted average.** `StressScore.kmWeightedAvg(trips)` — each trip's 0..100 score weighted by distance
+  so long stressful drives count proportionally more. ⚠️ This is a km-**weighted average on the 0..100 band**,
+  NOT a per-km burden rate (it does not divide stress by distance). UI labels it "km-weighted."
+- **Insights trend.** `StressTrendCard` replaced the single-average `StressSummaryRow`: km-weighted headline +
+  a **trailing-average-smoothed** `TimeSeriesChart` of how stress evolved + a delta vs the previous window
+  (rise = red). Pure `series`/`trailingAvg` helpers, unit-tested.
 
-Data/notes: computed from stored `TripEntity` aggregates → **no schema change** for per-trip or the trend
-(the trend just aggregates across trips). EMA/trailing-avg + per-km are pure/testable. Needs enough trips to
-read as a trend (owner's data is ~1 week now; grows over time). Re-validate calibration by DB-replay.
+### ⏳ Still open (CP follow-ups)
+- **Decouple `StressScore` out of `ui`** (this rev deepened it — `series`/`kmWeightedAvg`/`trailingAvg` were
+  added to `ui.StressScore`, and `export/ExportData` imports it). Move the pure logic to `analysis/`, leave
+  only `color()` in `ui/`. A real multi-file refactor (~5 callers) — propose the plan + risk before doing it.
+- **EMA vs trailing-average tuning** + per-user re-calibration as data grows (the trend currently uses a
+  5-trip trailing average; an EMA may read smoother). Re-validate calibration by DB-replay.
+- **(Optional) a true per-distance "burden" metric** — if we actually want stress *per km* (not a weighted
+  average), that needs a defined stress-per-distance unit; design first. Not the same as `kmWeightedAvg`.
+
+Notes: computed from stored `TripEntity` aggregates → **no schema change**. Needs enough trips to read as a
+trend (owner's data was ~1 week at ship; grows over time).
 
 ## Tier A — easy, low risk (UI polish)
 - **CK — Past-trips filter compaction + scroll affordance. ✅ DONE (v3.22).** Custom compact chips + an

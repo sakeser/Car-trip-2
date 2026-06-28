@@ -82,16 +82,16 @@ class StressScoreTest {
         assertTrue(StressScore.trailingAvg(emptyList(), 3).isEmpty())
     }
 
-    @Test fun avgPerKmIsDistanceWeighted() {
+    @Test fun kmWeightedAvgIsDistanceWeighted() {
         val short = trip(km = 4.0, durationS = 600.0, freeFlowS = 580.0) // calm, low
         val long = trip(km = 49.0, durationS = 3000.0, drawdownCount = 17, drawdownSeverity = 83771.0,
             motionEvents = 10, speedingSeverity = 50.0, freeFlowS = 2940.0) // high
         val sShort = StressScore.from(short)!!.score
         val sLong = StressScore.from(long)!!.score
-        val weighted = StressScore.avgPerKm(listOf(short, long))!!
+        val weighted = StressScore.kmWeightedAvg(listOf(short, long))!!
         val mean = (sShort + sLong) / 2
         assertTrue(weighted in minOf(sShort, sLong)..maxOf(sShort, sLong))
         assertTrue("weighted $weighted should exceed plain mean $mean (long trip dominates)", weighted > mean)
-        assertNull(StressScore.avgPerKm(emptyList()))
+        assertNull(StressScore.kmWeightedAvg(emptyList()))
     }
 }

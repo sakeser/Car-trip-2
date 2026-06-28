@@ -53,11 +53,12 @@ object StressScore {
     }
 
     /**
-     * Distance-weighted ("normalized by km") average stress across [trips]: a long stressful drive counts
-     * proportionally more than a brief one, so this reflects how demanding the driving was *per distance*
-     * rather than per trip. Null if nothing is scorable. Pure.
+     * Distance-weighted average of the per-trip stress scores across [trips]: each trip's 0..100 score is
+     * weighted by its distance, so a long stressful drive counts proportionally more than a brief one. NB:
+     * this is a km-WEIGHTED average on the same 0..100 band scale — NOT a per-km "burden" rate (it does not
+     * divide stress by distance). Null if nothing is scorable. Pure.
      */
-    fun avgPerKm(trips: List<TripEntity>): Int? {
+    fun kmWeightedAvg(trips: List<TripEntity>): Int? {
         var num = 0.0
         var den = 0.0
         for (t in trips) {

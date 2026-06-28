@@ -1,7 +1,8 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.24 (build 135)** (Rev CP, Drive Stress Score depth) · Branch `main`,
-**all pushed** · S25 installed **3.24 (build 135)**. Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.25 (build 136)** (Rev CP + review-fix pass) · Branch `main`,
+**all pushed** · S25 installed **3.24 (build 135)** (3.25 is wording/chart fixes only — reinstall when convenient).
+Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -1201,13 +1202,14 @@ A re-review (Codex) of the committed Rev CO. Verified each against source:
   "A→B" name, not just the user rename. Needs IO/Geocoder at export time, so it's a deliberate design change
   (the current builder is pure/sync); weigh against keeping export pure.
 - **⭐ Drive Stress Score depth (HIGH owner interest) — ✅ SHIPPED v3.24/build 135 (Rev CP).** `StressHeroPill`
-  in the trip-detail **hero** (replaced the old compact line); `StressScore.avgPerKm` (distance-weighted,
-  "normalized by km"); `StressScore.series`/`trailingAvg` (pure, tested) feeding an Insights **`StressTrendCard`**
-  — km-weighted headline + a trailing-average-smoothed `TimeSeriesChart` of how stress evolved over the window
-  + a delta vs the previous window (replaced the single-average `StressSummaryRow`). No schema change. Spec in
-  **`ROADMAP_NEW.md` → "Drive Stress Score — depth"**. **Still open:** the `StressScore` **decouple** below
-  (deepened by this rev — `series`/`avgPerKm`/`trailingAvg` were added to `ui.StressScore`), and EMA-vs-trailing
-  tuning + per-user re-calibration as data grows.
+  in the trip-detail **hero** (replaced the old compact line); `StressScore.kmWeightedAvg` (each trip's 0..100
+  score **distance-weighted** — a km-weighted average on the band scale, NOT a per-km burden rate);
+  `StressScore.series`/`trailingAvg` (pure, tested) feeding an Insights **`StressTrendCard`** — km-weighted
+  headline + a trailing-average-smoothed `TimeSeriesChart` (its dashed reference = the mean of the plotted
+  smoothed series) + a delta vs the previous window (replaced the single-average `StressSummaryRow`). No schema
+  change. Spec in **`ROADMAP_NEW.md` → "Drive Stress Score — depth"**. **Still open:** the `StressScore`
+  **decouple** below (deepened by this rev — `series`/`kmWeightedAvg`/`trailingAvg` were added to
+  `ui.StressScore`), EMA-vs-trailing tuning + per-user re-calibration, and an optional true per-distance metric.
 
 ---
 

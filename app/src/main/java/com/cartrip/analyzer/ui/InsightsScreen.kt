@@ -168,9 +168,9 @@ fun InsightsScreen(
             run {
                 val series = StressScore.series(windowTrips)
                 if (series.isNotEmpty()) {
-                    val kmAvg = StressScore.avgPerKm(windowTrips) ?: series.average().roundToInt()
+                    val kmAvg = StressScore.kmWeightedAvg(windowTrips) ?: series.average().roundToInt()
                     val smoothed = StressScore.trailingAvg(series, STRESS_SMOOTH_TRIPS)
-                    val prevKmAvg = StressScore.avgPerKm(prevWindowTrips)
+                    val prevKmAvg = StressScore.kmWeightedAvg(prevWindowTrips)
                     item { StressTrendCard(kmAvg, prevKmAvg, smoothed, series.size, window.label) }
                 }
             }
@@ -443,7 +443,9 @@ private fun StressTrendCard(
                     values = smoothed,
                     unit = "",
                     color = color,
-                    average = kmAvgScore.toFloat()
+                    // Dashed reference = the mean of the plotted (smoothed) series, so it represents THIS line.
+                    // (The headline number above is the distance-weighted average, a deliberately different stat.)
+                    average = smoothed.average().toFloat()
                 )
             }
         }
