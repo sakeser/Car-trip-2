@@ -4,8 +4,15 @@ An Android app that records your phone's sensors during a car trip, then reconst
 speed and acceleration, detects driving events, scores the drive, and visualizes the
 route on a map with charts.
 
-Built with Kotlin + Jetpack Compose, Room (local storage), and osmdroid (OpenStreetMap —
-**no API key required**). Target device: Samsung Galaxy S25 (Android 14/15), minSdk 26.
+Built with Kotlin + Jetpack Compose, Room (local storage), and the **Google Maps SDK**
+(`maps-compose`) for the map/route display. A **Google Maps API key is required** to render maps
+(`MAPS_API_KEY` in `local.properties`; the app builds without one but shows blank maps). Speed limits
+come from **OpenStreetMap** via the free Overpass API (cached locally). Target device: Samsung Galaxy
+S25 (Android 14/15), minSdk 26.
+
+> **Note:** this README covers the original v1.x build flow + core concepts. The app has since grown
+> well past it (auto-record, fuel/cost, drawdowns, Drive Stress Score, Insights, Google Sheets sync).
+> See **HANDOFF.md** for the authoritative current state (source 3.23 / build 134, Room schema v21).
 
 ---
 
@@ -51,8 +58,10 @@ The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 2. Open it with the **Files** app. Android will ask to allow installing unknown apps —
    tap **Settings**, enable **Allow from this source**, go back, and **Install**.
 3. Launch **Car Trip Analyzer**.
-4. On first **Start trip**, grant **Location** ("While using the app" is enough) and
-   **Notifications**. Make sure phone GPS/Location is turned on.
+4. On first **Start trip**, grant **Location** ("While using the app" is enough for manual recording)
+   and **Notifications**. Make sure phone GPS/Location is turned on.
+   - **Hands-free auto-record** (optional) additionally needs Location set to **"Allow all the time"**
+     so a trip can start in the background while the app is closed — set this in the Auto-record screen.
 
 ---
 
@@ -139,7 +148,7 @@ Tunable constants live at the top of `analysis/TripAnalyzer.kt`.
 
 ```
 app/src/main/java/com/cartrip/analyzer/
-  TripApp.kt              Application (osmdroid config)
+  TripApp.kt              Application (app init; starts the auto-record watcher)
   MainActivity.kt         Compose host, navigation, runtime permissions
   data/                   Room entities, DAO, database
   record/                 Foreground recording service + live state

@@ -3,6 +3,13 @@
 New items from the owner, assessed + ordered by value × (1/risk). Worked top-down ("clear the log,
 easiest/least-risk first"). Rev letters continue from CJ.
 
+> **⚠️ FRONTIER (updated 2026-06-28):** CK–CN shipped in **v3.22**. A second-reviewer (Codex) audit then
+> produced **Rev CO** (source bumped to 3.23/build 134) — a doc-truth + low-risk-correctness pass (docs reconciled to 3.23/build 134/schema
+> v21; sample GNSS cleanup; AI-export labels; quick-toggle background-location gate; export-schema refresh;
+> fuel-week wording). **The authoritative plan for what's next (CP migration tests / CQ Places / CR
+> commercialization) now lives in `HANDOFF.md` §14** — read that first. The Tier A–C items below are
+> still valid backlog; cross-reference §14 + §13.3 before starting any.
+
 ## Tier A — easy, low risk (UI polish)
 - **CK — Past-trips filter compaction + scroll affordance. ✅ DONE (v3.22).** Custom compact chips + an
   always-visible list scrollbar thumb. `ui/TripListScreen.kt`.

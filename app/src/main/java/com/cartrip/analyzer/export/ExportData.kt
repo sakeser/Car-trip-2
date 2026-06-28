@@ -2,6 +2,7 @@ package com.cartrip.analyzer.export
 
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.data.TripEntity
+import com.cartrip.analyzer.ui.StressScore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,7 +26,18 @@ object ExportData {
         // Speeding vs OSM limits
         "SpeedingPct", "MaxOverLimit_kmh", "LimitCoverage",
         // Parallel sensor-fused detector (beta; not scored)
-        "MotionBrake", "MotionAccel", "MotionTurn", "FusedConfidence"
+        "MotionBrake", "MotionAccel", "MotionTurn", "FusedConfidence",
+        // --- Appended (kept at the end so existing Sheets columns don't shift) ---
+        // Google Routes ETA (actual-vs-estimate)
+        "EtaTraffic_s", "EtaFreeFlow_s", "EtaSource", "EtaFetched",
+        // Magnitude-weighted speeding + road-stretch metrics
+        "SpeedingSeverity", "RoughStretchCount", "BumpyScore",
+        // Drawdowns (forced slowdowns) + the composite Drive Stress Score
+        "DrawdownCount", "DrawdownSeverity", "StressScore", "StressBand",
+        // Moving time + GNSS capture quality
+        "Moving_min", "GnssAvgSats", "GnssAvgCn0", "GnssTopCn0", "GnssL5Seen", "GnssSampleCount",
+        // Labels
+        "TripName", "IsDrive"
     )
 
     val SAMPLE_HEADER = listOf(
@@ -40,6 +52,7 @@ object ExportData {
         val m = a.metrics
         val start = a.points.firstOrNull()
         val end = a.points.lastOrNull()
+        val stress = StressScore.from(trip)
         return listOf(
             trip.id.toString(),
             iso.format(Date(trip.startTime)),
@@ -83,7 +96,27 @@ object ExportData {
             trip.motionBrakeCount.toString(),
             trip.motionAccelCount.toString(),
             trip.motionTurnCount.toString(),
-            f(trip.fusedConfidence, 3)
+            f(trip.fusedConfidence, 3),
+            // --- Appended columns (lockstep with the SUMMARY_HEADER tail) ---
+            f(trip.googleEtaTrafficS, 1),
+            f(trip.googleEtaFreeFlowS, 1),
+            trip.etaSource,
+            if (trip.etaFetchedAt > 0) iso.format(Date(trip.etaFetchedAt)) else "",
+            f(trip.speedingSeverity, 2),
+            trip.roughStretchCount.toString(),
+            f(trip.bumpyScore, 2),
+            trip.drawdownCount.toString(),
+            f(trip.drawdownSeverity, 1),
+            stress?.score?.toString() ?: "",
+            stress?.band ?: "",
+            f(m.movingS / 60.0, 2),
+            f(trip.gnssAvgSatsUsed, 1),
+            f(trip.gnssAvgCn0, 1),
+            f(trip.gnssTopCn0, 1),
+            if (trip.gnssL5Seen) "1" else "0",
+            trip.gnssSampleCount.toString(),
+            trip.name,
+            when (trip.userIsDrive) { true -> "drive"; false -> "walk"; null -> "auto" }
         )
     }
 

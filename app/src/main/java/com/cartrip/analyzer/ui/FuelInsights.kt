@@ -31,7 +31,7 @@ object FuelInsights {
         val costPerKm: List<Float>,         // $/km, per drive, chronological
         val costPerKmSmoothed: List<Float>, // $/km trailing moving average (empty until enough drives)
         val l100: List<Float>,              // L/100km, per drive
-        val weeklySpend: List<Float>,         // $ spent per calendar week, oldest first (0 for idle weeks)
+        val weeklySpend: List<Float>,         // $ spent per 7-day window from first drive, oldest first (0 = idle)
         val weeklySpendSmoothed: List<Float>, // weekly spend, trailing-averaged so the rate reads as a trend
     ) {
         val hasData: Boolean get() = drives > 0
@@ -83,8 +83,10 @@ object FuelInsights {
     }
 
     /**
-     * Spend per calendar week from the first drive to the last, oldest first. Weeks with no driving are 0,
-     * so the series is a true rate over time (the derivative of cumulative spend) rather than a running total.
+     * Spend per 7-day window (anchored on the first drive), oldest first. NB: these are rolling 7-day
+     * buckets from the first drive, not Mon-Sun calendar weeks — deliberately timezone/locale-free so the
+     * series is deterministic. Windows with no driving are 0, so it's a true rate over time (the derivative
+     * of cumulative spend) rather than a running total.
      */
     private fun weeklySpend(drives: List<TripEntity>, costs: List<Double>): List<Float> {
         if (drives.isEmpty()) return emptyList()

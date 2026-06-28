@@ -313,7 +313,7 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChang
 }
 
 /** Background location ("Allow all the time"); always true below API 29 where it doesn't exist. */
-private fun hasBackgroundLocation(context: Context): Boolean =
+internal fun hasBackgroundLocation(context: Context): Boolean =
     Build.VERSION.SDK_INT < 29 ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
         PackageManager.PERMISSION_GRANTED

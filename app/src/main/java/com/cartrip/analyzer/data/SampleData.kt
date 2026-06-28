@@ -81,6 +81,8 @@ object SampleData {
         // Only ever clear previously-generated sample trips — real recorded drives are preserved.
         dao.deleteSampleLocations()
         dao.deleteSampleMotions()
+        dao.deleteSampleGnssSamples()
+        dao.deleteSampleGnssMeasurements()
         dao.deleteSampleAnalysisPoints()
         dao.deleteSampleDriveEvents()
         dao.deleteSampleTrips()

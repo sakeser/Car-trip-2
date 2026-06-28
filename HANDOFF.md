@@ -1,7 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · App version **3.22 (build 133)** · Branch `main`, **all pushed** (origin at
-`ccaff69`) · S25 installed 3.22. Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.23 (build 134)** (Rev CO) · Branch `main` (Rev CO **uncommitted** —
+prior arc pushed at `ccaff69`) · S25 still on 3.22 (build 133). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -53,15 +53,17 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 - **Single workspace = the repo root `C:\Users\sinan\OneDrive\Desktop\cartrip`** on **`main`** (the only
   branch). The `cartrip-main` linked worktree and the stale `ux-redesign-v1` / `rev-g-functional` branches
   were removed on 2026-06-26; the old UX redesign is preserved as tags `archive/ux-redesign-v1-wip` +
-  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev AT** (pushed); verify
-  with `git log origin/main..main` (should be empty). Pushing to `main` needs explicit per-turn user
-  authorization.
-- Installed on the Samsung **S25 (SM_S931W)** as **3.14 (build 125)**. Device auto-locks fast; for a
+  `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev CN** (pushed; a **Rev
+  CO** doc/correctness pass is in progress — see §14); verify with `git log origin/main..main`. Pushing to
+  `main` needs explicit per-turn user authorization.
+- Source is **3.23 (build 134)** (Rev CO); the **S25 is still on 3.22 (build 133)** until the owner installs
+  Rev CO. Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
-- Unit tests all green (record/analysis/ui + cloud `SpeedingSummaryTest`, `GasPriceTest`, `FuelInsightsTest`,
-  etc.). Room schema **v20**: v18 `trips.userIsDrive` (walk override); v19 per-fix GPS accuracy +
-  `gnss_measurements` (lane R&D); **v20 `trips.speedingSeverity`** (magnitude-weighted speeding for Safety).
+- Unit tests all green (**176 tests**, all pure-JVM). Room schema **v21**: v18 `trips.userIsDrive` (walk
+  override); v19 per-fix GPS accuracy + `gnss_measurements` (lane R&D); v20 `trips.speedingSeverity`
+  (magnitude-weighted speeding for Safety); **v21 `trips.drawdownCount`/`drawdownSeverity`** (forced
+  slowdowns — feeds the Drive Stress Score).
 - **Process note (learned the hard way):** bump `versionName`/`versionCode` in `app/build.gradle.kts`
   **before** the final `assembleDebug`, or the installed APK keeps the *old* version label (happened twice).
   Verify with `dumpsys package ... | grep versionName` after install.
@@ -173,7 +175,7 @@ Pipeline: **record → analyze (offline) → persist → enrich → present.**
 | Recording | `record/RecordingService.kt` (FG service, GPS+sensors+GNSS+raw-GNSS; `ACTION_AUTO_ARM` = provisional record + 90 s motion-confirm by GPS **or** accelerometer vibration + discard; `ACTION_AUTO_STOP_GRACE` = retrospective-trim stop), `record/RecordingState.kt` (live state), `record/AutoStop.kt` (retrospective end-time, pure) |
 | Auto-record | **`record/AutoRecordWatchService.kt`** = persistent "armed" FGS, the reliable hands-free trigger (see note below); `record/AutoRecordController.kt` (decision dispatch → arm/stop), `record/AutoRecordPolicy.kt` (pure trigger logic, unit-tested), `record/AutoRecordPrefs.kt`, `record/AutoRecordLog.kt` (Diagnostics decision log), `record/BootReceiver.kt` (re-arm after reboot), `record/CompanionCarManager.kt` + `record/CarPresenceService.kt` (CompanionDeviceManager — secondary/unreliable for classic-BT cars), `record/GnssLoggingPrefs.kt` (raw-GNSS toggle). Dead: `record/PowerConnectionReceiver.kt` / `record/CarBluetoothReceiver.kt` (manifest registration removed in Rev AO) |
 | Analysis | `analysis/TripAnalyzer.kt` (Kalman/RTS speed+accel, events, metrics), `analysis/MotionFusion.kt` (potholes/rough-road/harsh-stops), `analysis/FusedEventDetector.kt` (magnitude-first sensor detector), `analysis/FuelEstimator.kt` (pure fuel/cost model), `analysis/GnssQuality.kt`, `analysis/SpeedTier.kt` |
-| Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema **v20** + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
+| Data | `data/Entities.kt`, `data/AppDatabase.kt` (Room, schema **v21** + migrations), `data/TripDao.kt`, `data/TripFinalizer.kt`, `data/TripStatus.kt` |
 | Cloud | `cloud/SpeedLimits.kt` (OSM/Overpass + tile cache + pure `speedingSummary` w/ magnitude-weighted severity + limit-drop grace), `cloud/Tiles.kt`, `cloud/RoutesClient.kt` (Google Routes ETA), `cloud/GasPrice.kt` (auto fuel price from Ontario weekly Toronto CSV), `cloud/TripSync.kt`/`SheetsClient.kt`/`GoogleAuth.kt` (Sheets) |
 | UI | `MainActivity.kt` (nav), `ui/HomeScreen.kt` (record + landscape big button), `ui/TripDetailScreen.kt` (hero, You-vs-Traffic, replay, Driving, map), `ui/TripListScreen.kt` (frozen map + buckets), `ui/TripMap.kt`, `ui/DisplayEvents.kt` (event cleanup/clustering), `ui/TripScores.kt`, `ui/TripDataQuality.kt`, `ui/DebugScreen.kt`, `ui/TripBuckets.kt`, `ui/Format.kt`, `ui/TripLabeler.kt`, `ui/GeoNamer.kt` (reverse-geocode), `ui/VehiclePrefs.kt` + `ui/VehicleScreen.kt` (fuel profile), `ui/InsightsScreen.kt`, `ui/Charts.kt` (TimeSeries/MiniSparkline/`DivergingBarChart`), `ui/TripNaming.kt` (same-name disambiguation), `ui/TripKind.kt` (walk/non-drive guard), `ui/DrivingTimes.kt` (daypart insights), `ui/EventGlyphs.kt` (shared bump glyph), `ui/UiPrefs.kt` (you-icon pref + event-g threshold), `ui/Components.kt` (shared bits + Options sheet), `ui/HomeDetector.kt` (frequency-learned home/work), `ui/EventHotspots.kt` (cross-trip recurring-event clustering), `ui/TroubleSpotsMap.kt` (hotspot map + tap-to-instance sheet), `ui/FuelInsights.kt` (fuel history/spend/$-per-km), `ui/TripHeatMap.kt` (dormant route heatmap) |
 
@@ -465,7 +467,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (82 tests)
+## 7. Test suite (176 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -481,8 +483,14 @@ arm / stop / wireless / Bluetooth gating), `FormatTest`, `TripNamingTest` (same-
 `TripKindTest` (3: walk vs drive vs zero-speed), `DrivingTimesTest` (2: dayparts / summarize). All
 pure-JVM (no Robolectric/instrumented).
 
-Gaps: no instrumented/Room/Compose tests; network paths (Overpass, Routes, Sheets) and the
-GnssStatus reading are not unit-tested (verified manually/on-device).
+Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (5), `AiInsightsExportTest` (3),
+`EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
+`GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard). Count is
+**176** (`grep -rc '@Test'` across `app/src/test`).
+
+Gaps: **no Room-migration tests, no Compose/UI tests, no instrumented tests** (the highest-value gap given
+21 migrations + a commercialization goal — see §14 Rev CP); network paths (Overpass, Routes, Sheets,
+GasPrice) and the GnssStatus reading are not unit-tested (verified manually/on-device).
 
 ---
 
@@ -947,7 +955,7 @@ and the premium analytics that justify a subscription. None of those require re-
 | Area | Status | Notes |
 |---|---|---|
 | **Performance** | ⚠️ | Trips start fast, UI smooth, schema stable. **Battery** is the weak point (§12.2 #4). |
-| **Reliability** | ✅ Strong | Handles GPS loss (`gpsGapCount`), reboot (`BootReceiver`), permission revocation (caught), app updates (migrations 1→20), service-kill (PARTIAL/`APP_RECOVERY`). See the failure-mode matrix (§3). |
+| **Reliability** | ✅ Strong | Handles GPS loss (`gpsGapCount`), reboot (`BootReceiver`), permission revocation (caught), app updates (migrations 1→21), service-kill (PARTIAL/`APP_RECOVERY`). See the failure-mode matrix (§3). |
 | **Privacy & Compliance** | ❌ Gaps | Need: a published **privacy policy** URL; the Play **Data Safety** form; **location-permission rationale** UX (partly there); **subscription policy** compliance. |
 | **Business Operations** | ❌ Gaps | Need: Play **Billing** + subscription management; **crash reporting** (Crashlytics/Sentry); analytics; a feedback channel; staged rollout; a bug/feature triage process. |
 
@@ -1128,6 +1136,49 @@ backend aggregates), **AI coaching** from the CN summary, lifetime history, expo
 fuel + destination analytics, exports, cloud backup. **Principle: premium = deeper insight; never gate basic
 recording.** Per-active-user marginal cost stays low/bounded because processing is offline and map/Places
 calls are cached + endpoint-only (§12.4).
+
+---
+
+## 14. Rev CO/CP — second-reviewer pass (2026-06-28) & current plan
+
+A second reviewer (Codex, read-only) audited the post-Batch-4 repo. Each finding was **re-verified against
+source** before acting (some Codex notes were stale or already-handled). Verdicts:
+
+| # | Finding | Verdict | Source |
+|---|---|---|---|
+| 1 | Docs stale (Rev AT / 3.14 / schema v20; README mapping stack) | **TRUE** — fixed in §1/§3/§7/§12.3 + README this pass | header vs body drift |
+| 2 | Sample cleanup misses GNSS rows | **TRUE but latent** (samples insert no GNSS today) — fixed defensively | `TripDao.deleteSample*`, `SampleData` |
+| 3 | Export schema behind analytics | **TRUE** — refreshed (appended ETA/severity/drawdowns/stress/GNSS/labels) | `ExportData.kt` |
+| 4 | Quick-toggle bypasses setup/disclosure | **TRUE** — now gates on background-location → routes to disclosure | `ui/HomeScreen.kt` |
+| 5 | Test coverage too narrow | **TRUE** — no migration/Compose/instrumented tests (see Rev CP) | `app/build.gradle.kts` |
+| 6 | AI export empty labels; fuel "week" wording | **TRUE** — AI export now passes real labels; fuel wording corrected (logic is deliberately rolling-7-day, not calendar) | `InsightsScreen.kt`, `FuelInsights.kt` |
+| 7 | Commercialization/policy risks | **AGREE** (bg-location, Places pricing, export privacy); **User-Agent already set** (challenge); OSM attribution weak | `SpeedLimits.kt:288`, `GuideScreen.kt` |
+
+**Rev CO — shipped this pass (docs + low-risk correctness, 173 tests green):**
+- Doc-truth pass (§1/§3/§7/§12.3 + README + `ROADMAP_NEW.md` frontier).
+- Sample GNSS cleanup: `deleteSampleGnssSamples`/`deleteSampleGnssMeasurements` + call site (defensive).
+- AI export labels: `InsightsScreen` "Share for AI insights" now resolves geocoded labels before building.
+- Quick-toggle gate: enabling hands-free from Home with no background-location routes to `AutoRecordScreen`
+  (disclosure + permission) instead of silently starting the watcher; resume-refresh keeps it in sync.
+- Export schema refresh: `ExportData.SUMMARY_HEADER`/`summaryRow` append ETA, speedingSeverity, rough-stretch/
+  bumpy, drawdowns, **Stress Score**, moving-min, GNSS quality, name, drive/walk. **Appended at the end** so
+  existing Google Sheets columns don't shift (old rows show blanks for new cols — expected).
+- Fuel-week wording corrected (kept the deterministic rolling-7-day bucketing — calendar weeks would add
+  timezone/locale fragility for no user gain).
+
+**Still open — Rev CP/CQ/CR (priority order):**
+- **CP (P1):** Room **migration tests** — the real test gap. Needs `androidx.room:room-testing` +
+  `exportSchema=true` (currently `false` in `AppDatabase.kt:23`) + an instrumented `MigrationTest` exercising
+  1→21. ⚠️ Instrumented/Robolectric — **needs an emulator/device run**, so it couldn't be executed in the
+  doc/desktop session; set up + flag for a device run. Also: shared bar/chart scale component (the queued
+  "bar-sizing audit"), Trip Detail reset-to-auto override, Past Trips open affordance, a visible **OSM "©
+  OpenStreetMap contributors (ODbL)"** attribution credit.
+- **CQ (P2, gated on owner's Places go/no-go):** Places API (New) prototype behind a feature flag — caching,
+  field masks, cost telemetry, Geocoder fallback (§13.4).
+- **CR (pre-launch, P1):** commercialization hardening — privacy policy, Data Safety inventory, **export
+  file retention/disclosure** (XLSX/CSV/share files live outside any DB encryption), background-location
+  review package + foreground-only default, API-key restrictions, billing guardrails, and **CO encrypt-at-
+  rest + biometric** (the SQLCipher item, distinct from this "Rev CO" review pass — naming collision noted).
 
 ---
 

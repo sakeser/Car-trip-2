@@ -56,10 +56,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
@@ -227,13 +230,27 @@ fun HomeScreen(
 /**
  * A compact "Auto-record" toggle for the Home screen so the owner can flip hands-free recording on/off
  * without opening the full Auto-record screen (it costs battery, so quick access matters). Mirrors the
- * core action there: flip the pref + start/stop the persistent watcher. Detailed setup (background-location
- * permission, car pairing) still lives behind the row's "Set up" affordance.
+ * core action there: flip the pref + start/stop the persistent watcher.
+ *
+ * Policy/UX gate: turning it ON when background location ("Allow all the time") isn't granted would start a
+ * persistent background watcher that can only ever record while the app is open — a half-working state, and
+ * background-location use must be preceded by the in-app disclosure. So the first enable routes to the full
+ * Auto-record screen (which carries the disclosure + the permission flow); once set up, the quick toggle
+ * flips directly. Turning it OFF always works directly.
  */
 @Composable
 private fun AutoRecordQuickToggle(onOpenAutoRecord: () -> Unit) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(AutoRecordPrefs.enabled(context)) }
+    // Re-read the pref on resume so returning from the full screen (where it may have been enabled) is reflected.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) enabled = AutoRecordPrefs.enabled(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -253,10 +270,16 @@ private fun AutoRecordQuickToggle(onOpenAutoRecord: () -> Unit) {
         }
         Switch(
             checked = enabled,
-            onCheckedChange = {
-                enabled = it
-                AutoRecordPrefs.setEnabled(context, it)
-                if (it) AutoRecordWatchService.start(context) else AutoRecordWatchService.stop(context)
+            onCheckedChange = { want ->
+                if (want && !hasBackgroundLocation(context)) {
+                    // Not set up for hands-free yet — send to the full screen for the disclosure + permission
+                    // instead of silently enabling a background watcher that can't start while closed.
+                    onOpenAutoRecord()
+                } else {
+                    enabled = want
+                    AutoRecordPrefs.setEnabled(context, want)
+                    if (want) AutoRecordWatchService.start(context) else AutoRecordWatchService.stop(context)
+                }
             }
         )
     }

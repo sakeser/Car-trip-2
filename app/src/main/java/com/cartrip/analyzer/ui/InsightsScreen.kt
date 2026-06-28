@@ -277,16 +277,21 @@ fun InsightsScreen(
             item {
                 OutlinedButton(
                     onClick = {
-                        val text = AiInsightsExport.build(
-                            completed, emptyMap(), vehicle, hotspots, System.currentTimeMillis()
-                        )
-                        val send = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_SUBJECT, "My driving summary")
-                            putExtra(Intent.EXTRA_TEXT, text)
-                        }
-                        runCatching {
-                            context.startActivity(Intent.createChooser(send, "Share driving summary for AI insights"))
+                        // Resolve the geocoded "A -> B" labels first (suspend), so the AI summary names each
+                        // recent drive instead of falling back to a generic "Trip".
+                        scope.launch {
+                            val names = viewModel.loadTripLabels(completed)
+                            val text = AiInsightsExport.build(
+                                completed, names, vehicle, hotspots, System.currentTimeMillis()
+                            )
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "My driving summary")
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            runCatching {
+                                context.startActivity(Intent.createChooser(send, "Share driving summary for AI insights"))
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()

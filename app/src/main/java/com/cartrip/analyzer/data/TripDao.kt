@@ -336,6 +336,14 @@ interface TripDao {
     @Query("DELETE FROM drive_events WHERE tripId IN (SELECT id FROM trips WHERE isSample = 1)")
     suspend fun deleteSampleDriveEvents()
 
+    // Sample trips don't currently capture GNSS rows, but mirror deleteTripWithData so a future sample
+    // generator that does can never leak orphaned high-volume/private GNSS rows past a demo-data reset.
+    @Query("DELETE FROM gnss_samples WHERE tripId IN (SELECT id FROM trips WHERE isSample = 1)")
+    suspend fun deleteSampleGnssSamples()
+
+    @Query("DELETE FROM gnss_measurements WHERE tripId IN (SELECT id FROM trips WHERE isSample = 1)")
+    suspend fun deleteSampleGnssMeasurements()
+
     @Query("DELETE FROM trips WHERE isSample = 1")
     suspend fun deleteSampleTrips()
 }
