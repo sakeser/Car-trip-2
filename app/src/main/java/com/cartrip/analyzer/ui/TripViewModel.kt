@@ -232,12 +232,15 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
                 evs.add(EventHotspots.Ev(t.id, EventHotspots.kindOf(type), p.lat, p.lon))
             }
         }
-        // Tag each hotspot with a friendly location when it's at the learned home/work.
+        // Tag each hotspot with a friendly location: home/work for free, else a reverse-geocoded
+        // neighbourhood for the strongest few (budget caps live geocoder calls; cache makes refreshes free).
         val home = loadHome(getApplication()); val work = loadWork(getApplication())
-        EventHotspots.find(evs).map { h ->
+        val budget = GeoNamer.Budget(8)
+        EventHotspots.find(evs).mapIndexed { i, h ->
             val where = when {
                 HomeDetector.isHome(h.lat, h.lon, home) -> "near Home"
                 HomeDetector.isWork(h.lat, h.lon, work) -> "near Work"
+                i < 8 -> GeoNamer.areaName(getApplication(), h.lat, h.lon, budget) ?: ""
                 else -> ""
             }
             h.copy(where = where)

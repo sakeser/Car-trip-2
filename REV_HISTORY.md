@@ -4,6 +4,13 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BM (2026-06-28) — hotspots show real place names
+
+Follow-up to Rev BJ: the "Recurring spots" card only labelled home/work spots; others were blank. New
+`GeoNamer.areaName` reverse-geocodes a single point (cached, budgeted, fail-soft); `loadEventHotspots` now
+tags the strongest few non-home/work hotspots with their neighbourhood (e.g. "Sharp turn · Yonge & Sheppard")
+so each spot says *where*. Budget-capped (8 live calls/refresh, cached thereafter).
+
 ## Rev BL (2026-06-28) — Fuel & cost Insights section (history + trends)
 
 Owner-requested: a dedicated fuel section now there's enough data. New pure `FuelInsights.summarize` (per-trip

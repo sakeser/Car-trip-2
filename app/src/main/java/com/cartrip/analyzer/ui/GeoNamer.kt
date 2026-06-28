@@ -150,6 +150,17 @@ object GeoNamer {
         }
     }
 
+    /**
+     * Reverse-geocode a single point to a neighbourhood/area name (cached, budgeted, fail-soft). Used to
+     * label a recurring-event hotspot that isn't at home/work. Never throws; call off the main thread.
+     */
+    fun areaName(context: Context, lat: Double, lon: Double, budget: Budget): String? {
+        if (!Geocoder.isPresent()) return null
+        val geocoder = Geocoder(context, Locale.getDefault())
+        val prefs = context.getSharedPreferences(CACHE, Context.MODE_PRIVATE)
+        return endpointName(geocoder, prefs, lat, lon, budget)
+    }
+
     /** Distance under which a trip's start and end are treated as the same spot -> a round trip. */
     private const val LOOP_RADIUS_M = 250.0
     /** The farthest point must be at least this far from the start to be a meaningful "via". */
