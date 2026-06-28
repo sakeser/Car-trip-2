@@ -31,10 +31,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import android.view.MotionEvent
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import com.cartrip.analyzer.cloud.CloudState
 import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
@@ -69,7 +72,7 @@ import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun InsightsScreen(
     viewModel: TripViewModel,
@@ -81,6 +84,7 @@ fun InsightsScreen(
     val vehicle = VehiclePrefs.load(context)
     val scope = rememberCoroutineScope()
     var reanalyzing by remember { mutableStateOf(false) }
+    var mapTouched by remember { mutableStateOf(false) }
     val completed = trips
         .filter { it.analyzed && it.endTime > 0 }
         .sortedBy { it.startTime }
@@ -132,7 +136,9 @@ fun InsightsScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            // Pause list-scroll while a finger is on the map so it pans with ONE finger (not two).
+            userScrollEnabled = !mapTouched
         ) {
             item { WindowSelector(window) { window = it } }
 
@@ -190,6 +196,13 @@ fun InsightsScreen(
                                 .fillMaxWidth()
                                 .height(280.dp)
                                 .clip(RoundedCornerShape(12.dp))
+                                .pointerInteropFilter { e ->
+                                    when (e.action) {
+                                        MotionEvent.ACTION_DOWN -> mapTouched = true
+                                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> mapTouched = false
+                                    }
+                                    false  // don't consume — the map still handles the gesture
+                                }
                         )
                     } else {
                         Text(

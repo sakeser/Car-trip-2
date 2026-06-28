@@ -4,6 +4,14 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BW (2026-06-28) — single-finger map pan
+
+Owner request: pan the maps with one finger instead of two. Maps inside scrolling parents show the
+"use two fingers" hint to avoid fighting the page scroll. Fix: while a finger is down on the map, pause the
+parent scroll (`pointerInteropFilter` → `mapTouched` toggled on ACTION_DOWN / UP / CANCEL, not consuming the
+event so the map still pans). Applied to the **trouble-spots map** (Insights `LazyColumn(userScrollEnabled =
+!mapTouched)`) and the **trip-detail route map** (`Column.verticalScroll(enabled = !mapTouched)`).
+
 ## Rev BV (2026-06-28) — you-vs-traffic headline + avg line; re-analyze-all
 
 Finishes the batch. (#9) **You vs traffic**: the headline is now **net minutes ahead of traffic over the last
