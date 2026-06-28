@@ -1,6 +1,7 @@
 package com.cartrip.analyzer.ui
 
 import com.cartrip.analyzer.data.TripEntity
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,5 +61,37 @@ class StressScoreTest {
         assertTrue(StressScore.band(35) == "Moderate")
         assertTrue(StressScore.band(55) == "Busy")
         assertTrue(StressScore.band(80) == "High stress")
+    }
+
+    @Test fun seriesDropsNonDrivesAndIsChronological() {
+        val early = trip(km = 5.0, durationS = 600.0, freeFlowS = 580.0).copy(startTime = 100L) // calm
+        val late = trip(km = 49.0, durationS = 3000.0, drawdownCount = 17, drawdownSeverity = 83771.0,
+            motionEvents = 10, speedingSeverity = 50.0, freeFlowS = 2940.0).copy(startTime = 300L) // high
+        val walk = trip(km = 2.0, durationS = 1500.0, topKmh = 5.0).copy(startTime = 200L)
+        val s = StressScore.series(listOf(late, walk, early))
+        assertEquals(2, s.size)            // walk dropped
+        assertTrue("early(calm) should sort before late(high): $s", s[0] < s[1])
+    }
+
+    @Test fun trailingAvgSmoothsAndKeepsLength() {
+        val out = StressScore.trailingAvg(listOf(10, 20, 30), 2)
+        assertEquals(3, out.size)
+        assertEquals(10f, out[0], 1e-4f)
+        assertEquals(15f, out[1], 1e-4f)
+        assertEquals(25f, out[2], 1e-4f)
+        assertTrue(StressScore.trailingAvg(emptyList(), 3).isEmpty())
+    }
+
+    @Test fun avgPerKmIsDistanceWeighted() {
+        val short = trip(km = 4.0, durationS = 600.0, freeFlowS = 580.0) // calm, low
+        val long = trip(km = 49.0, durationS = 3000.0, drawdownCount = 17, drawdownSeverity = 83771.0,
+            motionEvents = 10, speedingSeverity = 50.0, freeFlowS = 2940.0) // high
+        val sShort = StressScore.from(short)!!.score
+        val sLong = StressScore.from(long)!!.score
+        val weighted = StressScore.avgPerKm(listOf(short, long))!!
+        val mean = (sShort + sLong) / 2
+        assertTrue(weighted in minOf(sShort, sLong)..maxOf(sShort, sLong))
+        assertTrue("weighted $weighted should exceed plain mean $mean (long trip dominates)", weighted > mean)
+        assertNull(StressScore.avgPerKm(emptyList()))
     }
 }

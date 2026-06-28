@@ -52,6 +52,43 @@ object StressScore {
         return Result(score, band(score))
     }
 
+    /**
+     * Distance-weighted ("normalized by km") average stress across [trips]: a long stressful drive counts
+     * proportionally more than a brief one, so this reflects how demanding the driving was *per distance*
+     * rather than per trip. Null if nothing is scorable. Pure.
+     */
+    fun avgPerKm(trips: List<TripEntity>): Int? {
+        var num = 0.0
+        var den = 0.0
+        for (t in trips) {
+            val s = from(t) ?: continue
+            val km = (t.distanceM / 1000.0).coerceAtLeast(0.1)
+            num += s.score * km
+            den += km
+        }
+        return if (den <= 0.0) null else (num / den).roundToInt()
+    }
+
+    /** Per-trip stress scores in chronological order (unscorable trips dropped) — the raw trend series. */
+    fun series(trips: List<TripEntity>): List<Int> =
+        trips.sortedBy { it.startTime }.mapNotNull { from(it)?.score }
+
+    /**
+     * Trailing moving average over the last [window] points (same length as input, no lag-drop), so the
+     * trend reads as a smooth evolution instead of a spiky per-trip scatter. Pure.
+     */
+    fun trailingAvg(values: List<Int>, window: Int): List<Float> {
+        if (values.isEmpty()) return emptyList()
+        val out = ArrayList<Float>(values.size)
+        for (i in values.indices) {
+            val start = maxOf(0, i - window + 1)
+            var sum = 0.0
+            for (j in start..i) sum += values[j]
+            out += (sum / (i - start + 1)).toFloat()
+        }
+        return out
+    }
+
     fun band(score: Int): String = when {
         score < 25 -> "Calm"
         score < 45 -> "Moderate"

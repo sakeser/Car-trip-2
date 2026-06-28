@@ -1,7 +1,7 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.23 (build 134)** (Rev CO) · Branch `main`, **all pushed** (origin at
-`041ca86`; Rev CO = `b4eccfd`) · S25 still on 3.22 (build 133). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.24 (build 135)** (Rev CP, Drive Stress Score depth) · Branch `main`,
+**all pushed** · S25 installed **3.24 (build 135)**. Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -56,11 +56,10 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
   `archive/pre-ux-redesign-wip` (also pushed to origin). Branch `main` is at **Rev CN** (pushed; a **Rev
   CO** doc/correctness pass is in progress — see §14); verify with `git log origin/main..main`. Pushing to
   `main` needs explicit per-turn user authorization.
-- Source is **3.23 (build 134)** (Rev CO); the **S25 is still on 3.22 (build 133)** until the owner installs
-  Rev CO. Device auto-locks fast; for a
+- Source + **S25 installed = 3.24 (build 135)** (Rev CP, Drive Stress Score depth). Device auto-locks fast; for a
   UI-verify pass ask the owner to unlock it, then `adb shell svc power stayon true` keeps the screen
   awake (reset with `stayon false` after). Screencap to a **non-OneDrive** path.
-- Unit tests all green (**176 tests**, all pure-JVM). Room schema **v21**: v18 `trips.userIsDrive` (walk
+- Unit tests all green (**179 tests**, all pure-JVM). Room schema **v21**: v18 `trips.userIsDrive` (walk
   override); v19 per-fix GPS accuracy + `gnss_measurements` (lane R&D); v20 `trips.speedingSeverity`
   (magnitude-weighted speeding for Safety); **v21 `trips.drawdownCount`/`drawdownSeverity`** (forced
   slowdowns — feeds the Drive Stress Score).
@@ -467,7 +466,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (176 tests)
+## 7. Test suite (179 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -486,7 +485,7 @@ pure-JVM (no Robolectric/instrumented).
 Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (5), `AiInsightsExportTest` (3),
 `EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
 `GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard). Count is
-**176** (`grep -rc '@Test'` across `app/src/test`).
+**179** (`grep -rc '@Test'` across `app/src/test`).
 
 Gaps: **no Room-migration tests, no Compose/UI tests, no instrumented tests** (the highest-value gap given
 21 migrations + a commercialization goal — see §14 Rev CP); network paths (Overpass, Routes, Sheets,
@@ -1201,11 +1200,14 @@ A re-review (Codex) of the committed Rev CO. Verified each against source:
 - **`GeneratedTripLabel` export column** (optional) — a label-aware export path that includes the geocoded
   "A→B" name, not just the user rename. Needs IO/Geocoder at export time, so it's a deliberate design change
   (the current builder is pure/sync); weigh against keeping export pure.
-- **⭐ Drive Stress Score depth (HIGH owner interest, 2026-06-28).** Surface it in the trip-detail **hero**
-  (not the compact line at `TripDetailScreen.kt`~966), add a **per-km normalized** read, and an Insights
-  **30-day trend** smoothed with an **EMA/trailing average** + an evolution sparkline (replacing the single
-  average `StressSummaryRow`). Own rev; pairs with the `StressScore` decouple (do the new pure logic in the
-  non-UI module). No schema change. Full spec in **`ROADMAP_NEW.md` → "Drive Stress Score — depth"**.
+- **⭐ Drive Stress Score depth (HIGH owner interest) — ✅ SHIPPED v3.24/build 135 (Rev CP).** `StressHeroPill`
+  in the trip-detail **hero** (replaced the old compact line); `StressScore.avgPerKm` (distance-weighted,
+  "normalized by km"); `StressScore.series`/`trailingAvg` (pure, tested) feeding an Insights **`StressTrendCard`**
+  — km-weighted headline + a trailing-average-smoothed `TimeSeriesChart` of how stress evolved over the window
+  + a delta vs the previous window (replaced the single-average `StressSummaryRow`). No schema change. Spec in
+  **`ROADMAP_NEW.md` → "Drive Stress Score — depth"**. **Still open:** the `StressScore` **decouple** below
+  (deepened by this rev — `series`/`avgPerKm`/`trailingAvg` were added to `ui.StressScore`), and EMA-vs-trailing
+  tuning + per-user re-calibration as data grows.
 
 ---
 

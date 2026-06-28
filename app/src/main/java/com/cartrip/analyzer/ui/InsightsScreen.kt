@@ -164,12 +164,14 @@ fun InsightsScreen(
                 item { WindowDeltaStrip(averages, prevAverages, window.label) }
             }
 
-            // Drive Stress Score (Rev CJ): average over the window.
+            // Drive Stress Score: km-normalized average + a smoothed trend showing how it's evolved.
             run {
-                val stresses = windowTrips.mapNotNull { StressScore.from(it) }
-                if (stresses.isNotEmpty()) {
-                    val avg = stresses.map { it.score }.average().roundToInt()
-                    item { StressSummaryRow(avg, stresses.size) }
+                val series = StressScore.series(windowTrips)
+                if (series.isNotEmpty()) {
+                    val kmAvg = StressScore.avgPerKm(windowTrips) ?: series.average().roundToInt()
+                    val smoothed = StressScore.trailingAvg(series, STRESS_SMOOTH_TRIPS)
+                    val prevKmAvg = StressScore.avgPerKm(prevWindowTrips)
+                    item { StressTrendCard(kmAvg, prevKmAvg, smoothed, series.size, window.label) }
                 }
             }
 
@@ -378,32 +380,70 @@ private fun WindowSelector(selected: InsightWindow, onSelect: (InsightWindow) ->
     }
 }
 
-/** Average Drive Stress Score over the window — a calm/busy read of how demanding the driving has been. */
+/** Trips back to average over before the smoothed stress trend reads as a trend, not per-trip scatter. */
+private const val STRESS_SMOOTH_TRIPS = 5
+
+/**
+ * Drive Stress over the window: a km-normalized (distance-weighted) headline + a smoothed line showing how
+ * it has evolved, plus a delta vs the previous comparable window. Higher = more demanding, so a rise is red.
+ */
 @Composable
-private fun StressSummaryRow(avgScore: Int, drives: Int) {
-    val color = StressScore.color(avgScore)
+private fun StressTrendCard(
+    kmAvgScore: Int,
+    prevKmAvgScore: Int?,
+    smoothed: List<Float>,
+    drives: Int,
+    windowLabel: String
+) {
+    val color = StressScore.color(kmAvgScore)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                "$avgScore",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Drive stress", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(
-                    "${StressScore.band(avgScore)} on average - $drives drives (higher = more demanding)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "$kmAvgScore",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Drive stress", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${StressScore.band(kmAvgScore)}, km-weighted - $drives drives (higher = more demanding)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Change vs the previous comparable window. Higher stress is worse, so a rise is red.
+                prevKmAvgScore?.let { prev ->
+                    val d = kmAvgScore - prev
+                    if (d != 0) {
+                        val up = d > 0
+                        Text(
+                            (if (up) "+" else "") + "$d",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (up) Color(0xFFEF4444) else Color(0xFF22C55E)
+                        )
+                    }
+                }
+            }
+            if (smoothed.size >= 2) {
+                TimeSeriesChart(
+                    title = "Stress over $windowLabel (smoothed)",
+                    values = smoothed,
+                    unit = "",
+                    color = color,
+                    average = kmAvgScore.toFloat()
                 )
             }
         }

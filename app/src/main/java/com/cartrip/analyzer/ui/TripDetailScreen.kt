@@ -551,8 +551,42 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
                     MiniScoreRing("Comfort", scores.comfort)
                     MiniScoreRing("Pace", scores.speed)
                 }
+                // Drive Stress Score: higher = MORE demanding, the inverse of the green=good rings above, so
+                // it gets its own pill + green->red scale rather than a fourth ring (which would read as good).
+                StressScore.from(trip)?.let { s -> StressHeroPill(s) }
             }
         }
+    }
+}
+
+/**
+ * Drive Stress Score as a distinct hero pill. It's the inverse of Safety/Comfort/Pace (higher = more
+ * stressful), so it deliberately does NOT use a score ring — a labelled pill on the green->red stress scale
+ * keeps the "green = good" convention from being misread.
+ */
+@Composable
+private fun StressHeroPill(s: StressScore.Result) {
+    val color = StressScore.color(s.score)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(color))
+        Text(
+            "Drive stress",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            "${s.band} (${s.score})",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
     }
 }
 
@@ -963,15 +997,7 @@ private fun SafetyFactorsCard(
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Driving", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            // Drive Stress Score (Rev CJ): composite of forced slowdowns, hard events, congestion, etc.
-            StressScore.from(trip)?.let { s ->
-                Text(
-                    "Drive stress: ${s.band} (${s.score})",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = StressScore.color(s.score)
-                )
-            }
+            // (Drive Stress Score now headlines the hero card — see StressHeroPill in TripHero.)
             if (eventSummaries.isEmpty()) {
                 Text(
                     "No major braking, acceleration, or turn events detected.",
