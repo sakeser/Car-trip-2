@@ -20,6 +20,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -29,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,6 +39,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.cartrip.analyzer.analysis.FuelEstimator
+import com.cartrip.analyzer.cloud.GasPrice
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import java.util.Locale
@@ -59,6 +62,7 @@ fun VehicleScreen(onBack: () -> Unit) {
     var price by remember { mutableStateOf(fmt(initial.pricePerL)) }
     var cal by remember { mutableStateOf(fmt(initial.calibration)) }
     var actual by remember { mutableStateOf("") }
+    var autoPrice by remember { mutableStateOf(VehiclePrefs.autoUpdatePrice(context)) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -107,6 +111,34 @@ fun VehicleScreen(onBack: () -> Unit) {
             }
             OutlinedTextField(price, { price = it }, label = { Text("Fuel price ($/L)") }, modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+
+            // Auto-update the price from the free Ontario weekly survey (Toronto regular average).
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Auto-update price", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "${GasPrice.SOURCE_LABEL}, refreshed daily. You can still edit it manually.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = autoPrice,
+                    onCheckedChange = { on ->
+                        autoPrice = on
+                        VehiclePrefs.setAutoUpdatePrice(context, on)
+                        if (on) scope.launch {
+                            val p = GasPrice.refreshNow(context)
+                            if (p != null) {
+                                price = fmt(p)
+                                snackbar.showSnackbar(String.format(Locale.US, "Price updated to $%.2f/L", p))
+                            } else {
+                                snackbar.showSnackbar("Couldn't fetch the latest price")
+                            }
+                        }
+                    }
+                )
+            }
 
             val v = current()
             Card(

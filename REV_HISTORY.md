@@ -4,6 +4,23 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev BP (2026-06-28) — auto-update gas price (Toronto weekly average) + toggle
+
+Owner-requested dynamic gas price. Found a free, official, **current weekly** source — Ontario's fuel-price
+survey CSV (`ontario.ca/v1/files/fuel-prices/fueltypesall.csv`), Toronto West/East regular-gas average in
+¢/L (validated: week of 2026-06-22 = $1.616/L, matching the owner's manual $1.60). (The Ontario *open-data
+API* "Canadian gasoline" dataset is stale since 2022 — this weekly CSV is the live one.)
+
+- `cloud/GasPrice`: pure `parseLatestTorontoRegular` (latest-week Toronto avg, ¢→$, sanity-banded $0.50–5;
+  +4 tests) + a fail-soft OkHttp fetch. `maybeUpdate` refreshes once/day on app open; `refreshNow` for the
+  toggle/manual path.
+- `VehiclePrefs`: `autoUpdatePrice` toggle (default on), once/day stamp, `setPrice`. `VehicleScreen` gains
+  an **"Auto-update price"** switch (flipping it on fetches immediately + shows a snackbar); the manual
+  price field still works. `MainActivity` calls `GasPrice.maybeUpdate` on startup.
+
+Fail-soft throughout: any network/parse/format issue leaves the existing price untouched. Toggle UI not
+visually verified yet (built this session).
+
 ## Rev BO (2026-06-28) — trouble-spots map (hotspots + rough spots) in Insights
 
 Owner-requested: recurring hotspots + rough spots on a map. New `TroubleSpotsMap` (embedded in Insights,

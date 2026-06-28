@@ -39,4 +39,20 @@ object VehiclePrefs {
             .putString("fuel", v.fuelType)
             .apply()
     }
+
+    // --- Auto gas-price update (Rev BP): toggle + just the price + a once-per-day throttle stamp. ---
+
+    /** On by default — auto-update the price from the Toronto weekly average ([GasPrice]). */
+    fun autoUpdatePrice(c: Context): Boolean = p(c).getBoolean("autoPrice", true)
+    fun setAutoUpdatePrice(c: Context, on: Boolean) = p(c).edit().putBoolean("autoPrice", on).apply()
+
+    /** Update only the price (used by the auto-updater; leaves the rest of the profile untouched). */
+    fun setPrice(c: Context, pricePerL: Double) =
+        p(c).edit().putFloat("price", pricePerL.toFloat()).apply()
+
+    /** yyyymmdd of the last auto price update (throttles to once/day) + the displayed source label. */
+    fun lastPriceUpdateDay(c: Context): Int = p(c).getInt("priceDay", 0)
+    fun priceSourceLabel(c: Context): String? = p(c).getString("priceSrc", null)
+    fun recordPriceUpdate(c: Context, day: Int, label: String) =
+        p(c).edit().putInt("priceDay", day).putString("priceSrc", label).apply()
 }

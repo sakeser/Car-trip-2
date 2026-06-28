@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.cloud.CloudSync
+import com.cartrip.analyzer.cloud.GasPrice
 import com.cartrip.analyzer.cloud.GoogleAuth
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
@@ -89,6 +90,8 @@ private fun AppRoot() {
         val repaired = vm.recoverInterruptedTrips()
         // One-time: fill in the Rev BF speeding severity for older trips (from stored limits, no network).
         runCatching { vm.backfillSpeedingSeverity() }
+        // Once/day, refresh the fuel price from the Toronto weekly average (if auto-update is on).
+        runCatching { GasPrice.maybeUpdate(context) }
         CloudState.set { it.copy(email = CloudPrefs.email(context)) }
         if (repaired > 0) {
             CloudState.set {
