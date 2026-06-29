@@ -22,7 +22,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.cartrip.analyzer.MainActivity
-import com.cartrip.analyzer.R
+import com.cartrip.engine.R as EngineR
 
 /**
  * Persistent "armed" foreground service for hands-free auto-record. Runs while auto-record is enabled.
@@ -189,7 +189,7 @@ class AutoRecordWatchService : Service() {
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Auto-record on")
             .setContentText("Watching for a drive (charger / car Bluetooth)")
-            .setSmallIcon(R.drawable.ic_stat_record)
+            .setSmallIcon(EngineR.drawable.engine_ic_stat_record)
             .setOngoing(true)
             .setContentIntent(
                 PendingIntent.getActivity(

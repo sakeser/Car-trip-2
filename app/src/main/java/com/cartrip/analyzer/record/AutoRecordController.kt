@@ -13,7 +13,6 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.cartrip.analyzer.R
 
 /**
  * Applies [AutoRecordPolicy] to live device state and drives [RecordingService]. Called from the
@@ -157,7 +156,7 @@ object AutoRecordController {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val n = NotificationCompat.Builder(context, RecordingService.CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(context.applicationInfo.icon)
             .setContentTitle("Drive detected")
             .setContentText("Tap to start recording your trip")
             .setAutoCancel(true)

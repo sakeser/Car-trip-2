@@ -11,7 +11,7 @@
 ## Where we are
 
 - **Branch:** `ux-premium-modular-v1` (local only — NOT pushed, NOT merged to `main`).
-- **Last code commit:** `91e1c80` — Phase 1A (move VehiclePrefs). The doc commits after it are docs only.
+- **Last code commit:** the `record` R-decouple (latest commit on this branch; see "record R-decouple" below).
 - **Build state:** green. `:core-engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug` succeeds via the
   OneDrive relocate workaround; no build output leaks into the synced tree.
 - **App unchanged behaviorally:** v3.36 / build 147, Room schema v22.
@@ -36,48 +36,39 @@
 
 ## Exact current status
 
-Phase 1B-prep investigation complete (this doc). **No code changed in this prep step — docs only.** The `record`
-package still references the app `R` class; that decoupling is the recommended first move of Phase 1B (below).
+Phase 1B-prep **record R-decouple: DONE** (see below). `record` no longer references the app `R` class at all, so
+the package is now free to move into `:core-engine` without dragging an app-resource dependency. The package cluster
+itself has **not** moved yet — that is the remaining Phase 1B work.
 
-## Exact `record` R references found (the only `R` usage in any would-be-engine package)
+## record R-decouple — DONE ✅
 
-| File:line | Reference | Used as | Notification |
-|---|---|---|---|
-| `record/AutoRecordController.kt:160` | `R.mipmap.ic_launcher` | `setSmallIcon` | "Drive detected" start fallback |
-| `record/AutoRecordWatchService.kt:192` | `R.drawable.ic_stat_record` | `setSmallIcon` | "Auto-record on" watcher FGS |
-| `record/RecordingService.kt:1071` | `R.mipmap.ic_launcher` | `setSmallIcon` | "Couldn't auto-start your trip" |
-| `record/RecordingService.kt:1093` | `R.mipmap.ic_launcher` | `setSmallIcon` | "Trip not recorded" |
-| `record/RecordingService.kt:1126` | `R.drawable.ic_stat_record` | `setSmallIcon` | recording FGS notification |
+What was changed (the only `R` usage in any would-be-engine package, now resolved):
 
-Plus 3 `import com.cartrip.analyzer.R` lines: `AutoRecordController.kt:16`, `AutoRecordWatchService.kt:25`,
-`RecordingService.kt:29`.
+| File | Was | Now |
+|---|---|---|
+| `record/AutoRecordController.kt` | `R.mipmap.ic_launcher` (+ app `R` import) | `context.applicationInfo.icon`; app `R` import removed |
+| `record/AutoRecordWatchService.kt` | `R.drawable.ic_stat_record` (+ app `R` import) | `EngineR.drawable.engine_ic_stat_record`; import = `com.cartrip.engine.R as EngineR` |
+| `record/RecordingService.kt` | 2× `R.mipmap.ic_launcher`, 1× `R.drawable.ic_stat_record` (+ app `R` import) | 2× `applicationInfo.icon`, 1× `EngineR.drawable.engine_ic_stat_record`; import = `com.cartrip.engine.R as EngineR` |
 
-**Two resources only:**
-- `res/drawable/ic_stat_record.xml` — a **self-contained vector** (record-circle, white tint; references 0 other
-  resources). Copyable into `:core-engine/res/drawable/` later with **zero behavior change**.
-- `@mipmap/ic_launcher` — the **adaptive launcher icon** (`mipmap-anydpi-v26/ic_launcher.xml` → references a
-  foreground vector + background). Copying the whole adaptive set into the engine is messy. Confirmed in the manifest:
-  `android:icon="@mipmap/ic_launcher"`, so **`context.applicationInfo.icon` returns this exact resource id** — a clean
-  drop-in for `setSmallIcon(Int)` with no resource copy.
+New resource: `core-engine/src/main/res/drawable/engine_ic_stat_record.xml` — byte-for-byte copy of the original
+self-contained vector, renamed to avoid collision. `applicationInfo.icon` == `@mipmap/ic_launcher` (manifest
+`android:icon`), so the three launcher-icon notifications are unchanged. **No adaptive launcher icon copied.**
 
-## Recommended next step (do this BEFORE moving the `record` package)
+Verified: `grep "com.cartrip.analyzer.R|R\." record/` → CLEAN (no app-resource dependency in `record`). Full relocate
+build (`:core-engine` + `:app` tests + `:app:assembleDebug`) green; cross-module reference to `com.cartrip.engine.R`
+from the (still-in-`app`) `record` classes resolves; no output leaked to the OneDrive tree.
 
-Decouple `record` from the app `R` so the package can move cleanly. Smallest safe path:
+> **⚠️ On-device visual check still recommended** (not done — no device this session): start a trip → confirm the
+> recording FGS notification shows the record-dot icon; trigger auto-record → confirm "Auto-record on" shows it; and
+> the three launcher-icon notices still render. Do this before AND/OR after the full extraction. The icons are now a
+> vector in the engine + the system launcher icon, so the result should be visually identical.
 
-1. **`ic_stat_record` (2 refs):** when `record` moves, copy `ic_stat_record.xml` into `:core-engine/res/drawable/`;
-   the refs then resolve against `com.cartrip.engine.R`. (Or do the copy first and switch the import — but the vector
-   only needs to live in whichever module owns `record`.)
-2. **`ic_launcher` (3 refs):** replace `R.mipmap.ic_launcher` with `applicationInfo.icon`
-   (`context.applicationInfo.icon` in `AutoRecordController`; `applicationInfo.icon` inside the Services). Equivalent
-   result, removes the app-resource dependency, **no adaptive-icon copy needed.**
-3. Once both are done, the 3 `import com.cartrip.analyzer.R` lines can be removed and `record` is `R`-free.
+## Recommended next step
 
-**Caution:** all five references are in foreground-service / auto-record notification code — the most fragile,
-device-behavior-dependent area. After editing, **verify on-device** that each notification still shows its icon
-(start a trip → recording notification; trigger auto-record → "Auto-record on"). This is why this prep step left the
-code untouched: the change is best made and on-device-verified together, not blind.
-
-After the `record` R-decoupling is green, proceed with the rest of Phase 1B per the audit table below.
+The `record` R-decouple is done, so the remaining Phase 1B work is the actual cluster move. Proceed per the audit
+table below — move `analysis + data + cloud + record + export` (+ `settings`) into `:core-engine` as one unit.
+When `record` physically moves, `engine_ic_stat_record.xml` is already in the engine, so it just works; the
+`EngineR` alias can become a plain same-module `R` reference at that point if desired.
 
 ## Phase 1B full extraction audit (for after the R-decoupling)
 

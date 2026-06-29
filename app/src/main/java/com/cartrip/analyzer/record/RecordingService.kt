@@ -26,7 +26,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.cartrip.analyzer.MainActivity
-import com.cartrip.analyzer.R
+import com.cartrip.engine.R as EngineR
 import com.cartrip.analyzer.analysis.GeoUtils
 import com.cartrip.analyzer.analysis.TripAnalyzer
 import com.cartrip.analyzer.cloud.CloudPrefs
@@ -1068,7 +1068,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(applicationInfo.icon)
             .setContentTitle("Couldn't auto-start your trip")
             .setContentText("Allow location \"All the time\" for hands-free recording. Tap to open.")
             .setStyle(NotificationCompat.BigTextStyle().bigText(
@@ -1090,7 +1090,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(applicationInfo.icon)
             .setContentTitle("Trip not recorded")
             .setContentText("It was too short to save (under 5 m or 10 s).")
             .setAutoCancel(true)
@@ -1123,7 +1123,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Recording trip")
             .setContentText("Collecting GPS and motion data")
-            .setSmallIcon(R.drawable.ic_stat_record)
+            .setSmallIcon(EngineR.drawable.engine_ic_stat_record)
             .setOngoing(true)
             .setContentIntent(openIntent)
             .addAction(0, "Stop", stopIntent)
