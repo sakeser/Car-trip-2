@@ -4,6 +4,24 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CP cont. (2026-06-28, v3.29/build 140) — shared bar-scale component (bar-sizing audit)
+
+Continues the CP "bar-sizing audit" with a **pure, shared** axis/scale helper so bars stop each picking
+an ad-hoc max (built + unit tests green; the UI sizing is not yet eyeballed on device — low risk, the math
+is unit-tested; **not pushed**).
+- `ui/BarScale.kt` (pure, +8 tests): `niceAxisMax(dataMax, headroom)` rounds the data max up to a tidy
+  number (steps 1/5/10/30) with headroom so the longest bar fills ~75–90% of the track (not edge-to-edge);
+  `fillFraction(value, axisMax, minVisible)` floors a strictly-positive value to a visible sliver and
+  returns 0 for a non-positive value/axis.
+- `niceEtaAxisMaxMin` (you-vs-traffic, `ui/TripDetailScreen.kt`) now **delegates** to
+  `BarScale.niceAxisMax(_, 1.25)` — behaviour-identical (a test pins it to the old inline tiers), so that
+  bar is visually unchanged.
+- Past-trips `DurationBar` (`ui/TripListScreen.kt`) now sizes against `BarScale.niceAxisMax(maxMinutes,
+  1.15)` instead of the raw longest trip, so the longest bar is no longer edge-to-edge and short trips keep
+  a minimum sliver.
+- Intentionally left as-is (documented, not churned): `SpeedingShareBar` (a 0–100% proportion — full scale
+  is correct and it already has a min sliver) and `PeakLimitBar` (already carries 15% headroom).
+
 ## Rev CP cont. (2026-06-28, v3.28/build 139) — reset-to-automatic + OSM attribution + doc/test sync
 
 Low-risk autonomous polish pass on the CP backlog (built + 187 unit tests green; **not yet installed/

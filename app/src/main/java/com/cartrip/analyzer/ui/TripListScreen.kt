@@ -187,7 +187,10 @@ fun TripListScreen(
                     }
                 }
 
-                val maxDurationS = shownTrips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
+                // Size duration bars against a tidy axis with a little headroom (BarScale) so the longest
+                // trip fills ~75-90% of the track, not edge-to-edge. Axis kept in seconds (minutes * 60).
+                val rawMaxDurationS = shownTrips.maxOfOrNull { it.durationS }?.coerceAtLeast(1.0) ?: 1.0
+                val maxDurationS = BarScale.niceAxisMax(rawMaxDurationS / 60.0, headroom = 1.15) * 60.0
                 val grouped = TripBuckets.group(shownTrips)
                 // Differentiate same-named trips ("North York Loop (10:14am)") across the whole list.
                 val shownNames = remember(shownTrips, tripLabels) {
@@ -487,7 +490,7 @@ private fun TripRow(
                     )
                     DurationBar(
                         durationS = trip.durationS,
-                        fraction = (trip.durationS / maxDurationS).coerceIn(0.03, 1.0).toFloat(),
+                        fraction = BarScale.fillFraction(trip.durationS, maxDurationS, minVisible = 0.03f),
                         modifier = Modifier.weight(1f)
                     )
                     if (isWalk) {

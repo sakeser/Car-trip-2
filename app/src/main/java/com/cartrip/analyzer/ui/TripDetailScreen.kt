@@ -1585,16 +1585,7 @@ private fun EtaCompare(freeFlowS: Double, typicalS: Double, actualS: Double, you
 }
 
 /** A round-number axis max ~25% above the largest ETA so the longest bar fills ~80% and ticks are tidy. */
-private fun niceEtaAxisMaxMin(dataMin: Double): Double {
-    val target = (dataMin * 1.25).coerceAtLeast(1.0)
-    val step = when {
-        target <= 10 -> 1.0
-        target <= 30 -> 5.0
-        target <= 120 -> 10.0
-        else -> 30.0
-    }
-    return kotlin.math.ceil(target / step) * step
-}
+private fun niceEtaAxisMaxMin(dataMin: Double): Double = BarScale.niceAxisMax(dataMin, headroom = 1.25)
 
 private enum class EventFilter(val label: String) {
     BRAKING("Brakes"),

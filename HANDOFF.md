@@ -1,12 +1,13 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.28 (build 139)** (Rev CP cont.: Trip-Detail reset-to-automatic +
-visible OSM/ODbL attribution + doc/test-count sync; atop CR export retention + migration foundation + Places
-scaffold) · on review branch **`rev-cp-v3.28-polish`** (`682f791`); **`main` is untouched at `efa82a8` =
-origin/main**, **NOT pushed** — v3.28 awaits the owner's review + push authorization (to land it:
-`git checkout main && git merge --ff-only rev-cp-v3.28-polish`, then push) · S25 installed **3.27 (build
-138)** — v3.28 **not yet installed/eyeballed on device** (UI changes build + unit-test clean; device
-verification pending). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.29 (build 140)** (Rev CP cont.: shared bar-scale component /
+bar-sizing audit; atop v3.28 Trip-Detail reset-to-automatic + visible OSM/ODbL attribution + doc/test sync,
+CR export retention, migration foundation, Places scaffold) · on review branch **`rev-cp-v3.28-polish`**
+(v3.28 + v3.29 stacked); **`main` is untouched at `efa82a8` = origin/main**, **NOT pushed** — awaits the
+owner's review + push authorization (to land it: `git checkout main && git merge --ff-only
+rev-cp-v3.28-polish`, then push) · **195 unit tests, all green** · S25 installed **3.28 (build 139)** this
+session; v3.29 **not yet installed/eyeballed** (UI sizing builds + unit-tests clean; device check pending).
+Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -470,7 +471,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (187 tests)
+## 7. Test suite (195 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -489,8 +490,8 @@ pure-JVM (no Robolectric/instrumented).
 Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (8), `AiInsightsExportTest` (3),
 `EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
 `GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard),
-`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7). Count is **187** (`grep -rc '@Test'`
-across `app/src/test`). The per-suite counts above are exact and sum to 187 (verified 2026-06-28).
+`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7), `BarScaleTest` (8). Count is **195**
+(`grep -rc '@Test'` across `app/src/test`). The per-suite counts above are exact and sum to 195 (verified 2026-06-28).
 
 Gaps: **no Compose/UI tests, no instrumented tests.** Room migrations: **schema export is now on** (v3.27 —
 `exportSchema=true` + `app/schemas/.../21.json`), so Room validates migrations at compile time and v21+ is a
@@ -1186,8 +1187,12 @@ source** before acting (some Codex notes were stale or already-handled). Verdict
   override (clears `userIsDrive` back to null; only shown when a manual override exists), and a visible
   **OSM "© OpenStreetMap contributors (ODbL)"** attribution credit in the "How it works" guide (a new
   "Credits & data sources" card; the © glyph is built via `0xA9.toChar()` so the `.kt` source stays ASCII —
-  mojibake trap). Still open: shared bar/chart scale component (the queued "bar-sizing audit") and a better
-  Past Trips open/preview affordance.
+  mojibake trap). **Bar-sizing audit — shared scale shipped (v3.29/build 140):** `ui/BarScale.kt` (pure,
+  unit-tested) — `niceAxisMax(dataMax, headroom)` + `fillFraction(value, axisMax, minVisible)`; the
+  you-vs-traffic ETA axis now delegates to it (behaviour-identical) and the Past-Trips `DurationBar` sizes
+  against it (no longer edge-to-edge, keeps a min sliver). `SpeedingShareBar` (a 0–100% proportion) and
+  `PeakLimitBar` (already carries headroom) were intentionally left. Still open: a better Past Trips
+  open/preview affordance.
 - **CQ (P2, gated on owner's Places go/no-go):** **SCAFFOLD DONE (v3.27, inert):** `cloud/Places.kt`
   (Nearby Search New: pure `topPlaceName` parser + `cellKey` cache key, both unit-tested; `nearbyName` fetch
   with `X-Goog-FieldMask=places.displayName`, ~60 m radius, rank-by-distance; `placeNameCached` caches by
