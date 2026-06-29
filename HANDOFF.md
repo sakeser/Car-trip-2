@@ -1,10 +1,13 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-29 · Source **3.33 (build 144), schema v22** (Rev CV+CT: trip-view defaults +
-**Insights chart/filter overhaul** — dynamic `1/3/7/30/All` days filter, Drive-Stress chart fixed 0..100 with
-y-axis labels + no min/max footer, bumps hidden from the trip "All events" list by default; **all
-device-verified on the S25**, pushed; the Fuel %-change chart + Rev CU bars + Rev CW Driver-Load are the
-queued follow-ups — see ROADMAP_NEW) · atop Rev CS: **Drive Stress Score v2** —
+_Last updated: 2026-06-29 · Source **3.34 (build 145), schema v22** (Rev CT-fuel + CU: a new **"Fuel economy
+vs your average"** chart — `PercentChangeChart` plots each drive's L/100km as a smoothed %-deviation from your
+window mean with green/red fill + a dashed live-OEM-rating line; and **bar-sizing pass 2** — the "When you
+drive" daypart bars now scale through `BarScale` (~80% busiest, not edge-to-edge); **210 tests**, **both
+device-verified on the S25**; **Rev CW Driver-Load is the next queued rev** — see ROADMAP_NEW) · atop Rev
+CV+CT (v3.33/build 144): trip-view defaults + **Insights chart/filter overhaul** — dynamic `1/3/7/30/All` days
+filter, Drive-Stress chart fixed 0..100 with y-axis labels + no min/max footer, bumps hidden from the trip
+"All events" list by default · atop Rev CS: **Drive Stress Score v2** —
 a stop-and-go / no-break demand-gated model + `analysis/StopAndGo.kt` + schema v22; atop the
 Rev CP cont. v3.28–v3.31: reset-to-automatic, OSM/ODbL attribution, bar-scale audit, AI-export traffic/daypart
 sections, export value-mapping tests, CR export retention, migration foundation, Places scaffold ·

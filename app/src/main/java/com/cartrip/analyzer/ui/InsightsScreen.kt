@@ -693,6 +693,9 @@ private fun WhenYouDriveCard(trips: List<TripEntity>) {
     val active = buckets.filter { it.tripCount > 0 }
     if (active.isEmpty()) return
     val maxCount = active.maxOf { it.tripCount }
+    // Round the busiest count up to a tidy axis so the longest bar fills ~80-90% (not edge-to-edge) and a
+    // single-trip daypart still shows a sliver — same scaling judgement as the ETA / duration bars.
+    val axisMax = BarScale.niceAxisMax(maxCount.toDouble())
     val mostDriven = active.maxByOrNull { it.tripCount }
     val safest = active.filter { it.avgSafety != null }.maxByOrNull { it.avgSafety!! }
     Card(
@@ -711,7 +714,7 @@ private fun WhenYouDriveCard(trips: List<TripEntity>) {
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(b.tripCount.toFloat() / maxCount)
+                                .fillMaxWidth(BarScale.fillFraction(b.tripCount.toDouble(), axisMax))
                                 .height(10.dp).clip(RoundedCornerShape(5.dp))
                                 .background(MaterialTheme.colorScheme.primary)
                         )
@@ -898,6 +901,24 @@ private fun FuelSection(s: FuelInsights.Summary, spend: FuelInsights.Spend, v: F
             val weekly = if (s.weeklySpendSmoothed.size >= 2) s.weeklySpendSmoothed else s.weeklySpend
             if (weekly.size >= 2) {
                 TimeSeriesChart("Spend rate ($/week)", weekly, "$/wk", Color(0xFF0EA5E9))
+            }
+            // Economy as a %-change against your own average for this window, with the factory combined
+            // rating marked. Lower L/100km than your norm is greener; the dashed line is the OEM rating.
+            if (s.l100PctVsMean.size >= 2 && s.l100Mean > 0.0) {
+                val combined = FuelEstimator.combinedL100(v)
+                val oemPct = (((combined / s.l100Mean) - 1.0) * 100.0).toFloat()
+                PercentChangeChart(
+                    title = "Fuel economy vs your average",
+                    pct = s.l100PctVsMean,
+                    belowIsBetter = true,
+                    referencePct = oemPct,
+                    referenceLabel = String.format(
+                        Locale.US,
+                        "Dashed = %s factory rating (%.1f L/100km) vs your %.1f average · green = more efficient",
+                        v.label, combined, s.l100Mean
+                    ),
+                    xAxisLabel = "Per drive, oldest -> newest"
+                )
             }
         }
     }

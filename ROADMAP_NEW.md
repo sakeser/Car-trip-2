@@ -29,17 +29,47 @@ is shipped + device-verified; this is what's next.)
 ### Build plan (rev sequence, value x (1/risk))
 - **Rev CV — Trip-view event defaults — DONE (v3.33, device-verified):** the "All events" list hides
   bumps/potholes by default (the Bumps chip reveals them); the list already opened by default. `ui/TripDetailScreen.kt`.
-- **Rev CT — Insights chart & filter overhaul — MOSTLY DONE (v3.33, device-verified):** dynamic
+- **Rev CT — Insights chart & filter overhaul — DONE (v3.33–v3.34, device-verified):** dynamic
   `1/3/7/30/All` days filter (default 7d, dropped 500 km) + Drive-Stress chart fixed **0..100** with y-axis
   labels, no min/max footer, x-axis label; the `TimeSeriesChart` rework also cleaned the fuel/traffic chart
-  axes. **Still open (CT-fuel):** the Fuel **%-change-vs-30-day-baseline** chart + red/green shading + OEM
-  (Tucson) reference line.
-- **Rev CU — Bar-sizing pass 2:** finish the BarScale job across the remaining bars + investigate the
-  you-vs-traffic edge. Small-medium.
+  axes. **CT-fuel — DONE (v3.34, device-verified):** new **"Fuel economy vs your average"** chart — a new
+  `PercentChangeChart` plots each drive's L/100km as a smoothed **% deviation from the window mean** (the 0%
+  line), green fill below (more efficient) / red above, plus a dashed **OEM reference line** read from the
+  live `FuelEstimator.combinedL100(vehicle)` (no hardcode — the owner's profile shows 6.4 combined vs 7.0
+  estimated avg = −8.6%). _Design note:_ used the **window mean** (single self-consistent baseline shared by
+  the data + the OEM line) rather than a drifting 30-day rolling mean, so the OEM line is one fixed reference
+  and the chart reads as a clean trend.
+- **Rev CU — Bar-sizing pass 2 — DONE (v3.34, device-verified):** applied `BarScale` to the **"When you
+  drive" daypart bars** (busiest now fills ~80%, not edge-to-edge — verified Morning 16→80%, Evening 15→75%,
+  Midday 10→50% on a max-20 axis). _Left as-is (already correct):_ `PeakLimitBar` fills ~87% by construction
+  (`peak*1.15` headroom + labels); `SpeedingShareBar` is a true 0-100% proportion with a min-visible floor
+  (full = 100% of moving time is meaningful, like the score bars). _Still open:_ `EtaCompare` lives on the
+  **Trip-Detail** screen (not Insights) — code-review shows it already caps at ~80% via `niceEtaAxisMaxMin`
+  (headroom 1.25); the owner's "near full width" likely a specific trip or the wipe animation, so it needs an
+  owner-pointed on-device re-check rather than a blind change.
 - **Rev CW — Driver-Load / "Drive readiness" model (marquee R&D):** the cumulative, time-decaying load index
   + 24 h recovery forecast. Larger; design below; workshop calibration. The premium hook.
 - _Misc (low priority):_ trip-end trim leaves a few seconds at 0 km/h on the tail — tighten
   `AutoStop.retrospectiveStopTime` to drop a trailing standstill (one observed case; fold into a polish rev).
+
+### Next-agent pickup — CW Driver-Load (file pointers; start here)
+
+Current state: **v3.34 / build 145, schema v22, 210 tests, main == origin/main, CT-fuel + CU device-verified
+on the S25.** Build/test/device workflow is HANDOFF section 2.1 (relocated Gradle init script; grep the log
+for `BUILD SUCCESSFUL`; bump version for runtime changes; install + eyeball on the S25). **CV, CT, CT-fuel,
+and CU are all done + device-verified** (see the Build-plan bullets above for what shipped). What remains:
+
+**Rev CW — Driver-Load / "Drive readiness" model (marquee R&D).** The cumulative, time-decaying load index +
+24 h recovery forecast — the premium hook. Design lives in the "Driver-Load" section further down this file;
+it's a larger, calibration-heavy R&D rev (workshop the decay/recovery constants by DB-replay, the way Stress
+v2 was anchored). No code exists yet — start from the design section + the existing `analysis/StressScore.kt`
++ `analysis/StopAndGo.kt` + `analysis/Drawdowns.kt` (the per-trip demand signals it will integrate over time).
+
+**Small leftovers (fold into a polish rev):**
+- `EtaCompare` (Trip-Detail, `ui/TripDetailScreen.kt` ~ln 1497) — owner-pointed on-device re-check of the
+  "near full width" report; the code already caps at ~80% via `niceEtaAxisMaxMin` (headroom 1.25), so this
+  needs the owner to name a specific trip rather than a blind change.
+- trip-end trim leaves a few seconds at 0 km/h on the tail — tighten `AutoStop.retrospectiveStopTime`.
 
 ### Item-by-item solutions
 **Insights dynamic days filter (Rev CT).** Replace the `30 days / 500 km / All time` chips with

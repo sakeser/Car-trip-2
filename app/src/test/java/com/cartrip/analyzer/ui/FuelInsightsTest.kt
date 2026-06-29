@@ -62,6 +62,24 @@ class FuelInsightsTest {
         assertEquals(s.weeklySpend.size, s.weeklySpendSmoothed.size)
     }
 
+    @Test fun economyPctSeriesCenteredOnTheMean() {
+        // Identical drives -> every L/100km equals the mean, so the %-vs-mean series is flat at 0%.
+        val s = FuelInsights.summarize((0 until 8).map { drive(10.0, 50.0) }, v)
+        assertEquals(s.l100.size, s.l100PctVsMean.size)
+        assertEquals(s.l100.average(), s.l100Mean, 1e-9)
+        s.l100PctVsMean.forEach { assertEquals(0f, it, 1e-3f) }
+    }
+
+    @Test fun economyPctIsNegativeForBetterThanAverageEconomy() {
+        // A long run of efficient cruising drives then one stop-and-go crawl (worse economy). The mean sits
+        // between them, so the efficient stretch reads as a negative % (better) and never positive.
+        val trips = (0 until 7).map { drive(20.0, 70.0) } + drive(3.0, 4.0, idleS = 120.0)
+        val s = FuelInsights.summarize(trips, v)
+        assertEquals(8, s.l100PctVsMean.size)
+        assertTrue("efficient drives should read below the mean", s.l100PctVsMean.first() < 0f)
+        assertTrue("crawl should not be more efficient than the mean", s.l100PctVsMean.last() > 0f)
+    }
+
     @Test fun walksAndZeroDistanceExcluded() {
         val trips = listOf(
             drive(10.0, 50.0),                       // a real drive

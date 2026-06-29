@@ -18,6 +18,9 @@ object FuelInsights {
     const val SMOOTH_MIN_DRIVES = 10
     private const val SMOOTH_WINDOW = 5
 
+    /** Trailing window (drives) for the economy %-change series — wider than $/km so the % trend is calm. */
+    private const val L100_SMOOTH_WINDOW = 7
+
     private const val WEEK_MS = 7L * 24L * 60L * 60L * 1000L
     /** Trailing window (in weeks) for smoothing the weekly spend-rate series. */
     private const val WEEKLY_SMOOTH_WEEKS = 4
@@ -32,6 +35,8 @@ object FuelInsights {
         val costPerKm: List<Float>,         // $/km, per drive, chronological
         val costPerKmSmoothed: List<Float>, // $/km trailing moving average (empty until enough drives)
         val l100: List<Float>,              // L/100km, per drive
+        val l100Mean: Double,               // mean of the per-drive L/100km series (the 0% baseline)
+        val l100PctVsMean: List<Float>,     // smoothed % deviation of economy from l100Mean (-=better, +=worse)
         val weeklySpend: List<Float>,         // $ spent per 7-day window from first drive, oldest first (0 = idle)
         val weeklySpendSmoothed: List<Float>, // weekly spend, trailing-averaged so the rate reads as a trend
     ) {
@@ -104,7 +109,7 @@ object FuelInsights {
     /** [trips] should be chronological (oldest first). Non-drives (walks) and zero-distance are excluded. */
     fun summarize(trips: List<TripEntity>, v: FuelEstimator.Vehicle): Summary {
         val drives = trips.filter { it.distanceM > 0.0 && !TripKind.isLikelyNonDrive(it) }
-        if (drives.isEmpty()) return Summary(0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
+        if (drives.isEmpty()) return Summary(0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList(), emptyList(), emptyList(), 0.0, emptyList(), emptyList(), emptyList())
 
         var totalKm = 0.0; var totalLitres = 0.0; var totalCost = 0.0
         val costPerKm = ArrayList<Float>(drives.size)
@@ -120,6 +125,14 @@ object FuelInsights {
             costs += cost
         }
         val weekly = weeklySpend(drives, costs)
+        // Economy as a % deviation from your average for this window: the per-drive L/100km is smoothed,
+        // then expressed against the series mean (the 0% line). Lower L/100km than your norm reads as a
+        // negative % (you burned less) — the chart paints that side green. Mean is the simple per-drive
+        // average (not the distance-weighted avgL100) so it shares the exact basis as the plotted series.
+        val l100Mean = if (l100.isNotEmpty()) l100.average() else 0.0
+        val l100Pct = if (l100Mean > 0.0) {
+            trailingAvg(l100, L100_SMOOTH_WINDOW).map { ((it / l100Mean.toFloat()) - 1f) * 100f }
+        } else emptyList()
         return Summary(
             drives = drives.size,
             totalKm = totalKm,
@@ -130,6 +143,8 @@ object FuelInsights {
             costPerKm = costPerKm,
             costPerKmSmoothed = if (drives.size >= SMOOTH_MIN_DRIVES) smooth(costPerKm, SMOOTH_WINDOW) else emptyList(),
             l100 = l100,
+            l100Mean = l100Mean,
+            l100PctVsMean = l100Pct,
             weeklySpend = weekly,
             weeklySpendSmoothed = trailingAvg(weekly, WEEKLY_SMOOTH_WEEKS),
         )

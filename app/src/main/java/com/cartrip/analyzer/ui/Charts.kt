@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -155,6 +156,129 @@ fun TimeSeriesChart(
                 style = MaterialTheme.typography.labelSmall,
                 color = axisColor,
                 modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/**
+ * A line chart of **percent deviation from a baseline** (the 0% line), with the area below/above the
+ * baseline filled in two colours by meaning. Built for "fuel economy vs your average": each point is how
+ * far that drive's L/100km sat below/above your norm, so [belowIsBetter] paints the under-baseline side
+ * green (you burned less) and the over-baseline side red.
+ *
+ * [referencePct] draws a dashed horizontal reference at a fixed percent — e.g. where the vehicle's factory
+ * combined rating falls relative to the same baseline. The vertical scale is symmetric around 0 and sized
+ * to the data (and the reference), floored at [minAmplitude] so a calm series still reads.
+ */
+@Composable
+fun PercentChangeChart(
+    title: String,
+    pct: List<Float>,
+    modifier: Modifier = Modifier,
+    belowIsBetter: Boolean = true,
+    referencePct: Float? = null,
+    referenceLabel: String? = null,
+    xAxisLabel: String? = null,
+    minAmplitude: Float = 4f
+) {
+    val betterColor = Color(0xFF22C55E)
+    val worseColor = Color(0xFFEF4444)
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (pct.size < 2) {
+            Text(
+                "Not enough data",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return
+        }
+
+        var amp = pct.maxOf { abs(it) }
+        referencePct?.let { amp = max(amp, abs(it)) }
+        amp = (amp * 1.2f).coerceAtLeast(minAmplitude)
+
+        val aboveColor = if (belowIsBetter) worseColor else betterColor
+        val belowColor = if (belowIsBetter) betterColor else worseColor
+        val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+        val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f)
+        val zeroColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+        val refColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f)
+        val strokeColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+
+        Row(modifier = Modifier.fillMaxWidth().height(124.dp).padding(top = 6.dp)) {
+            Column(
+                modifier = Modifier.fillMaxHeight().padding(end = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End
+            ) {
+                Text("+${amp.roundToInt()}%", style = MaterialTheme.typography.labelSmall, color = axisColor)
+                Text("0%", style = MaterialTheme.typography.labelSmall, color = axisColor)
+                Text("-${amp.roundToInt()}%", style = MaterialTheme.typography.labelSmall, color = axisColor)
+            }
+            Canvas(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                val w = size.width
+                val h = size.height
+                fun xAt(i: Int) = w * i / (pct.size - 1)
+                fun yAt(v: Float) = h / 2f - (v.coerceIn(-amp, amp) / amp) * (h / 2f)
+                val y0 = yAt(0f)
+
+                drawLine(gridColor, Offset(0f, yAt(amp)), Offset(w, yAt(amp)), 1f)
+                drawLine(gridColor, Offset(0f, yAt(-amp)), Offset(w, yAt(-amp)), 1f)
+
+                // Area between the curve and the baseline, clipped above/below the 0% line so each side
+                // takes its own meaning colour.
+                val area = Path().apply {
+                    moveTo(xAt(0), yAt(pct[0]))
+                    for (i in 1 until pct.size) lineTo(xAt(i), yAt(pct[i]))
+                    lineTo(xAt(pct.lastIndex), y0)
+                    lineTo(xAt(0), y0)
+                    close()
+                }
+                clipRect(left = 0f, top = 0f, right = w, bottom = y0) {
+                    drawPath(area, aboveColor.copy(alpha = 0.20f))
+                }
+                clipRect(left = 0f, top = y0, right = w, bottom = h) {
+                    drawPath(area, belowColor.copy(alpha = 0.20f))
+                }
+
+                drawLine(zeroColor, Offset(0f, y0), Offset(w, y0), 2f)
+
+                val line = Path()
+                line.moveTo(xAt(0), yAt(pct[0]))
+                for (i in 1 until pct.size) line.lineTo(xAt(i), yAt(pct[i]))
+                drawPath(line, strokeColor, style = Stroke(width = 3f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawCircle(strokeColor, radius = 4.5f, center = Offset(xAt(pct.lastIndex), yAt(pct.last())))
+
+                referencePct?.takeIf { it in -amp..amp }?.let { r ->
+                    val yr = yAt(r)
+                    drawLine(
+                        refColor, Offset(0f, yr), Offset(w, yr), 2f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                    )
+                }
+            }
+        }
+        referenceLabel?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
+                color = refColor,
+                modifier = Modifier.fillMaxWidth().padding(top = 3.dp)
+            )
+        }
+        xAxisLabel?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
+                color = axisColor,
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 textAlign = TextAlign.Center
             )
         }

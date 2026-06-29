@@ -4,6 +4,33 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CT-fuel + CU (2026-06-29, v3.34/build 145) — Fuel economy %-change chart + bar-sizing pass 2
+
+Built + **210 tests green** (208 + 2 new `FuelInsights` tests); **device-verified on the S25** (v3.34) against
+the owner's real vehicle profile + trip history. The two follow-ups deferred from Rev CT.
+- **CT-fuel — "Fuel economy vs your average" chart:**
+  - New `PercentChangeChart` (`ui/Charts.kt`): plots a `%`-deviation series around a 0% baseline, fills the
+    area **two-tone by meaning** (clipped above/below the 0-line), and draws a dashed horizontal **reference
+    line**. `belowIsBetter` makes the under-baseline side green (fuel: lower L/100km = more efficient).
+  - `FuelInsights.summarize` (`ui/FuelInsights.kt`) now emits `l100Mean` + `l100PctVsMean`: each drive's
+    L/100km is **trailing-smoothed (window 7)** then expressed as a `%` deviation from the **per-drive series
+    mean** (the 0% line / your average for the window).
+  - `FuelSection` (`ui/InsightsScreen.kt`) renders it with a dashed **OEM reference** read live from
+    `FuelEstimator.combinedL100(vehicle)` (no hardcode) — on the owner's phone: factory 6.4 vs 7.0 estimated
+    avg = **−8.6%**, dashed line sitting in the green (more-efficient) band, as expected.
+  - _Design choice:_ baseline = **window mean** (one self-consistent baseline shared by the data series and
+    the OEM line) rather than a drifting 30-day rolling mean, so the OEM reference is a single fixed line and
+    the chart reads as a clean trend. (Within a 1/3/7/30-day selector window the two are nearly identical.)
+- **CU — bar-sizing pass 2:** `WhenYouDriveCard` daypart bars (`ui/InsightsScreen.kt`) now scale through
+  `BarScale.niceAxisMax`/`fillFraction` — busiest fills ~80% (not edge-to-edge), tiny counts keep a sliver.
+  Device-verified: Morning 16→80%, Evening 15→75%, Midday 10→50% on a max-20 axis.
+  - _Left as-is (already correct):_ `PeakLimitBar` fills ~87% by construction (`peak*1.15` headroom + labels);
+    `SpeedingShareBar` is a true 0-100% proportion with a min-visible floor (full = 100% of moving time is
+    meaningful, like the 0-100 score bars). `EtaCompare` (Trip-Detail) already caps ~80% via
+    `niceEtaAxisMaxMin` — its "near full width" report needs an owner-pointed on-device re-check, not a blind
+    change (deferred).
+- **Next:** **Rev CW** Driver-Load / "Drive readiness" model (marquee R&D) — see `ROADMAP_NEW.md`.
+
 ## Rev CV + CT (2026-06-29, v3.33/build 144) — trip-view defaults + Insights chart/filter overhaul
 
 Built + 208 tests green; **device-verified on the S25** (v3.33). First two of the 2026-06-29 review-note revs.
