@@ -494,6 +494,26 @@ private fun DriverLoadCard(s: DriverLoad.State, nowMs: Long) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            // ACWR "vs your recent norm" overload flag (phase 2): a tinted chip when there's enough history to
+            // compare this week's load against your ~4-week baseline. Red when well above (the overload signal).
+            s.acwr?.let { ratio ->
+                val label = DriverLoad.acwrLabel(ratio) ?: return@let
+                val chip = when {
+                    ratio > DriverLoad.ACWR_HIGH -> Color(0xFFEF4444)
+                    ratio >= 1.3f -> Color(0xFFF59E0B)
+                    else -> Color(0xFF22C55E)
+                }
+                Text(
+                    "$label  (x${String.format(Locale.US, "%.1f", ratio)} vs your 4-week norm)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = chip,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(chip.copy(alpha = 0.12f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
             if (s.recovery.size >= 2) {
                 TimeSeriesChart(
                     title = "If you stop now: 24 h recovery",

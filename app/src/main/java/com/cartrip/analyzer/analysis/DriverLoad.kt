@@ -46,6 +46,24 @@ object DriverLoad {
      */
     const val BASELINE_LOAD = 20
 
+    // --- Phase 2: ACWR (Acute:Chronic Workload Ratio) "above your recent norm" overload flag ---
+    // NB: these decay constants are deliberately MUCH longer than the load's fast [TAU_HOURS]. The load TAU
+    // (~1.2 d) is for the "right now / recover by tonight" feel; the ACWR is a multi-week *trend* comparison.
+    // A decay shorter than the ~daily drive cadence makes the discrete impulses bias the ratio (a steady
+    // driver would read ~1.2 and over-flag), so we mirror the literature's ~7-day acute / ~28-day chronic.
+    /** Acute decay (~1 week): "lately". */
+    const val TAU_ACUTE_HOURS = 7.0 * 24.0
+    /** Chronic decay (~4 weeks): your established baseline. */
+    const val TAU_CHRONIC_HOURS = 28.0 * 24.0
+    /** Need at least this much driving history before a chronic baseline (and thus the ratio) is meaningful. */
+    const val ACWR_MIN_HISTORY_HOURS = 14.0 * 24.0
+    /** Floor on the chronic rate (avoids a divide-by-noise ratio for a near-idle baseline). */
+    const val ACWR_MIN_CHRONIC_RATE = 0.002
+    /** Acute:chronic above this = "well above your recent norm" — the evidence-backed overload threshold. */
+    const val ACWR_HIGH = 1.5
+    /** Below this = "easing off vs your norm" (the sports "detraining" zone; informational, not a risk). */
+    const val ACWR_LOW = 0.8
+
     /** Hours plotted in the recovery forecast (now -> +[FORECAST_HOURS], assuming no further driving). */
     const val FORECAST_HOURS = 24
 
@@ -56,6 +74,7 @@ object DriverLoad {
         val drivesCounted: Int,        // scorable drives that contributed a (non-negligible) impulse
         val recovery: List<Float>,     // forecast load at now+0..now+FORECAST_HOURS h, one point per hour
         val hoursToBaseline: Int?,     // whole hours until the forecast load first reaches BASELINE_LOAD
+        val acwr: Float?,              // acute:chronic workload ratio (null until there's enough history)
     )
 
     /**
@@ -69,14 +88,17 @@ object DriverLoad {
         return (stress / 100.0) * hours
     }
 
-    /** The raw leaky-integrator load at [nowMs]: sum of each trip's impulse decayed by its age. Pure. */
-    fun rawLoadAt(trips: List<TripEntity>, nowMs: Long): Double {
+    /**
+     * The raw leaky-integrator load at [nowMs]: sum of each trip's impulse decayed by its age over [tauHours]
+     * (defaults to the acute load TAU; the ACWR passes a chronic TAU for the baseline term). Pure.
+     */
+    fun rawLoadAt(trips: List<TripEntity>, nowMs: Long, tauHours: Double = TAU_HOURS): Double {
         var sum = 0.0
         for (t in trips) {
             val i = impulse(t) ?: continue
             val ageH = (nowMs - t.startTime) / 3_600_000.0
             if (ageH < 0.0) continue   // a trip timestamped in the future can't contribute
-            sum += i * exp(-ageH / TAU_HOURS)
+            sum += i * exp(-ageH / tauHours)
         }
         return sum
     }
@@ -107,7 +129,50 @@ object DriverLoad {
             drivesCounted = drives,
             recovery = recovery,
             hoursToBaseline = hoursToBaseline(raw),
+            acwr = acwr(trips, nowMs),
         )
+    }
+
+    /**
+     * Acute:Chronic Workload Ratio (Williams et al., BJSM 2017): how your recent ("acute", [TAU_ACUTE_HOURS])
+     * driving load compares with your established baseline ("chronic", [TAU_CHRONIC_HOURS]). ~1 = in line with
+     * your norm; **> [ACWR_HIGH] = well above it** (the evidence-backed overload signal); < [ACWR_LOW] = easing
+     * off. Independent of the absolute 0-100 scale, so it catches "you've been driving more/harder than usual
+     * lately" even when the absolute load looks ordinary.
+     *
+     * Each term is the load normalized by its **effective integration window** `TAU*(1 - exp(-H/TAU))` (H =
+     * span of available history), which makes both terms a true average *rate* — so the ratio reads ~1 at
+     * steady state and isn't biased by a chronic window longer than the data. Null until there's enough history
+     * ([ACWR_MIN_HISTORY_HOURS]) and a non-negligible chronic baseline. Pure.
+     */
+    fun acwr(trips: List<TripEntity>, nowMs: Long): Float? {
+        var oldestAgeH = 0.0
+        var any = false
+        for (t in trips) {
+            if (impulse(t) == null) continue
+            val ageH = (nowMs - t.startTime) / 3_600_000.0
+            if (ageH < 0.0) continue
+            any = true
+            if (ageH > oldestAgeH) oldestAgeH = ageH
+        }
+        if (!any || oldestAgeH < ACWR_MIN_HISTORY_HOURS) return null
+
+        fun rate(tauHours: Double): Double {
+            val window = tauHours * (1.0 - exp(-oldestAgeH / tauHours))
+            return if (window > 0.0) rawLoadAt(trips, nowMs, tauHours) / window else 0.0
+        }
+        val chronic = rate(TAU_CHRONIC_HOURS)
+        if (chronic < ACWR_MIN_CHRONIC_RATE) return null
+        return (rate(TAU_ACUTE_HOURS) / chronic).toFloat()
+    }
+
+    /** A plain "vs your recent norm" reading of an [acwr] ratio, or null when it isn't available. */
+    fun acwrLabel(acwr: Float?): String? = when {
+        acwr == null -> null
+        acwr > ACWR_HIGH -> "Well above your recent norm"
+        acwr >= 1.3f -> "A bit above your recent norm"
+        acwr >= ACWR_LOW -> "In line with your recent norm"
+        else -> "Below your recent norm"
     }
 
     /**

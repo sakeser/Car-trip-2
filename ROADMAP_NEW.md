@@ -51,26 +51,24 @@ is shipped + device-verified; this is what's next.)
   time-decaying load index + 24 h recovery forecast. `analysis/DriverLoad.kt` (pure leaky integrator, TAU
   28.8 h, +8 tests) DB-replay-calibrated (`SATURATION_K=1.0`: median real day ~54/Moderate, heaviest ~78);
   `DriverLoadCard` in Insights (load + readiness + one-line read + 24 h recovery curve + medical disclaimer).
-  Device-verified: live load 67/Elevated, decaying from the morning peak as the model predicts. **Phase 2
-  deferred:** the ACWR acute-vs-chronic "above your norm" overload flag + constant tuning over time.
+  Device-verified: live load 67/Elevated, decaying from the morning peak as the model predicts. **Phase 2 —
+  DONE (v3.36):** the ACWR acute(~7 d)-vs-chronic(~28 d) "above your recent norm" overload flag — a tinted
+  chip (red > 1.5). Correctly suppressed on the owner's 7-day history (needs ≥14 d for a real chronic
+  baseline); render-checked on-device via a temporary lowered floor. Constant tuning stays open as data lands.
 - _Misc (low priority):_ trip-end trim leaves a few seconds at 0 km/h on the tail — tighten
   `AutoStop.retrospectiveStopTime` to drop a trailing standstill (one observed case; fold into a polish rev).
 
-### Next-agent pickup — CW phase 2 + leftovers (file pointers; start here)
+### Next-agent pickup — review-note batch COMPLETE; leftovers + frontier (start here)
 
-Current state: **v3.35 / build 146, schema v22, 218 tests, CV / CT / CT-fuel / CU / CW all done +
-device-verified on the S25.** (Push status: confirm with `git log origin/main..main` — CT-fuel+CU were pushed;
-CW may be local-only pending owner OK.) Build/test/device workflow is HANDOFF section 2.1 (relocated Gradle
-init script; grep the log for `BUILD SUCCESSFUL`; bump version for runtime changes; install + eyeball on the
-S25). The 2026-06-29 review-note build sequence is **complete**; what remains is CW phase 2 + small polish:
+Current state: **v3.36 / build 147, schema v22, 222 tests, CV / CT / CT-fuel / CU / CW (+ phase 2) all done +
+device-verified on the S25.** (Push status: confirm with `git log origin/main..main` — CT-fuel+CU+CW were
+pushed; CW phase 2 may be local-only pending owner OK.) Build/test/device workflow is HANDOFF section 2.1
+(relocated Gradle init script; grep the log for `BUILD SUCCESSFUL`; bump version for runtime changes; install
++ eyeball on the S25). **The 2026-06-29 review-note build sequence is fully shipped.** What remains:
 
-**Rev CW phase 2 — ACWR "above your recent norm" flag.** Files: `analysis/DriverLoad.kt` (add an acute vs
-chronic EWMA pair) + the `DriverLoadCard` in `ui/InsightsScreen.kt`. Add a second leaky integrator at a
-**chronic** TAU (~21 d) alongside the existing acute one, surface the ratio (acute/chronic), and flag
-**> 1.5** as "well above your recent norm" — the evidence-backed overload signal (Williams et al. ACWR). It's
-independent of the absolute 0-100 scale, so it catches "you've been driving much more/harder than usual
-lately" even when the absolute load looks ordinary. Also: keep workshopping the TAU / K / `BASELINE_LOAD`
-constants as more trips land (DB-replay).
+**Driver-Load follow-ups (when data allows):** the ACWR chip needs **≥14 days** of scorable history before it
+surfaces (the owner had only 7.1 d on 2026-06-29) — re-verify on-device once that lands, and workshop the
+`DriverLoad` constants (TAU / SATURATION_K / BASELINE_LOAD / ACWR thresholds) against more trips by DB-replay.
 
 **Small leftovers (fold into a polish rev):**
 - `EtaCompare` (Trip-Detail, `ui/TripDetailScreen.kt` ~ln 1497) — owner-pointed on-device re-check of the

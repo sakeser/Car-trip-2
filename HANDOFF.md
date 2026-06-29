@@ -1,12 +1,13 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-29 · Source **3.35 (build 146), schema v22** (Rev CW: **Driver Load / "Drive
+_Last updated: 2026-06-29 · Source **3.36 (build 147), schema v22** (Rev CW + phase 2: **Driver Load / "Drive
 readiness"** — `analysis/DriverLoad.kt`, a pure recency-weighted leaky integrator of stress-weighted driving
 time (TAU 28.8 h) that builds with recent stressful driving + decays with rest, DB-replay-calibrated
 (`SATURATION_K=1.0`), surfaced as an Insights card with load/readiness + a one-line read + a 24 h recovery
 curve + a not-a-medical-assessment disclaimer; **device-verified** live load 67/Elevated decaying from the
-morning peak; **218 tests**; **Phase 2 = the ACWR acute-vs-chronic overload flag** — see ROADMAP_NEW) · atop
-Rev CT-fuel + CU (v3.34/build 145): a **"Fuel economy vs your average"** `PercentChangeChart` (smoothed
+morning peak. **Phase 2:** an **ACWR** acute(~7 d)-vs-chronic(~28 d) "above your recent norm" overload chip
+(red > 1.5), correctly suppressed until ≥14 d of history (owner had 7.1 d) — render-checked on-device;
+**222 tests**) · atop Rev CT-fuel + CU (v3.34/build 145): a **"Fuel economy vs your average"** `PercentChangeChart` (smoothed
 %-deviation from your window mean, green/red fill + a dashed live-OEM-rating line) + **bar-sizing pass 2** (the
 "When you drive" daypart bars scale through `BarScale`, ~80% busiest) · atop Rev CV+CT (v3.33/build 144):
 trip-view defaults + **Insights chart/filter overhaul** — dynamic `1/3/7/30/All` days filter, Drive-Stress

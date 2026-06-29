@@ -23,8 +23,26 @@ the morning peak. No schema change (pure from the trip list).
   + self-attenuating; shown only when there's recent load): the green->red load number (`StressColors`),
   band + readiness, a one-line read ("...about 2.0 days of rest to baseline" / a clock time if < 24 h), the
   24 h recovery `TimeSeriesChart` (fixed 0-100), and an **awareness-only, not-a-medical-assessment** disclaimer.
-- **Deferred (phase 2, per the design):** the ACWR "vs your recent norm" overload flag (acute vs chronic EWMA
-  ratio > 1.5); workshop the TAU / K / baseline constants further as more data lands.
+- **Phase 2 shipped (v3.36/build 147):** see the next entry.
+
+## Rev CW phase 2 (2026-06-29, v3.36/build 147) — ACWR "above your recent norm" overload flag
+
+The evidence-backed overload signal layered onto Driver Load: an **Acute:Chronic Workload Ratio** (Williams et
+al., BJSM 2017) comparing your recent driving load against your established baseline, independent of the
+absolute 0-100 scale. Built + **222 tests green** (218 + 4 new); chip **render-verified on the S25**.
+- `analysis/DriverLoad.kt` `acwr()` (+ `acwrLabel()`): a second leaky-integrator pair — **acute ~7 d** vs
+  **chronic ~28 d** decay (deliberately *much* longer than the load's ~1.2 d TAU: a decay shorter than the
+  ~daily drive cadence makes discrete impulses bias the ratio, so a steady driver would read ~1.2 and
+  over-flag). Each term is normalized by its **effective integration window** `TAU*(1-exp(-H/TAU))` so both
+  read a true average *rate* (ratio ~1 at steady state, unbiased by a chronic window longer than the data).
+  Ratio **> 1.5 = "well above your recent norm"**; **< 0.8 = "below"**. Null until **≥14 days** of history +
+  a non-negligible chronic baseline (guard).
+- `DriverLoadCard`: a tinted pill (red > 1.5 / amber ≥ 1.3 / green in-range) — "<label> (×R vs your 4-week norm)".
+- **On-device (S25):** the owner's scorable history is only **7.1 days** (first drive 2026-06-22), so the chip
+  is **correctly suppressed** (a 28-day chronic on 7 days of data is meaningless — it computes a hollow ~1.05).
+  The guard working *is* the verification; the chip itself was render-checked by temporarily dropping the floor
+  to 5 d (green "In line (×1.0)" pill) then reverting. It will surface for real once history reaches 2 weeks.
+- **Still deferred:** keep workshopping the TAU / K / `BASELINE_LOAD` / threshold constants as more data lands.
 
 ## Rev CT-fuel + CU (2026-06-29, v3.34/build 145) — Fuel economy %-change chart + bar-sizing pass 2
 

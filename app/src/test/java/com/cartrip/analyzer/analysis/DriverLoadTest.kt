@@ -101,5 +101,47 @@ class DriverLoadTest {
         assertEquals(0, st.load)
         assertEquals(100, st.readiness)
         assertEquals(0, st.drivesCounted)
+        assertNull(st.acwr)
+    }
+
+    // --- Phase 2: ACWR ---
+
+    private fun dailyCrawls(now: Long, days: Int): List<TripEntity> =
+        (1..days).map { crawl(now - it.toLong() * 24 * H) }
+
+    @Test fun acwrNullWithoutEnoughHistory() {
+        val now = 50L * 24 * H
+        // Only 5 days of history — below ACWR_MIN_HISTORY_HOURS (14 d) — so no chronic baseline yet.
+        assertNull(DriverLoad.acwr(dailyCrawls(now, 5), now))
+        assertNull(DriverLoad.state(dailyCrawls(now, 5), now).acwr)
+    }
+
+    @Test fun acwrNearOneForSteadyDriving() {
+        val now = 200L * 24 * H
+        // 40 days of identical daily driving -> recent matches baseline -> ratio ~1 (no overload).
+        val r = DriverLoad.state(dailyCrawls(now, 40), now).acwr!!
+        assertTrue("steady driving should read ~1, got $r", r in 0.8f..1.25f)
+        assertEquals("In line with your recent norm", DriverLoad.acwrLabel(r))
+    }
+
+    @Test fun acwrRisesWithARecentSpike() {
+        val now = 200L * 24 * H
+        // A light, regular baseline: one drive every 3 days for ~7 weeks.
+        val baseline = (1..16).map { crawl(now - it.toLong() * 72 * H) }
+        val steady = DriverLoad.acwr(baseline, now)!!
+        // A sudden burst on top of it: a drive every 12 h across the last 4 days.
+        val spike = baseline + (1..8).map { crawl(now - it.toLong() * 12 * H) }
+        val spiked = DriverLoad.acwr(spike, now)!!
+        assertTrue("a recent burst must raise ACWR (steady=$steady spiked=$spiked)", spiked > steady + 0.25f)
+        assertTrue("a real recent overload clears the high threshold (got $spiked)", spiked > DriverLoad.ACWR_HIGH)
+        assertEquals("Well above your recent norm", DriverLoad.acwrLabel(spiked))
+    }
+
+    @Test fun acwrLabelThresholds() {
+        assertNull(DriverLoad.acwrLabel(null))
+        assertEquals("Well above your recent norm", DriverLoad.acwrLabel(1.8f))
+        assertEquals("A bit above your recent norm", DriverLoad.acwrLabel(1.35f))
+        assertEquals("In line with your recent norm", DriverLoad.acwrLabel(1.0f))
+        assertEquals("Below your recent norm", DriverLoad.acwrLabel(0.6f))
     }
 }
