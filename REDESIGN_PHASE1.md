@@ -11,7 +11,8 @@
 ## Where we are
 
 - **Branch:** `ux-premium-modular-v1` (local only — NOT pushed, NOT merged to `main`).
-- **Last code commit:** the `record` R-decouple (latest commit on this branch; see "record R-decouple" below).
+- **Last code commit:** `d0ee440` — the `record` → MainActivity decouple; completes the Phase 1B-prep decoupling
+  (the earlier R-decouple was not sufficient — see "record decouple" below).
 - **Build state:** green. `:core-engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug` succeeds via the
   OneDrive relocate workaround; no build output leaks into the synced tree.
 - **App unchanged behaviorally:** v3.36 / build 147, Room schema v22.
@@ -36,11 +37,25 @@
 
 ## Exact current status
 
-Phase 1B-prep **record R-decouple: DONE** (see below). `record` no longer references the app `R` class at all, so
-the package is now free to move into `:core-engine` without dragging an app-resource dependency. The package cluster
-itself has **not** moved yet — that is the remaining Phase 1B work.
+Phase 1B-prep decoupling **DONE** (both the `R` class and `MainActivity`; see below). The engine-bound packages
+(`analysis / cloud / data / record / export / settings`) now reference **no** app `R`, `ui`, `MainActivity`, or
+`TripApp` in code — independently re-verified by grep on 2026-06-29. The package cluster itself has **not** moved
+yet — that is the remaining Phase 1B work.
 
-## record R-decouple — DONE ✅
+> **Lesson (2026-06-29):** the original R-decouple report claimed `record` was free to move, but `record` still
+> imported `com.cartrip.analyzer.MainActivity` (4 notification content-intents). Always **independently grep the
+> engine packages for app/ui/MainActivity/TripApp references right before the move** — do not trust a prior audit.
+> One cosmetic residue remains: a KDoc link `[com.cartrip.analyzer.ui.VehicleScreen]` in `settings/VehiclePrefs.kt`;
+> KDoc is ignored by kotlinc (no build impact), tidy it when `settings` moves.
+
+## record decouple — DONE ✅ (R class + MainActivity)
+
+**Part 2 — MainActivity (`d0ee440`, 2026-06-29):** `record` also imported `com.cartrip.analyzer.MainActivity` for
+4 notification "tap to open" `PendingIntent`s (`AutoRecordWatchService` ×1, `RecordingService` ×3). Replaced each
+`Intent(this, MainActivity::class.java)` with `packageManager.getLaunchIntentForPackage(packageName)` (same launcher
+activity, identical tap-to-open behavior) and dropped the import. `record` now has zero app references.
+
+**Part 1 — the R class (below):**
 
 What was changed (the only `R` usage in any would-be-engine package, now resolved):
 
@@ -58,17 +73,25 @@ Verified: `grep "com.cartrip.analyzer.R|R\." record/` → CLEAN (no app-resource
 build (`:core-engine` + `:app` tests + `:app:assembleDebug`) green; cross-module reference to `com.cartrip.engine.R`
 from the (still-in-`app`) `record` classes resolves; no output leaked to the OneDrive tree.
 
-> **⚠️ On-device visual check still recommended** (not done — no device this session): start a trip → confirm the
-> recording FGS notification shows the record-dot icon; trigger auto-record → confirm "Auto-record on" shows it; and
-> the three launcher-icon notices still render. Do this before AND/OR after the full extraction. The icons are now a
-> vector in the engine + the system launcher icon, so the result should be visually identical.
+> **⚠️ On-device visual check still recommended** (device connected + branch builds green this session, but the
+> notification render/tap was NOT visually verified on-device — the S25 holds the owner's live data + active test
+> rides, so the WIP branch APK was not installed over it without the owner): start a trip → confirm the recording
+> FGS notification shows the record-dot icon; trigger auto-record → confirm "Auto-record on" shows it; and the three
+> launcher-icon notices still render. **Also tap each notification** to confirm it still opens the app — the
+> content-intent moved from `MainActivity::class.java` to the package launch intent in `d0ee440`. The icons are a
+> vector in the engine + the system launcher icon, so the render should be visually identical. Best done as an
+> owner-assisted pass (RecordingService is `exported=false`, so a trip can only be started by tapping the UI).
 
 ## Recommended next step
 
-The `record` R-decouple is done, so the remaining Phase 1B work is the actual cluster move. Proceed per the audit
-table below — move `analysis + data + cloud + record + export` (+ `settings`) into `:core-engine` as one unit.
-When `record` physically moves, `engine_ic_stat_record.xml` is already in the engine, so it just works; the
-`EngineR` alias can become a plain same-module `R` reference at that point if desired.
+Phase 1B-prep is now fully done (`R` + `MainActivity` decoupled, boundary verified clean), so the remaining Phase 1B
+work is the actual cluster move. **Before moving, independently re-grep the engine packages for
+app/`ui`/`MainActivity`/`TripApp` references** (a prior audit missed one — see the Lesson above). Proceed per the
+audit table below — move `analysis + data + cloud + record + export` (+ `settings`) into `:core-engine` as one unit.
+Note the cluster is mutually interdependent, so the code move is essentially **one atomic commit** (deps + KSP/Room +
+`schemas/` + manifest move with it); the engine-package tests can follow as a second commit. When `record` physically
+moves, `engine_ic_stat_record.xml` is already in the engine, so it just works; the `EngineR` alias can become a plain
+same-module `R` reference at that point if desired.
 
 ## Phase 1B full extraction audit (for after the R-decoupling)
 
