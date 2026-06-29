@@ -25,7 +25,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.cartrip.analyzer.MainActivity
 import com.cartrip.engine.R as EngineR
 import com.cartrip.analyzer.analysis.GeoUtils
 import com.cartrip.analyzer.analysis.TripAnalyzer
@@ -1064,7 +1063,8 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private fun postHandsFreeBlockedNotice() {
         val open = PendingIntent.getActivity(
             this, 2,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            (packageManager.getLaunchIntentForPackage(packageName) ?: Intent())
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -1086,7 +1086,8 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private fun postNotRecordedNotice() {
         val open = PendingIntent.getActivity(
             this, 3,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            (packageManager.getLaunchIntentForPackage(packageName) ?: Intent())
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -1112,7 +1113,8 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
     private fun buildNotification(): Notification {
         val openIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            (packageManager.getLaunchIntentForPackage(packageName) ?: Intent())
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val stopIntent = PendingIntent.getService(

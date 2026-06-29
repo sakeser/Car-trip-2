@@ -21,7 +21,6 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.cartrip.analyzer.MainActivity
 import com.cartrip.engine.R as EngineR
 
 /**
@@ -194,7 +193,8 @@ class AutoRecordWatchService : Service() {
             .setContentIntent(
                 PendingIntent.getActivity(
                     this, 0,
-                    Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    (packageManager.getLaunchIntentForPackage(packageName) ?: Intent())
+                        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
             )
