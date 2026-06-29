@@ -4,9 +4,10 @@ _Last updated: 2026-06-29 · Source **3.32 (build 143), schema v22** (Rev CS: **
 stop-and-go / no-break demand-gated model + `analysis/StopAndGo.kt` + schema v22; atop the already-pushed
 Rev CP cont. v3.28–v3.31: reset-to-automatic, OSM/ODbL attribution, bar-scale audit, AI-export traffic/daypart
 sections, export value-mapping tests, CR export retention, migration foundation, Places scaffold) ·
-**committed on `main`, NOT pushed — device-verify pending** (the phone disconnected, USB flaky, before the
-v22 migration + Insights "Re-analyze all trips"; everything up to v3.31 IS already pushed) · **208 unit tests,
-all green** (incl. the 1187~40 / 1189~78 stress calibration anchors) · **S25 installed + verified 3.31 (build 142)**: the OSM/ODbL "©" attribution renders correctly (it's
+**device-verified on the S25 and pushed**: the v22 migration applied cleanly (`user_version=22`), Insights
+"Re-analyze all trips" populated all **47/47** trips, and the live Drive-Stress scores match the calibration —
+**trip 1187 = 40, trip 1189 = 78** (the stop-and-go crawl that used to score 18/Calm) · **208 unit tests,
+all green** (incl. the 1187~40 / 1189~78 stress calibration anchors) · Earlier this session: **S25 verified 3.31 (build 142)**: the OSM/ODbL "©" attribution renders correctly (it's
 built via `0xA9.toChar()` to dodge the Cp1252 mojibake trap) and the Past-Trips duration bars are no longer
 edge-to-edge. **Field-validated on the 2026-06-29 home→work commute (trip 1187, 43.8 km / 41 min):**
 drawdowns (4), Drive Stress **42 (Moderate)**, "you vs traffic **5 min faster**" + ~35% congestion vs
