@@ -12,9 +12,10 @@ easiest/least-risk first"). Rev letters continue from CJ.
 > **"Reset to automatic"** + a **visible OSM/ODbL attribution** credit (v3.28), a pure **shared bar-scale**
 > helper / bar-sizing audit (v3.29), AI-export **Traffic** + **"When you drive"** sections (v3.30/v3.31), and
 > export value-mapping tests. **On-device verified (S25 @ 3.31):** the "©" attribution renders correctly and the
-> duration bars aren't edge-to-edge. **Still open (priority order):** **Past-Trips OPEN affordance** — confirmed
-> fiddly on-device (a row tap only selects/previews, never opens the detail screen; needs an explicit Open
-> control — see §14 CP); **CQ** = *activate* Places (paid — needs the owner's go-ahead, a UI toggle,
+> duration bars aren't edge-to-edge. **Still open (priority order):** **Past-Trips open affordance** — it's an intentional
+> two-tap (tap once to preview, then tap the *same* trip again to open), **verified working on-device
+> 2026-06-29**; the small wart is the second tap is easy to miss after the preview-line shift → make it more
+> discoverable (lower priority, see §14 CP); **CQ** = *activate* Places (paid — needs the owner's go-ahead, a UI toggle,
 > diagnostics, Geocoder-fallback wiring); **CR** = commercialization hardening (privacy policy, Data Safety,
 > background-location / foreground-only) and **SQLCipher + biometric** at-rest encryption (gated, higher-risk —
 > ask first). The Tier A–C items below are older backlog; cross-reference §14 + §13.3 before starting.
