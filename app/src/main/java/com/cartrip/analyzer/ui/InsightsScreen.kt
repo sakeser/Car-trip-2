@@ -71,6 +71,7 @@ import com.cartrip.analyzer.analysis.DriverLoad
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TripKind
+import com.cartrip.analyzer.settings.VehiclePrefs
 import com.cartrip.analyzer.data.TripEntity
 import java.util.Locale
 import kotlin.math.max

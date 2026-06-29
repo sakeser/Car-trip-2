@@ -1,4 +1,4 @@
-package com.cartrip.analyzer.ui
+package com.cartrip.analyzer.settings
 
 import android.content.Context
 import com.cartrip.analyzer.analysis.FuelEstimator
@@ -6,7 +6,8 @@ import com.cartrip.analyzer.analysis.FuelEstimator
 /**
  * Persists the single active [FuelEstimator.Vehicle] profile used for fuel/cost estimates.
  * Seeded with the owner's 2023 Hyundai Tucson + a representative GTA fuel price; all editable in
- * [VehicleScreen]. As real car-reported economy comes in, adjust the ratings or [Vehicle.calibration].
+ * [com.cartrip.analyzer.ui.VehicleScreen]. As real car-reported economy comes in, adjust the ratings
+ * or [FuelEstimator.Vehicle.calibration].
  */
 object VehiclePrefs {
     private const val NAME = "cartrip_vehicle"
@@ -42,7 +43,7 @@ object VehiclePrefs {
 
     // --- Auto gas-price update (Rev BP): toggle + just the price + a once-per-day throttle stamp. ---
 
-    /** On by default — auto-update the price from the Toronto weekly average ([GasPrice]). */
+    /** On by default — auto-update the price from the Toronto weekly average ([com.cartrip.analyzer.cloud.GasPrice]). */
     fun autoUpdatePrice(c: Context): Boolean = p(c).getBoolean("autoPrice", true)
     fun setAutoUpdatePrice(c: Context, on: Boolean) = p(c).edit().putBoolean("autoPrice", on).apply()
 

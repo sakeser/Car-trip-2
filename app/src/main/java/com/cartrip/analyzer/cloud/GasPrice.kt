@@ -1,7 +1,7 @@
 package com.cartrip.analyzer.cloud
 
 import android.content.Context
-import com.cartrip.analyzer.ui.VehiclePrefs
+import com.cartrip.analyzer.settings.VehiclePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient

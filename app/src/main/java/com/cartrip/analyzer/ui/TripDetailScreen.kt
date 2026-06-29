@@ -104,6 +104,7 @@ import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.EventType
 import com.cartrip.analyzer.analysis.FuelEstimator
+import com.cartrip.analyzer.settings.VehiclePrefs
 import com.cartrip.analyzer.analysis.SpeedTier
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TrackPoint
