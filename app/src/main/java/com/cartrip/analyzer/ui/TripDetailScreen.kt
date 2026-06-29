@@ -291,6 +291,11 @@ fun TripDetailScreen(
         val visibleEvents = remember(shownEvents, eventFilters) {
             shownEvents.filter { eventFilterFor(it.type) in eventFilters }
         }
+        // The Driving "All events" list shows every cleaned event EXCEPT bumps/potholes by default (they're
+        // noisy / low-interest); selecting the Bumps filter chip reveals them. Other chips only gate markers.
+        val listEventsForDriving = remember(shownEvents, eventFilters) {
+            shownEvents.filter { eventFilterFor(it.type) != EventFilter.BUMPS || EventFilter.BUMPS in eventFilters }
+        }
         val jumpToEvent: (DriveEvent) -> Unit = { event ->
             val sameEvent = selectedEvent == event
             selectedEvent = event
@@ -430,9 +435,9 @@ fun TripDetailScreen(
                     trip = t,
                     points = a.points,
                     events = shownEvents,
-                    // Show every cleaned event in the tap-to-jump list by default; the filter chips only
-                    // gate which markers appear on the map, not what the Driving list shows (owner request).
-                    listEvents = shownEvents,
+                    // All-events list defaults open and shows every event EXCEPT bumps/potholes; the Bumps
+                    // chip reveals them. Other filter chips only gate the map markers (owner request, Rev CV).
+                    listEvents = listEventsForDriving,
                     rawEventCount = rawEvents.size,
                     routeLimitCoverage = routeLimitCoverage,
                     checking = fetchingLimits,

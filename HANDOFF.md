@@ -1,10 +1,14 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-29 · Source **3.32 (build 143), schema v22** (Rev CS: **Drive Stress Score v2** — a
-stop-and-go / no-break demand-gated model + `analysis/StopAndGo.kt` + schema v22; atop the already-pushed
+_Last updated: 2026-06-29 · Source **3.33 (build 144), schema v22** (Rev CV+CT: trip-view defaults +
+**Insights chart/filter overhaul** — dynamic `1/3/7/30/All` days filter, Drive-Stress chart fixed 0..100 with
+y-axis labels + no min/max footer, bumps hidden from the trip "All events" list by default; **all
+device-verified on the S25**, pushed; the Fuel %-change chart + Rev CU bars + Rev CW Driver-Load are the
+queued follow-ups — see ROADMAP_NEW) · atop Rev CS: **Drive Stress Score v2** —
+a stop-and-go / no-break demand-gated model + `analysis/StopAndGo.kt` + schema v22; atop the
 Rev CP cont. v3.28–v3.31: reset-to-automatic, OSM/ODbL attribution, bar-scale audit, AI-export traffic/daypart
-sections, export value-mapping tests, CR export retention, migration foundation, Places scaffold) ·
-**device-verified on the S25 and pushed**: the v22 migration applied cleanly (`user_version=22`), Insights
+sections, export value-mapping tests, CR export retention, migration foundation, Places scaffold ·
+**Rev CS device-verified on the S25 and pushed**: the v22 migration applied cleanly (`user_version=22`), Insights
 "Re-analyze all trips" populated all **47/47** trips, and the live Drive-Stress scores match the calibration —
 **trip 1187 = 40, trip 1189 = 78** (the stop-and-go crawl that used to score 18/Calm) · **208 unit tests,
 all green** (incl. the 1187~40 / 1189~78 stress calibration anchors) · Earlier this session: **S25 verified 3.31 (build 142)**: the OSM/ODbL "©" attribution renders correctly (it's

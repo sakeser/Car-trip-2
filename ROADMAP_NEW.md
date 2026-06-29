@@ -27,10 +27,13 @@ concept. Assessment, solutions, and sequencing below; **pushback marked**. (Driv
 is shipped + device-verified; this is what's next.)
 
 ### Build plan (rev sequence, value x (1/risk))
-- **Rev CV — Trip-view event defaults (quick win, do first):** default "All events" open; default the
-  **Bumps/potholes** filter chip **OFF**. One-liner in `ui/TripDetailScreen.kt`.
-- **Rev CT — Insights chart & filter overhaul (high visibility):** dynamic days filter (1/3/7/30/All);
-  fixed-range Drive-Stress chart; Fuel %-change chart. Medium-large; device-verify each.
+- **Rev CV — Trip-view event defaults — DONE (v3.33, device-verified):** the "All events" list hides
+  bumps/potholes by default (the Bumps chip reveals them); the list already opened by default. `ui/TripDetailScreen.kt`.
+- **Rev CT — Insights chart & filter overhaul — MOSTLY DONE (v3.33, device-verified):** dynamic
+  `1/3/7/30/All` days filter (default 7d, dropped 500 km) + Drive-Stress chart fixed **0..100** with y-axis
+  labels, no min/max footer, x-axis label; the `TimeSeriesChart` rework also cleaned the fuel/traffic chart
+  axes. **Still open (CT-fuel):** the Fuel **%-change-vs-30-day-baseline** chart + red/green shading + OEM
+  (Tucson) reference line.
 - **Rev CU — Bar-sizing pass 2:** finish the BarScale job across the remaining bars + investigate the
   you-vs-traffic edge. Small-medium.
 - **Rev CW — Driver-Load / "Drive readiness" model (marquee R&D):** the cumulative, time-decaying load index

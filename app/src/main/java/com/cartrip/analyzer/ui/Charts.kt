@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,10 +26,12 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * Lightweight time-series line chart drawn on a Canvas (no third-party chart lib).
@@ -43,7 +46,9 @@ fun TimeSeriesChart(
     modifier: Modifier = Modifier,
     zeroCentered: Boolean = false,
     selectedIndex: Int? = null,
-    average: Float? = null
+    average: Float? = null,
+    yRange: ClosedFloatingPointRange<Float>? = null,
+    xAxisLabel: String? = null
 ) {
     Column(modifier = modifier) {
         Text(
@@ -67,6 +72,10 @@ fun TimeSeriesChart(
             maxV = a
             minV = -a
         }
+        if (yRange != null) {
+            minV = yRange.start
+            maxV = yRange.endInclusive
+        }
         if (maxV - minV < 0.001f) {
             maxV += 1f
             minV -= 1f
@@ -75,69 +84,78 @@ fun TimeSeriesChart(
         val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f)
         val baselineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
         val cursorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(124.dp)
-                .padding(top = 6.dp)
-        ) {
-            val w = size.width
-            val h = size.height
-            fun xAt(i: Int) = w * i / (values.size - 1)
-            fun yAt(v: Float) = h - (v - minV) / (maxV - minV) * h
-
-            drawLine(gridColor, Offset(0f, 0f), Offset(w, 0f), 1f)
-            drawLine(gridColor, Offset(0f, h), Offset(w, h), 1f)
-
-            if (minV < 0f && maxV > 0f) {
-                val y0 = yAt(0f)
-                drawLine(baselineColor, Offset(0f, y0), Offset(w, y0), 1.5f)
-            }
-
-            // Average reference line (dashed) — e.g. the mean pace-vs-traffic across the window.
-            average?.takeIf { it in minV..maxV }?.let { avg ->
-                val ya = yAt(avg)
-                drawLine(
-                    color = color.copy(alpha = 0.55f),
-                    start = Offset(0f, ya),
-                    end = Offset(w, ya),
-                    strokeWidth = 2f,
-                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
-                )
-            }
-
-            val path = Path()
-            path.moveTo(xAt(0), yAt(values[0]))
-            for (i in 1 until values.size) {
-                path.lineTo(xAt(i), yAt(values[i]))
-            }
-            val fill = Path().apply {
-                addPath(path)
-                lineTo(w, h)
-                lineTo(0f, h)
-                close()
-            }
-            drawPath(fill, color.copy(alpha = 0.10f))
-            drawPath(path, color, style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawCircle(color, radius = 4.5f, center = Offset(xAt(values.lastIndex), yAt(values.last())))
-
-            selectedIndex?.coerceIn(0, values.size - 1)?.let { selected ->
-                val x = xAt(selected)
-                drawLine(
-                    color = cursorColor,
-                    start = Offset(x, 0f),
-                    end = Offset(x, h),
-                    strokeWidth = 2f
-                )
-            }
+        val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+        val midV = (minV + maxV) / 2f
+        // Pick label precision from the range: whole numbers for wide ranges (e.g. 0..100 stress), more
+        // decimals as the range narrows (e.g. ~$0.02 cost/km would round to a useless "0.1" at 1 decimal).
+        fun fmt(v: Float): String = when {
+            maxV - minV >= 10f -> v.roundToInt().toString()
+            maxV - minV >= 1f -> "%.1f".format(v)
+            else -> "%.2f".format(v)
         }
 
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().height(124.dp).padding(top = 6.dp)) {
+            // Y-axis labels (max / mid / min) aligned to the gridlines — replaces the old min/max footer.
+            Column(
+                modifier = Modifier.fillMaxHeight().padding(end = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(fmt(maxV), style = MaterialTheme.typography.labelSmall, color = axisColor)
+                Text(fmt(midV), style = MaterialTheme.typography.labelSmall, color = axisColor)
+                Text(fmt(minV), style = MaterialTheme.typography.labelSmall, color = axisColor)
+            }
+            Canvas(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                val w = size.width
+                val h = size.height
+                fun xAt(i: Int) = w * i / (values.size - 1)
+                fun yAt(v: Float) = h - (v - minV) / (maxV - minV) * h
+
+                // Gridlines at min / mid / max.
+                for (gv in listOf(minV, midV, maxV)) {
+                    drawLine(gridColor, Offset(0f, yAt(gv)), Offset(w, yAt(gv)), 1f)
+                }
+                if (minV < 0f && maxV > 0f) {
+                    drawLine(baselineColor, Offset(0f, yAt(0f)), Offset(w, yAt(0f)), 1.5f)
+                }
+                // Average reference line (dashed) — e.g. the mean pace-vs-traffic across the window.
+                average?.takeIf { it in minV..maxV }?.let { avg ->
+                    val ya = yAt(avg)
+                    drawLine(
+                        color = color.copy(alpha = 0.55f),
+                        start = Offset(0f, ya),
+                        end = Offset(w, ya),
+                        strokeWidth = 2f,
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                    )
+                }
+                val path = Path()
+                path.moveTo(xAt(0), yAt(values[0].coerceIn(minV, maxV)))
+                for (i in 1 until values.size) {
+                    path.lineTo(xAt(i), yAt(values[i].coerceIn(minV, maxV)))
+                }
+                val fill = Path().apply {
+                    addPath(path)
+                    lineTo(w, h)
+                    lineTo(0f, h)
+                    close()
+                }
+                drawPath(fill, color.copy(alpha = 0.10f))
+                drawPath(path, color, style = Stroke(width = 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawCircle(color, radius = 4.5f, center = Offset(xAt(values.lastIndex), yAt(values.last().coerceIn(minV, maxV))))
+
+                selectedIndex?.coerceIn(0, values.size - 1)?.let { selected ->
+                    drawLine(cursorColor, Offset(xAt(selected), 0f), Offset(xAt(selected), h), 2f)
+                }
+            }
+        }
+        xAxisLabel?.let {
             Text(
-                text = "min ${"%.1f".format(values.min())} $unit    max ${"%.1f".format(values.max())} $unit",
+                text = it,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = axisColor,
+                modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
+                textAlign = TextAlign.Center
             )
         }
     }

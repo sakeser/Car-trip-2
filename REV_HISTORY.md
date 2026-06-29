@@ -4,6 +4,21 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CV + CT (2026-06-29, v3.33/build 144) — trip-view defaults + Insights chart/filter overhaul
+
+Built + 208 tests green; **device-verified on the S25** (v3.33). First two of the 2026-06-29 review-note revs.
+- **CV — Trip-view event defaults:** the Driving "All events" list (already open by default) now hides
+  **bumps/potholes** by default; the Bumps filter chip reveals them. `ui/TripDetailScreen.kt`.
+- **CT — Insights filter + charts:**
+  - **Dynamic days filter** `1d / 3d / 7d / 30d / All` (was `30d / 500km / All`), **default 7d**; the window
+    drives every Insights section live. Dropped the niche 500 km window (pushback, accepted).
+  - **Drive-Stress chart:** fixed **0..100** y-axis with labelled gridlines (0/50/100), the misleading
+    "min/max" footer **removed**, and an x-axis label — **each point = one drive (oldest -> most recent)**.
+  - `TimeSeriesChart` (`ui/Charts.kt`) reworked: optional fixed `yRange` + range-aware y-axis labels +
+    `xAxisLabel`, footer gone — so the **fuel & you-vs-traffic charts** also get clean labelled y-axes.
+- **Deferred to follow-ups:** the **Fuel %-change** chart (vs 30-day baseline + red/green + OEM Tucson line),
+  **Rev CU** bar-sizing pass 2, and **Rev CW** Driver-Load model (workshop) — see `ROADMAP_NEW.md`.
+
 ## Rev CS (2026-06-29, v3.32/build 143, schema v22) — Drive Stress Score v2 (stop-and-go / no-break model)
 
 Re-imagined the Drive Stress Score after the 2026-06-29 narrated drive exposed a blind spot: a stressful

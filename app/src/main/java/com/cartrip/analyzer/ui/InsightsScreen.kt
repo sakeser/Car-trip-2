@@ -120,25 +120,19 @@ fun InsightsScreen(
 
         val now = System.currentTimeMillis()
         val thirtyDays = 30L * 24L * 60L * 60L * 1000L
-        var window by remember { mutableStateOf(InsightWindow.DAYS30) }
-        val windowTrips = when (window) {
-            InsightWindow.DAYS30 -> completed.filter { it.startTime >= now - thirtyDays }
-            InsightWindow.KM500 -> recentByDistance(completed, 500_000.0)
-            InsightWindow.ALL -> completed
-        }.ifEmpty { completed.takeLast(1) }
+        var window by remember { mutableStateOf(InsightWindow.DAY7) }
+        val windowTrips = (window.days?.let { d ->
+            val cutoff = now - d * 24L * 60L * 60L * 1000L
+            completed.filter { it.startTime >= cutoff }
+        } ?: completed).ifEmpty { completed.takeLast(1) }
         val wScores = windowTrips.map { TripScores.from(it) }
         val averages = ScoreAverages.from(wScores)
         // The window immediately preceding the current one, for a "this window vs previous" delta strip.
         // All-time has no prior period, so it shows no deltas.
-        val prevWindowTrips = when (window) {
-            InsightWindow.DAYS30 ->
-                completed.filter { it.startTime in (now - 2 * thirtyDays) until (now - thirtyDays) }
-            InsightWindow.KM500 -> {
-                val cur = windowTrips.toHashSet()
-                recentByDistance(completed.filterNot { it in cur }, 500_000.0)
-            }
-            InsightWindow.ALL -> emptyList()
-        }
+        val prevWindowTrips = window.days?.let { d ->
+            val ms = d * 24L * 60L * 60L * 1000L
+            completed.filter { it.startTime in (now - 2 * ms) until (now - ms) }
+        } ?: emptyList()
         val prevAverages = if (prevWindowTrips.isNotEmpty())
             ScoreAverages.from(prevWindowTrips.map { TripScores.from(it) }) else null
         // Cross-trip recurring-event hotspots (loaded off the main thread). [sliderG] tracks the live slider
@@ -318,20 +312,12 @@ fun InsightsScreen(
     }
 }
 
-private enum class InsightWindow(val label: String) {
-    DAYS30("30 days"), KM500("500 km"), ALL("All time")
-}
-
-/** Most-recent trips whose cumulative distance covers [meters], returned in chronological order. */
-private fun recentByDistance(completed: List<TripEntity>, meters: Double): List<TripEntity> {
-    val out = ArrayList<TripEntity>()
-    var sum = 0.0
-    for (t in completed.asReversed()) {
-        out.add(t)
-        sum += t.distanceM
-        if (sum >= meters) break
-    }
-    return out.asReversed()
+private enum class InsightWindow(val chip: String, val label: String, val days: Int?) {
+    DAY1("1d", "1 day", 1),
+    DAY3("3d", "3 days", 3),
+    DAY7("7d", "7 days", 7),
+    DAY30("30d", "30 days", 30),
+    ALL("All", "all time", null)
 }
 
 private data class ScoreAverages(
@@ -371,12 +357,12 @@ private fun movingAverage(values: List<Float>, window: Int): List<Float> {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WindowSelector(selected: InsightWindow, onSelect: (InsightWindow) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         InsightWindow.values().forEach { w ->
             FilterChip(
                 selected = w == selected,
                 onClick = { onSelect(w) },
-                label = { Text(w.label) }
+                label = { Text(w.chip) }
             )
         }
     }
@@ -441,13 +427,15 @@ private fun StressTrendCard(
             }
             if (smoothed.size >= 2) {
                 TimeSeriesChart(
-                    title = "Stress over $windowLabel (smoothed)",
+                    title = "Stress trend (smoothed)",
                     values = smoothed,
                     unit = "",
                     color = color,
-                    // Dashed reference = the mean of the plotted (smoothed) series, so it represents THIS line.
-                    // (The headline number above is the distance-weighted average, a deliberately different stat.)
-                    average = smoothed.average().toFloat()
+                    // Fixed 0-100 scale + y-axis labels (owner request). Dashed line = the mean of the plotted
+                    // smoothed series (the headline above is the distance-weighted average - a different stat).
+                    average = smoothed.average().toFloat(),
+                    yRange = 0f..100f,
+                    xAxisLabel = "each point = one drive (oldest -> most recent), last $windowLabel"
                 )
             }
         }
