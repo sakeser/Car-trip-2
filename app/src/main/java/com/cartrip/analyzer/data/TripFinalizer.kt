@@ -4,6 +4,7 @@ import com.cartrip.analyzer.analysis.DriveEvent
 import com.cartrip.analyzer.analysis.DriveMetrics
 import com.cartrip.analyzer.analysis.Drawdowns
 import com.cartrip.analyzer.analysis.EventType
+import com.cartrip.analyzer.analysis.StopAndGo
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.analysis.TripAnalyzer
@@ -82,9 +83,14 @@ object TripFinalizer {
         // Drawdowns (Rev CI): computed from the limit-annotated, sampled track so it can use limits when
         // present, and so a re-analyze recomputes it. A walk can't have a (>=60 km/h) drawdown anyway.
         val drawdowns = Drawdowns.detect(annotatedPoints)
+        // Stop-and-go / continuous-focus signals (Drive Stress v2) from the same limit-annotated track.
+        val stopAndGo = StopAndGo.analyze(annotatedPoints)
         val withDrawdowns = updated.copy(
             drawdownCount = drawdowns.count,
-            drawdownSeverity = drawdowns.severity
+            drawdownSeverity = drawdowns.severity,
+            crawlFraction = stopAndGo.crawlFraction,
+            belowLimitLoad = stopAndGo.belowLimitLoad,
+            longestNoBreakS = stopAndGo.longestNoBreakS
         )
         val pointEntities = annotatedPoints.map { it.toEntity(tripId) }
         // Persist GPS/pothole events and the Rev D fused events together (each tagged by source).

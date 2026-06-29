@@ -39,7 +39,9 @@ object ExportData {
         // Labels. UserTripName = the user's manual rename only (blank for unnamed trips); the generated
         // "A -> B" geocoded label is NOT exported here (it's an IO/Geocoder display-time value, kept out of
         // this pure builder). A future GeneratedTripLabel column could add it via a label-aware path.
-        "UserTripName", "IsDrive"
+        "UserTripName", "IsDrive",
+        // Stop-and-go / continuous-focus signals (Drive Stress v2)
+        "CrawlFraction", "BelowLimitLoad", "LongestNoBreak_s"
     )
 
     val SAMPLE_HEADER = listOf(
@@ -118,7 +120,10 @@ object ExportData {
             if (trip.gnssL5Seen) "1" else "0",
             trip.gnssSampleCount.toString(),
             trip.name,
-            when (trip.userIsDrive) { true -> "drive"; false -> "walk"; null -> "auto" }
+            when (trip.userIsDrive) { true -> "drive"; false -> "walk"; null -> "auto" },
+            f(trip.crawlFraction, 3),
+            f(trip.belowLimitLoad, 3),
+            f(trip.longestNoBreakS, 0)
         )
     }
 

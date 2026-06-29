@@ -1,10 +1,12 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-29 · Source **3.31 (build 142)** (Rev CP cont.: reset-to-automatic + OSM/ODbL
-attribution, shared bar-scale / bar-sizing audit, AI-export traffic + "when you drive" sections, export
-value-mapping tests; atop CR export retention, migration foundation, Places scaffold) · **all merged to
-`main` and pushed** (the `rev-cp-v3.28-polish` review branch was deleted post-merge) · **200 unit tests, all
-green** · **S25 installed + verified 3.31 (build 142)**: the OSM/ODbL "©" attribution renders correctly (it's
+_Last updated: 2026-06-29 · Source **3.32 (build 143), schema v22** (Rev CS: **Drive Stress Score v2** — a
+stop-and-go / no-break demand-gated model + `analysis/StopAndGo.kt` + schema v22; atop the already-pushed
+Rev CP cont. v3.28–v3.31: reset-to-automatic, OSM/ODbL attribution, bar-scale audit, AI-export traffic/daypart
+sections, export value-mapping tests, CR export retention, migration foundation, Places scaffold) ·
+**committed on `main`, NOT pushed — device-verify pending** (the phone disconnected, USB flaky, before the
+v22 migration + Insights "Re-analyze all trips"; everything up to v3.31 IS already pushed) · **208 unit tests,
+all green** (incl. the 1187~40 / 1189~78 stress calibration anchors) · **S25 installed + verified 3.31 (build 142)**: the OSM/ODbL "©" attribution renders correctly (it's
 built via `0xA9.toChar()` to dodge the Cp1252 mojibake trap) and the Past-Trips duration bars are no longer
 edge-to-edge. **Field-validated on the 2026-06-29 home→work commute (trip 1187, 43.8 km / 41 min):**
 drawdowns (4), Drive Stress **42 (Moderate)**, "you vs traffic **5 min faster**" + ~35% congestion vs
@@ -477,7 +479,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (200 tests)
+## 7. Test suite (208 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -493,11 +495,11 @@ arm / stop / wireless / Bluetooth gating), `FormatTest` (2), `TripNamingTest` (3
 `TripKindTest` (6: walk vs drive vs zero-speed), `DrivingTimesTest` (2: dayparts / summarize). All
 pure-JVM (no Robolectric/instrumented).
 
-Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (8), `AiInsightsExportTest` (6),
+Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (10), `AiInsightsExportTest` (6),
 `EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
 `GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (5, header/row lockstep + value mapping),
-`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7), `BarScaleTest` (8). Count is **200**
-(`grep -rc '@Test'` across `app/src/test`). The per-suite counts above are exact and sum to 200 (verified 2026-06-28).
+`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7), `BarScaleTest` (8), `StopAndGoTest` (6).
+Count is **208** (`grep -rc '@Test'` across `app/src/test`). The per-suite counts above are exact and sum to 208 (verified 2026-06-29).
 
 Gaps: **no Compose/UI tests, no instrumented tests.** Room migrations: **schema export is now on** (v3.27 —
 `exportSchema=true` + `app/schemas/.../21.json`), so Room validates migrations at compile time and v21+ is a

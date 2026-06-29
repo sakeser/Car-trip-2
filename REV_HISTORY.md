@@ -4,6 +4,26 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CS (2026-06-29, v3.32/build 143, schema v22) — Drive Stress Score v2 (stop-and-go / no-break model)
+
+Re-imagined the Drive Stress Score after the 2026-06-29 narrated drive exposed a blind spot: a stressful
+stop-and-go crawl (trip 1189) scored "Calm" (18) — *lower* than a smooth highway commute (42) — because v1
+leaned on drawdowns (which miss sustained stop-and-go) + a Routes congestion factor that was often missing.
+Built + **208 unit tests green** (incl. the 1187~40 / 1189~78 calibration anchors); **device-verify pending,
+NOT pushed** (the phone disconnected before the v22 migration + re-analyze).
+- `analysis/StopAndGo.kt` (pure, +6 tests): three signals from the per-point track — `crawlFraction` (share
+  of moving time < 40 km/h), `belowLimitLoad` (mean shortfall vs the posted limit), `longestNoBreakS` (the
+  longest unbroken driving stretch with no >= 10 s rest — the owner's "no mental break" idea).
+- Schema **v22** (`trips.crawlFraction/belowLimitLoad/longestNoBreakS`, `MIGRATION_21_22`); `TripFinalizer`
+  computes + stores them from the limit-annotated track (recomputed on re-analyze).
+- `analysis/StressScore.kt` **v2**: `105 × mean` of 4 roughly-balanced pillars (congestion, hazards,
+  no-break load, duration load). The no-break + duration loads are **demand-gated** by congestion, so a
+  long, fast, EMPTY cruise stays restful while a long CONGESTED grind lands at full weight; the no-break load
+  **accelerates** past ~45 min. Owner-calibrated (2026-06-29) to 1187 ~40, 1189 ~78; a smooth cruise ~4.
+- Export: appended `CrawlFraction` / `BelowLimitLoad` / `LongestNoBreak_s`.
+- **Next:** reconnect phone -> install v3.32 -> run the migration -> Insights **"Re-analyze all trips"** ->
+  verify 1189 now reads ~78 -> push. Calibration refines as more drives (esp. a genuinely high-stress one) log.
+
 ## Rev CP cont. (2026-06-28, test hardening — no version bump, still build 142) — export value-mapping tests
 
 Test-only (no runtime change → no version bump / reinstall). Hardens the export pipeline the owner relies on

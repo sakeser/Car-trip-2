@@ -91,7 +91,13 @@ data class TripEntity(
     // hard/long (>50% speed loss) that later recovers (not a normal stop). A traffic-quality / stop-and-go
     // signal that feeds the Drive Stress Score. drawdownSeverity = sum of (speed lost, km/h)^2 over drawdowns.
     val drawdownCount: Int = 0,
-    val drawdownSeverity: Double = 0.0
+    val drawdownSeverity: Double = 0.0,
+    // Stop-and-go / continuous-focus signals (Drive Stress v2, Rev CS): share of moving time crawling
+    // (< 40 km/h), mean shortfall below the posted limit, and the longest unbroken driving stretch (s) with
+    // no >= 10 s rest. Computed by StopAndGo from the limit-annotated track; recomputed on re-analyze.
+    val crawlFraction: Double = 0.0,
+    val belowLimitLoad: Double = 0.0,
+    val longestNoBreakS: Double = 0.0
 )
 
 @Entity(tableName = "locations", indices = [Index("tripId")])
