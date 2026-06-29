@@ -1,13 +1,13 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.30 (build 141)** (Rev CP cont.: AI-export traffic & congestion
-section; atop v3.29 shared bar-scale / bar-sizing audit, v3.28 reset-to-automatic + visible OSM/ODbL
-attribution + doc/test sync, CR export retention, migration foundation, Places scaffold) · on review branch
-**`rev-cp-v3.28-polish`** (v3.28 → v3.30 stacked); **`main` is untouched at `efa82a8` = origin/main**, **NOT
-pushed** — awaits the owner's review + push authorization (to land it: `git checkout main && git merge
---ff-only rev-cp-v3.28-polish`, then push) · **197 unit tests, all green** · S25 installed **3.28 (build
-139)** this session; v3.29/v3.30 **not yet installed/eyeballed** (all changes build + unit-test clean; device
-check pending). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.31 (build 142)** (Rev CP cont.: AI-export "when you drive" daypart
+section + v3.30 traffic & congestion; atop v3.29 shared bar-scale / bar-sizing audit, v3.28
+reset-to-automatic + visible OSM/ODbL attribution + doc/test sync, CR export retention, migration foundation,
+Places scaffold) · on review branch **`rev-cp-v3.28-polish`** (v3.28 → v3.31 stacked); **`main` is untouched
+at `efa82a8` = origin/main**, **NOT pushed** — awaits the owner's review + push authorization (to land it:
+`git checkout main && git merge --ff-only rev-cp-v3.28-polish`, then push) · **198 unit tests, all green** ·
+S25 installed **3.28 (build 139)** this session; v3.29–v3.31 **not yet installed/eyeballed** (all changes
+build + unit-test clean; device check pending). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -471,7 +471,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (197 tests)
+## 7. Test suite (198 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -487,11 +487,11 @@ arm / stop / wireless / Bluetooth gating), `FormatTest` (2), `TripNamingTest` (3
 `TripKindTest` (6: walk vs drive vs zero-speed), `DrivingTimesTest` (2: dayparts / summarize). All
 pure-JVM (no Robolectric/instrumented).
 
-Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (8), `AiInsightsExportTest` (5),
+Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (8), `AiInsightsExportTest` (6),
 `EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
 `GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard),
-`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7), `BarScaleTest` (8). Count is **197**
-(`grep -rc '@Test'` across `app/src/test`). The per-suite counts above are exact and sum to 197 (verified 2026-06-28).
+`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7), `BarScaleTest` (8). Count is **198**
+(`grep -rc '@Test'` across `app/src/test`). The per-suite counts above are exact and sum to 198 (verified 2026-06-28).
 
 Gaps: **no Compose/UI tests, no instrumented tests.** Room migrations: **schema export is now on** (v3.27 —
 `exportSchema=true` + `app/schemas/.../21.json`), so Room validates migrations at compile time and v21+ is a

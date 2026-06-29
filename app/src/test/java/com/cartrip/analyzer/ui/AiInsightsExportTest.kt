@@ -59,4 +59,14 @@ class AiInsightsExportTest {
         val md = AiInsightsExport.build(listOf(drive(40.0, 2400.0, day)), emptyMap(), v, emptyList(), 2 * day)
         assertTrue(!md.contains("## Traffic"))
     }
+
+    @Test fun includesWhenYouDriveSection() {
+        // Daypart depends on the local time zone, so assert the section/structure exists, not a daypart name.
+        val day = 24L * 3600 * 1000
+        val md = AiInsightsExport.build(
+            listOf(drive(40.0, 2400.0, day), drive(5.0, 600.0, 2 * day)), emptyMap(), v, emptyList(), 3 * day
+        )
+        assertTrue(md.contains("## When you drive"))
+        assertTrue(md.contains("By daypart:"))
+    }
 }

@@ -105,6 +105,28 @@ object AiInsightsExport {
             sb.appendLine()
         }
 
+        // When you drive: daypart distribution + which part of the day is your safest / least safe.
+        val activeParts = DrivingTimes.summarize(
+            drives.map { DrivingTimes.Entry(it.startTime, TripScores.from(it).safety, it.distanceM / 1000.0) }
+        ).filter { it.tripCount > 0 }
+        if (activeParts.isNotEmpty()) {
+            sb.appendLine("## When you drive")
+            sb.appendLine("- By daypart: " + activeParts.joinToString(", ") {
+                "${it.part.label} ${it.tripCount} (${it.totalKm.roundToInt()} km)"
+            })
+            val rated = activeParts.filter { it.avgSafety != null }
+            if (rated.size >= 2) {
+                val safest = rated.maxByOrNull { it.avgSafety!! }!!
+                val worst = rated.minByOrNull { it.avgSafety!! }!!
+                if (safest.part != worst.part) {
+                    sb.appendLine("- Safest in the ${safest.part.label.lowercase()} (avg Safety " +
+                        "${safest.avgSafety}); least safe in the ${worst.part.label.lowercase()} " +
+                        "(avg Safety ${worst.avgSafety})")
+                }
+            }
+            sb.appendLine()
+        }
+
         if (hotspots.isNotEmpty()) {
             sb.appendLine("## Recurring trouble spots")
             hotspots.take(8).forEach { h ->

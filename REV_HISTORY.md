@@ -4,6 +4,14 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CP cont. (2026-06-28, v3.31/build 142) — AI export: "when you drive" daypart section
+
+Adds the temporal dimension to the "Share for AI insights" markdown (pure; built + unit tests green; **not
+pushed**). Builds on the v3.30 traffic section.
+- `ui/AiInsightsExport.kt` (+1 test): a new **## When you drive** section via `DrivingTimes.summarize` —
+  per-daypart drive counts + km, plus which daypart is the user's safest / least safe (avg Safety). Pure,
+  from stored aggregates; emitted only when there are drives. (Daypart uses the device's local time zone.)
+
 ## Rev CP cont. (2026-06-28, v3.30/build 141) — AI export: traffic & congestion section
 
 Enriches the "Share for AI insights" markdown (pure; built + unit tests green; **not pushed**). The summary
