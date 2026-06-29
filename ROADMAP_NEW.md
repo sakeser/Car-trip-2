@@ -47,29 +47,39 @@ is shipped + device-verified; this is what's next.)
   **Trip-Detail** screen (not Insights) — code-review shows it already caps at ~80% via `niceEtaAxisMaxMin`
   (headroom 1.25); the owner's "near full width" likely a specific trip or the wipe animation, so it needs an
   owner-pointed on-device re-check rather than a blind change.
-- **Rev CW — Driver-Load / "Drive readiness" model (marquee R&D):** the cumulative, time-decaying load index
-  + 24 h recovery forecast. Larger; design below; workshop calibration. The premium hook.
+- **Rev CW — Driver-Load / "Drive readiness" model — DONE (v3.35, device-verified):** the cumulative,
+  time-decaying load index + 24 h recovery forecast. `analysis/DriverLoad.kt` (pure leaky integrator, TAU
+  28.8 h, +8 tests) DB-replay-calibrated (`SATURATION_K=1.0`: median real day ~54/Moderate, heaviest ~78);
+  `DriverLoadCard` in Insights (load + readiness + one-line read + 24 h recovery curve + medical disclaimer).
+  Device-verified: live load 67/Elevated, decaying from the morning peak as the model predicts. **Phase 2
+  deferred:** the ACWR acute-vs-chronic "above your norm" overload flag + constant tuning over time.
 - _Misc (low priority):_ trip-end trim leaves a few seconds at 0 km/h on the tail — tighten
   `AutoStop.retrospectiveStopTime` to drop a trailing standstill (one observed case; fold into a polish rev).
 
-### Next-agent pickup — CW Driver-Load (file pointers; start here)
+### Next-agent pickup — CW phase 2 + leftovers (file pointers; start here)
 
-Current state: **v3.34 / build 145, schema v22, 210 tests, main == origin/main, CT-fuel + CU device-verified
-on the S25.** Build/test/device workflow is HANDOFF section 2.1 (relocated Gradle init script; grep the log
-for `BUILD SUCCESSFUL`; bump version for runtime changes; install + eyeball on the S25). **CV, CT, CT-fuel,
-and CU are all done + device-verified** (see the Build-plan bullets above for what shipped). What remains:
+Current state: **v3.35 / build 146, schema v22, 218 tests, CV / CT / CT-fuel / CU / CW all done +
+device-verified on the S25.** (Push status: confirm with `git log origin/main..main` — CT-fuel+CU were pushed;
+CW may be local-only pending owner OK.) Build/test/device workflow is HANDOFF section 2.1 (relocated Gradle
+init script; grep the log for `BUILD SUCCESSFUL`; bump version for runtime changes; install + eyeball on the
+S25). The 2026-06-29 review-note build sequence is **complete**; what remains is CW phase 2 + small polish:
 
-**Rev CW — Driver-Load / "Drive readiness" model (marquee R&D).** The cumulative, time-decaying load index +
-24 h recovery forecast — the premium hook. Design lives in the "Driver-Load" section further down this file;
-it's a larger, calibration-heavy R&D rev (workshop the decay/recovery constants by DB-replay, the way Stress
-v2 was anchored). No code exists yet — start from the design section + the existing `analysis/StressScore.kt`
-+ `analysis/StopAndGo.kt` + `analysis/Drawdowns.kt` (the per-trip demand signals it will integrate over time).
+**Rev CW phase 2 — ACWR "above your recent norm" flag.** Files: `analysis/DriverLoad.kt` (add an acute vs
+chronic EWMA pair) + the `DriverLoadCard` in `ui/InsightsScreen.kt`. Add a second leaky integrator at a
+**chronic** TAU (~21 d) alongside the existing acute one, surface the ratio (acute/chronic), and flag
+**> 1.5** as "well above your recent norm" — the evidence-backed overload signal (Williams et al. ACWR). It's
+independent of the absolute 0-100 scale, so it catches "you've been driving much more/harder than usual
+lately" even when the absolute load looks ordinary. Also: keep workshopping the TAU / K / `BASELINE_LOAD`
+constants as more trips land (DB-replay).
 
 **Small leftovers (fold into a polish rev):**
 - `EtaCompare` (Trip-Detail, `ui/TripDetailScreen.kt` ~ln 1497) — owner-pointed on-device re-check of the
   "near full width" report; the code already caps at ~80% via `niceEtaAxisMaxMin` (headroom 1.25), so this
   needs the owner to name a specific trip rather than a blind change.
 - trip-end trim leaves a few seconds at 0 km/h on the tail — tighten `AutoStop.retrospectiveStopTime`.
+
+Beyond the review notes, the older Tier A-C backlog + the §14 frontier items (Places activation **CQ**,
+commercialization hardening **CR**, SQLCipher+biometric encryption — gated/ask-first) still stand.
 
 ### Item-by-item solutions
 **Insights dynamic days filter (Rev CT).** Replace the `30 days / 500 km / All time` chips with

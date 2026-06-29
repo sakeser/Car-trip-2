@@ -4,6 +4,28 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CW (2026-06-29, v3.35/build 146) — Driver Load / "Drive readiness" model (marquee R&D, v1)
+
+The owner's "drive stress built up over time" concept: a single 0-100 number that **builds with recent
+stressful driving and decays with rest**, plus a 24 h recovery forecast. Built + **218 tests green** (210 + 8
+new `DriverLoad`); **device-verified on the S25** (v3.35) — live load **67/Elevated**, decaying correctly from
+the morning peak. No schema change (pure from the trip list).
+- `analysis/DriverLoad.kt` (pure, +8 tests): an exponentially-weighted **leaky integrator** of stress-weighted
+  driving time — maps onto the EWMA Acute:Chronic Workload Ratio / Banister fatigue / Borbely two-process
+  models (all the same decay math). Each drive deposits `impulse = (stress/100) * durationHours`; load
+  `L(t) = Σ impulse·exp(-Δt/TAU)`, **TAU 28.8 h** (half-life ~20 h, so a 3-day-old drive contributes ~8%).
+  Raw is mapped to 0-100 by a saturating `1 - exp(-raw/K)`; `state()` also returns readiness (`100-load`), a
+  band, the 25-point 24 h **recovery curve**, and `hoursToBaseline` (closed-form from the decay).
+- **Calibration (DB-replay over the owner's 39 scorable drives, the Stress-v2 method):** `SATURATION_K = 1.0`
+  so a calm isolated commute ~23 (Light), the **median real day ~54 (Moderate)**, a busy day ~72 (Elevated),
+  the heaviest observed day ~78 — headroom left for a truly exceptional day to read High. `BASELINE_LOAD = 20`.
+- `ui/InsightsScreen.kt` `DriverLoadCard` (window-independent — runs over ALL trips, since load is cumulative
+  + self-attenuating; shown only when there's recent load): the green->red load number (`StressColors`),
+  band + readiness, a one-line read ("...about 2.0 days of rest to baseline" / a clock time if < 24 h), the
+  24 h recovery `TimeSeriesChart` (fixed 0-100), and an **awareness-only, not-a-medical-assessment** disclaimer.
+- **Deferred (phase 2, per the design):** the ACWR "vs your recent norm" overload flag (acute vs chronic EWMA
+  ratio > 1.5); workshop the TAU / K / baseline constants further as more data lands.
+
 ## Rev CT-fuel + CU (2026-06-29, v3.34/build 145) — Fuel economy %-change chart + bar-sizing pass 2
 
 Built + **210 tests green** (208 + 2 new `FuelInsights` tests); **device-verified on the S25** (v3.34) against

@@ -1,13 +1,17 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-29 · Source **3.34 (build 145), schema v22** (Rev CT-fuel + CU: a new **"Fuel economy
-vs your average"** chart — `PercentChangeChart` plots each drive's L/100km as a smoothed %-deviation from your
-window mean with green/red fill + a dashed live-OEM-rating line; and **bar-sizing pass 2** — the "When you
-drive" daypart bars now scale through `BarScale` (~80% busiest, not edge-to-edge); **210 tests**, **both
-device-verified on the S25**; **Rev CW Driver-Load is the next queued rev** — see ROADMAP_NEW) · atop Rev
-CV+CT (v3.33/build 144): trip-view defaults + **Insights chart/filter overhaul** — dynamic `1/3/7/30/All` days
-filter, Drive-Stress chart fixed 0..100 with y-axis labels + no min/max footer, bumps hidden from the trip
-"All events" list by default · atop Rev CS: **Drive Stress Score v2** —
+_Last updated: 2026-06-29 · Source **3.35 (build 146), schema v22** (Rev CW: **Driver Load / "Drive
+readiness"** — `analysis/DriverLoad.kt`, a pure recency-weighted leaky integrator of stress-weighted driving
+time (TAU 28.8 h) that builds with recent stressful driving + decays with rest, DB-replay-calibrated
+(`SATURATION_K=1.0`), surfaced as an Insights card with load/readiness + a one-line read + a 24 h recovery
+curve + a not-a-medical-assessment disclaimer; **device-verified** live load 67/Elevated decaying from the
+morning peak; **218 tests**; **Phase 2 = the ACWR acute-vs-chronic overload flag** — see ROADMAP_NEW) · atop
+Rev CT-fuel + CU (v3.34/build 145): a **"Fuel economy vs your average"** `PercentChangeChart` (smoothed
+%-deviation from your window mean, green/red fill + a dashed live-OEM-rating line) + **bar-sizing pass 2** (the
+"When you drive" daypart bars scale through `BarScale`, ~80% busiest) · atop Rev CV+CT (v3.33/build 144):
+trip-view defaults + **Insights chart/filter overhaul** — dynamic `1/3/7/30/All` days filter, Drive-Stress
+chart fixed 0..100 with y-axis labels + no min/max footer, bumps hidden from the trip "All events" list by
+default · atop Rev CS: **Drive Stress Score v2** —
 a stop-and-go / no-break demand-gated model + `analysis/StopAndGo.kt` + schema v22; atop the
 Rev CP cont. v3.28–v3.31: reset-to-automatic, OSM/ODbL attribution, bar-scale audit, AI-export traffic/daypart
 sections, export value-mapping tests, CR export retention, migration foundation, Places scaffold ·

@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cartrip.analyzer.analysis.DriverLoad
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TripKind
@@ -168,6 +169,15 @@ fun InsightsScreen(
                     val smoothed = StressScore.trailingAvg(series, STRESS_SMOOTH_TRIPS)
                     val prevKmAvg = StressScore.kmWeightedAvg(prevWindowTrips)
                     item { StressTrendCard(kmAvg, prevKmAvg, smoothed, series.size, window.label) }
+                }
+            }
+
+            // Driver Load / readiness: a recency-weighted "right now" state over ALL trips (not the window),
+            // since load is cumulative + self-attenuating. Shown only when there's recent driving load.
+            run {
+                val load = DriverLoad.state(completed, now)
+                if (load.drivesCounted > 0) {
+                    item { DriverLoadCard(load, now) }
                 }
             }
 
@@ -438,6 +448,87 @@ private fun StressTrendCard(
                     xAxisLabel = "each point = one drive (oldest -> most recent), last $windowLabel"
                 )
             }
+        }
+    }
+}
+
+/**
+ * Driver Load / "Drive readiness" (Rev CW): a recency-weighted cumulative-stress state that builds with recent
+ * stressful driving and decays with rest, plus a 24 h recovery forecast. Higher load = less ready, so it gets
+ * the green->red StressColors scale (not a green=good ring). Awareness/wellness only — not a fitness-to-drive
+ * assessment (the disclaimer line says so).
+ */
+@Composable
+private fun DriverLoadCard(s: DriverLoad.State, nowMs: Long) {
+    val color = StressColors.color(s.load)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "${s.load}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Driver load", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${s.band} - ${s.readiness}/100 readiness (builds with driving, eases with rest)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Text(
+                driverLoadRead(s, nowMs),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (s.recovery.size >= 2) {
+                TimeSeriesChart(
+                    title = "If you stop now: 24 h recovery",
+                    values = s.recovery,
+                    unit = "",
+                    color = color,
+                    yRange = 0f..100f,
+                    xAxisLabel = "next 24 h with no further driving"
+                )
+            }
+            Text(
+                "Awareness only, from your own driving - not a fitness-to-drive or medical assessment.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** One-line plain read of the load + when it returns to baseline (clock time if within a day, else days). */
+private fun driverLoadRead(s: DriverLoad.State, nowMs: Long): String {
+    val h = s.hoursToBaseline
+    return when {
+        s.load < DriverLoad.BASELINE_LOAD || h == 0 ->
+            "Low recent load - you're at your driving baseline."
+        h == null ->
+            "${s.band} load from recent driving - give it some rest to recover."
+        h <= DriverLoad.FORECAST_HOURS -> {
+            val target = java.text.SimpleDateFormat("h a", Locale.US)
+                .format(java.util.Date(nowMs + h * 3_600_000L))
+            "${s.band} load from recent driving - back to baseline around $target with no more driving."
+        }
+        else -> {
+            val days = h / 24.0
+            "${s.band} load from recent driving - about ${String.format(Locale.US, "%.1f", days)} days of rest to baseline."
         }
     }
 }
