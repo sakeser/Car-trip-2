@@ -1,13 +1,14 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-28 · Source **3.31 (build 142)** (Rev CP cont.: AI-export "when you drive" daypart
-section + v3.30 traffic & congestion; atop v3.29 shared bar-scale / bar-sizing audit, v3.28
-reset-to-automatic + visible OSM/ODbL attribution + doc/test sync, CR export retention, migration foundation,
-Places scaffold) · on review branch **`rev-cp-v3.28-polish`** (v3.28 → v3.31 stacked); **`main` is untouched
-at `efa82a8` = origin/main**, **NOT pushed** — awaits the owner's review + push authorization (to land it:
-`git checkout main && git merge --ff-only rev-cp-v3.28-polish`, then push) · **200 unit tests, all green** ·
-S25 installed **3.28 (build 139)** this session; v3.29–v3.31 **not yet installed/eyeballed** (all changes
-build + unit-test clean; device check pending). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
+_Last updated: 2026-06-28 · Source **3.31 (build 142)** (Rev CP cont.: reset-to-automatic + OSM/ODbL
+attribution, shared bar-scale / bar-sizing audit, AI-export traffic + "when you drive" sections, export
+value-mapping tests; atop CR export retention, migration foundation, Places scaffold) · **all merged to
+`main` and pushed** (the `rev-cp-v3.28-polish` review branch was deleted post-merge) · **200 unit tests, all
+green** · **S25 installed + verified 3.31 (build 142)**: the OSM/ODbL "©" attribution renders correctly (it's
+built via `0xA9.toChar()` to dodge the Cp1252 mojibake trap) and the Past-Trips duration bars are no longer
+edge-to-edge. "Reset to automatic" is verified by-construction (trivial additive logic on the unit-tested
+`setTripIsDrive(null)` path) — the Past-Trips **open** affordance proved too fiddly to reach the trip-detail
+overflow menu via scripted taps (confirmed on-device; see §14 CP). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
 "you"-line white-edge fix; "Load sample data" + Sheets card moved into the Options sheet; **Home-screen
 auto-record quick toggle**; **Past-trips recency filter** (24h/3d/7d/30d/All, default 7d); fuel "spend over
@@ -1191,8 +1192,15 @@ source** before acting (some Codex notes were stale or already-handled). Verdict
   unit-tested) — `niceAxisMax(dataMax, headroom)` + `fillFraction(value, axisMax, minVisible)`; the
   you-vs-traffic ETA axis now delegates to it (behaviour-identical) and the Past-Trips `DurationBar` sizes
   against it (no longer edge-to-edge, keeps a min sliver). `SpeedingShareBar` (a 0–100% proportion) and
-  `PeakLimitBar` (already carries headroom) were intentionally left. Still open: a better Past Trips
-  open/preview affordance.
+  `PeakLimitBar` (already carries headroom) were intentionally left. **AI-export enrichment (v3.30/v3.31):**
+  added a **Traffic** section (you-vs-Google + congestion vs free-flow) and a **"When you drive"** daypart
+  section to the "Share for AI insights" markdown, plus export value-mapping regression tests. **Past Trips
+  open/preview affordance — still open, now confirmed problematic on-device (v3.31 verify):** tapping a trip
+  row only **selects/previews** it (adds a detail line, repaints the frozen map, shifts the list) and does
+  **not** open the full trip-detail screen — four distinct taps (row, re-tap, preview map) all failed to
+  navigate. Needs an explicit **"open"** affordance (a chevron/Open button on the selected row, or
+  open-on-second-tap that survives the list shift). This also blocks reaching the trip-detail overflow menu
+  by script, so "Reset to automatic" was verified by-construction rather than clicked on-device.
 - **CQ (P2, gated on owner's Places go/no-go):** **SCAFFOLD DONE (v3.27, inert):** `cloud/Places.kt`
   (Nearby Search New: pure `topPlaceName` parser + `cellKey` cache key, both unit-tested; `nearbyName` fetch
   with `X-Goog-FieldMask=places.displayName`, ~60 m radius, rank-by-distance; `placeNameCached` caches by

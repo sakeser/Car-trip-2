@@ -3,20 +3,21 @@
 New items from the owner, assessed + ordered by value × (1/risk). Worked top-down ("clear the log,
 easiest/least-risk first"). Rev letters continue from CJ.
 
-> **⚠️ FRONTIER (updated 2026-06-28 — source v3.28 / build 139, schema v21, 187 tests):** The authoritative
-> plan lives in **`HANDOFF.md` §14 / §14.1** — read that first; this box is the quick status. Shipped since the
-> CK–CN batch (v3.22): **Rev CO** doc-truth + low-risk-correctness pass; **Rev CP** Drive Stress Score depth
-> (hero pill, km-weighted average, Insights smoothed trend), **then `StressScore` + `TripKind` decoupled out of
-> `ui` into `analysis/` (v3.26)**; **CR export-file retention** (`export/ExportRetention` prunes the unencrypted
-> per-trip `.xlsx`, v3.27); **Room migration-test FOUNDATION** (`exportSchema=true` + committed
-> `schemas/.../21.json` baseline, v3.27); **Places scaffold** (`cloud/Places.kt` + `PlacesPrefs`, flag **OFF** /
-> inert — no wiring, no cost, v3.27); **Trip-Detail "Reset to automatic"** + a **visible OSM/ODbL attribution**
-> credit + a doc/test-count sync (v3.28). **Still open (priority order):** finish the **bar-sizing audit** +
-> Past-Trips open affordance (CP polish); **CQ** = *activate* Places (paid — needs the owner's go-ahead, a UI
-> toggle, diagnostics, and wiring into naming with a Geocoder fallback); **CR** = commercialization hardening
-> (privacy policy, Data Safety, background-location / foreground-only package) and **SQLCipher + biometric**
-> at-rest encryption (gated, higher-risk — ask first). The Tier A–C items below are older backlog;
-> cross-reference §14 + §13.3 before starting.
+> **⚠️ FRONTIER (updated 2026-06-28 — source v3.31 / build 142, schema v21, 200 tests, all merged to `main`
+> and pushed):** The authoritative plan lives in **`HANDOFF.md` §14 / §14.1** — read that first; this box is the
+> quick status. Shipped since the CK–CN batch (v3.22): **Rev CO** doc-truth pass; **Rev CP** Drive Stress Score
+> depth, **then `StressScore` + `TripKind` decoupled into `analysis/` (v3.26)**; **CR export-file retention**
+> (v3.27); **Room migration-test FOUNDATION** (`exportSchema=true` + `schemas/.../21.json`, v3.27); **Places
+> scaffold** (flag **OFF** / inert, v3.27); **Rev CP cont. (this session, v3.28–v3.31):** Trip-Detail
+> **"Reset to automatic"** + a **visible OSM/ODbL attribution** credit (v3.28), a pure **shared bar-scale**
+> helper / bar-sizing audit (v3.29), AI-export **Traffic** + **"When you drive"** sections (v3.30/v3.31), and
+> export value-mapping tests. **On-device verified (S25 @ 3.31):** the "©" attribution renders correctly and the
+> duration bars aren't edge-to-edge. **Still open (priority order):** **Past-Trips OPEN affordance** — confirmed
+> fiddly on-device (a row tap only selects/previews, never opens the detail screen; needs an explicit Open
+> control — see §14 CP); **CQ** = *activate* Places (paid — needs the owner's go-ahead, a UI toggle,
+> diagnostics, Geocoder-fallback wiring); **CR** = commercialization hardening (privacy policy, Data Safety,
+> background-location / foreground-only) and **SQLCipher + biometric** at-rest encryption (gated, higher-risk —
+> ask first). The Tier A–C items below are older backlog; cross-reference §14 + §13.3 before starting.
 
 ## ⭐ Drive Stress Score — depth (owner-requested, HIGH interest)
 
