@@ -207,6 +207,40 @@ foreground-only default, privacy policy, Data Safety), monetization infra (repla
 account/backend storing only compact summaries; Play Billing), and the premium dashboard (stress/drawdown
 trends — built; Places destination analytics; cohort comparisons; AI coaching).
 
+## Settings architecture — graduate from scattered options to a proper Settings system (premium redesign, UX item)
+**Status: future redesign requirement (owner-requested 2026-06-29). NOT scheduled for implementation yet — this is
+product/navigation/settings-architecture direction, not a task. Belongs to the premium-redesign track (see
+`REDESIGN_PHASE1.md` and the `ux-premium-modular-v1` branch), and should land only after the engine extraction +
+new UI shell, not before.**
+
+**Problem.** Settings/preferences are currently scattered with no single home: the Home **Options sheet** (`Tune` icon
+→ Guide / Diagnostics / Vehicle & fuel / Auto-record + an inline auto-record toggle), plus separate Vehicle, Auto-record,
+Diagnostics, Guide screens, plus 8+ independent pref stores (`UiPrefs` — satellite map mode, "your trip" icon, event
+threshold; `AutoRecordPrefs`; `GnssLoggingPrefs`; `settings/VehiclePrefs`; `cloud/CloudPrefs`; `cloud/PlacesPrefs`;
+plus state in `GeoNamer`/`TripViewModel`). A user has no clear place to understand or customize app behavior.
+
+**Direction.** As the app becomes a premium/local-first driving-intelligence product, the redesign should add a proper
+top-level **Settings** area (the "More/Settings" tab in the UX build spec). Proposed sections:
+1. **Recording** — manual vs auto-record; foreground-only vs background hands-free; wireless-charging requirement;
+   Bluetooth/car pairing; haptics; battery/data retention.
+2. **Vehicle & Fuel** — vehicle profile; fuel price; auto-update gas price; calibration. *(backed by `settings/VehiclePrefs`)*
+3. **Maps & Display** — default map mode (satellite); "your trip" icon; event marker/filter prefs; units (if added). *(`UiPrefs`)*
+4. **Insights** — stress trend smoothing; event sensitivity / g-force threshold; show/hide **beta** metrics; Places
+   naming toggle (only if billing/API enabled).
+5. **Privacy & Data** — exported-file cleanup; raw GNSS logging; delete all data; data retention; AI-export disclosure;
+   cloud/Sheets sync controls. *(`GnssLoggingPrefs`, export retention, `CloudPrefs`)*
+6. **Premium / Account (later)** — subscription status; enabled premium features; cloud backup; billing/account
+   controls. *(driven by the `Entitlements` seam in `:core-engine`; wires up when Play Billing lands)*
+
+**Notes / boundaries.**
+- The current Home **Options sheet stays as the legacy-app mechanism** — do not rip it out. The redesigned premium app
+  graduates to the proper Settings screen/system; legacy `ui/` remains the working oracle during extraction.
+- Natural backend consolidation point: the `com.cartrip.analyzer.settings` package (created in Phase 1A) can grow into
+  a coherent settings layer that the scattered `*Prefs` migrate behind, with a Settings UI on top.
+- Sequencing: depends on the new UI shell; the beta-metric toggles (4) also depend on the analytics-validation track
+  (so users can hide not-yet-trustworthy scores). Premium/Account (6) depends on the Entitlements→Play Billing swap.
+- Keep it honest and local-first: privacy/data controls (5) are a launch-credibility headline, pairs with CO encryption.
+
 ## Cross-cutting principle (owner): always look for novel, innovative ways to present and add value/analysis.
 Examples to fold in opportunistically: AI coaching from the CN export; stress/drawdown trends over time;
 "your worst-traffic times/routes"; per-destination analytics once POI naming (CM) lands.

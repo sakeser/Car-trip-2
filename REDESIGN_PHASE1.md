@@ -92,6 +92,14 @@ $env:JAVA_HOME='C:\Users\sinan\AppData\Local\cartrip-build-tools\jdk17\jdk-17.0.
 ```
 Then confirm: build/test green; no `*/build` written into the OneDrive tree; no new `engine→ui` imports.
 
+## Related redesign requirement (later phase — not Phase 1)
+A proper top-level **Settings** area is now a documented redesign requirement (owner-requested 2026-06-29):
+consolidate today's scattered options (Home Options sheet + the 8+ `*Prefs` stores) into a Settings system with
+sections Recording / Vehicle & Fuel / Maps & Display / Insights / Privacy & Data / Premium-Account. Full spec in
+`ROADMAP_NEW.md` → "Settings architecture". Relevant here because the `com.cartrip.analyzer.settings` package (Phase 1A)
+is its natural backend home, and the Premium/Account section is driven by the `:core-engine` Entitlements seam. Lands
+after the engine extraction + new UI shell — **do not implement during Phase 1.**
+
 ## ⚠️ Reminders
 - **Full Phase 1B extraction has NOT started.** The package cluster has not moved.
 - **Do NOT rename packages** (`com.cartrip.analyzer.*` stays).
