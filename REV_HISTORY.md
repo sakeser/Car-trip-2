@@ -4,6 +4,15 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CP cont. (2026-06-28, test hardening — no version bump, still build 142) — export value-mapping tests
+
+Test-only (no runtime change → no version bump / reinstall). Hardens the export pipeline the owner relies on
+for Sheets + AI analysis: the prior `ExportDataTest` only guarded header/row **width**, not values.
+- `export/ExportDataTest` (+2 tests, 3 → 5): index the summary row by header **name** (robust to appended
+  columns) and pin key value mappings (TripId, Distance_km, Duration_min, DrawdownCount, GnssSampleCount,
+  UserTripName) plus the IsDrive override (drive / walk / auto). Catches a swapped or mis-placed metric that
+  the width guard would miss. **200 tests total, all green.**
+
 ## Rev CP cont. (2026-06-28, v3.31/build 142) — AI export: "when you drive" daypart section
 
 Adds the temporal dimension to the "Share for AI insights" markdown (pure; built + unit tests green; **not

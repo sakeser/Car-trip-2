@@ -5,7 +5,7 @@ section + v3.30 traffic & congestion; atop v3.29 shared bar-scale / bar-sizing a
 reset-to-automatic + visible OSM/ODbL attribution + doc/test sync, CR export retention, migration foundation,
 Places scaffold) · on review branch **`rev-cp-v3.28-polish`** (v3.28 → v3.31 stacked); **`main` is untouched
 at `efa82a8` = origin/main**, **NOT pushed** — awaits the owner's review + push authorization (to land it:
-`git checkout main && git merge --ff-only rev-cp-v3.28-polish`, then push) · **198 unit tests, all green** ·
+`git checkout main && git merge --ff-only rev-cp-v3.28-polish`, then push) · **200 unit tests, all green** ·
 S25 installed **3.28 (build 139)** this session; v3.29–v3.31 **not yet installed/eyeballed** (all changes
 build + unit-test clean; device check pending). Schema **v21**. **Newest arc (Rev BY–CN, 2026-06-28 — the "revision-plan"
 session):** executed a comprehensive batch plan against the §9 backlog. **Batch 1 (BY–CD):** you-vs-traffic
@@ -471,7 +471,7 @@ Falls back to `TripLabeler` (GTA-hardcoded landmarks/commute) when geocoding is 
 
 ---
 
-## 7. Test suite (198 tests)
+## 7. Test suite (200 tests)
 
 Run: `…\gradlew.bat --init-script '…\relocate-build.gradle' :app:testDebugUnitTest --no-daemon`.
 Results: `C:\Users\sinan\cartrip-build-out\app\test-results\testDebugUnitTest\*.xml`.
@@ -489,9 +489,9 @@ pure-JVM (no Robolectric/instrumented).
 
 Newer suites not in the list above: `DrawdownsTest` (6), `StressScoreTest` (8), `AiInsightsExportTest` (6),
 `EventHotspotsTest` (7), `HomeDetectorTest` (8), `MotionRearmDetectorTest` (10), `AutoStartTest` (8),
-`GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (3, header/row lockstep guard),
-`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7), `BarScaleTest` (8). Count is **198**
-(`grep -rc '@Test'` across `app/src/test`). The per-suite counts above are exact and sum to 198 (verified 2026-06-28).
+`GasPriceTest` (4), `SpeedingSummaryTest` (6), `ExportDataTest` (5, header/row lockstep + value mapping),
+`ExportRetentionTest` (4), `PlacesTest` (4), `FuelInsightsTest` (7), `BarScaleTest` (8). Count is **200**
+(`grep -rc '@Test'` across `app/src/test`). The per-suite counts above are exact and sum to 200 (verified 2026-06-28).
 
 Gaps: **no Compose/UI tests, no instrumented tests.** Room migrations: **schema export is now on** (v3.27 —
 `exportSchema=true` + `app/schemas/.../21.json`), so Room validates migrations at compile time and v21+ is a

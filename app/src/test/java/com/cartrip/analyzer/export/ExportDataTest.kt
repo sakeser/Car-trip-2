@@ -38,4 +38,30 @@ class ExportDataTest {
     @Test fun sampleHeaderWidthIsStable() {
         assertEquals(7, ExportData.SAMPLE_HEADER.size)
     }
+
+    private fun cell(name: String, row: List<String>): String {
+        val i = ExportData.SUMMARY_HEADER.indexOf(name)
+        require(i >= 0) { "no such export column: $name" }
+        return row[i]
+    }
+
+    @Test fun summaryRowMapsKeyColumnsByName() {
+        // Index by header NAME (robust to appended columns) and pin the value mapping, so a mis-placed or
+        // swapped metric is caught - the width guard alone wouldn't notice a wrong value in the right slot.
+        val row = ExportData.summaryRow(trip, analysis)
+        assertEquals(trip.id.toString(), cell("TripId", row))
+        assertEquals("5.000", cell("Distance_km", row))   // 5000 m -> km, 3 dp
+        assertEquals("10.00", cell("Duration_min", row))  // 600 s -> min, 2 dp
+        assertEquals("3", cell("DrawdownCount", row))
+        assertEquals("42", cell("GnssSampleCount", row))
+        assertEquals("North York -> Scarborough", cell("UserTripName", row))
+        assertEquals("drive", cell("IsDrive", row))
+    }
+
+    @Test fun isDriveColumnReflectsTheOverride() {
+        fun isDrive(t: TripEntity) = cell("IsDrive", ExportData.summaryRow(t, analysis))
+        assertEquals("drive", isDrive(trip.copy(userIsDrive = true)))
+        assertEquals("walk", isDrive(trip.copy(userIsDrive = false)))
+        assertEquals("auto", isDrive(trip.copy(userIsDrive = null)))
+    }
 }
