@@ -42,4 +42,21 @@ class AiInsightsExportTest {
         val md = AiInsightsExport.build(listOf(drive(40.0, 2400.0, 2 * day), walk), emptyMap(), v, emptyList(), 3 * day)
         assertTrue(md.contains("Drives: 1"))
     }
+
+    @Test fun includesTrafficSectionWhenEtaPresent() {
+        val day = 24L * 3600 * 1000
+        // actual 2400s vs live-traffic estimate 2000s -> 20% slower; vs free-flow 1600s -> 50% congestion.
+        val t = drive(40.0, 2400.0, day).copy(googleEtaTrafficS = 2000.0, googleEtaFreeFlowS = 1600.0)
+        val md = AiInsightsExport.build(listOf(t), emptyMap(), v, emptyList(), 2 * day)
+        assertTrue(md.contains("## Traffic"))
+        assertTrue(md.contains("20% slower than"))
+        assertTrue(md.contains("Congestion"))
+        assertTrue(md.contains("50%"))
+    }
+
+    @Test fun noTrafficSectionWithoutEta() {
+        val day = 24L * 3600 * 1000
+        val md = AiInsightsExport.build(listOf(drive(40.0, 2400.0, day)), emptyMap(), v, emptyList(), 2 * day)
+        assertTrue(!md.contains("## Traffic"))
+    }
 }

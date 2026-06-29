@@ -7,6 +7,7 @@ import com.cartrip.analyzer.data.TripEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -81,6 +82,28 @@ object AiInsightsExport {
                 "(on roads with known limits)")
         }
         sb.appendLine()
+
+        // Traffic: how the user's actual time compares to Google's live-traffic estimate, and how much
+        // slower than free-flow (no-traffic) their drives ran — the congestion they actually sat in.
+        val etaTrips = drives.filter { it.googleEtaTrafficS > 0.0 }
+        val freeTrips = drives.filter { it.googleEtaFreeFlowS > 0.0 }
+        if (etaTrips.isNotEmpty() || freeTrips.isNotEmpty()) {
+            sb.appendLine("## Traffic")
+            if (etaTrips.isNotEmpty()) {
+                val vs = etaTrips.map { (it.durationS - it.googleEtaTrafficS) / it.googleEtaTrafficS }
+                    .average() * 100.0
+                val word = if (vs <= 0.0) "faster than" else "slower than"
+                sb.appendLine("- You vs Google's live-traffic estimate: ${"%.0f".format(abs(vs))}% $word " +
+                    "the estimate across ${etaTrips.size} drives with ETA data")
+            }
+            if (freeTrips.isNotEmpty()) {
+                val cong = (freeTrips.map { it.durationS / it.googleEtaFreeFlowS - 1.0 }.average() * 100.0)
+                    .coerceAtLeast(0.0)
+                sb.appendLine("- Congestion vs free-flow (no traffic): drives ran ${"%.0f".format(cong)}% " +
+                    "longer than clear roads, across ${freeTrips.size} drives")
+            }
+            sb.appendLine()
+        }
 
         if (hotspots.isNotEmpty()) {
             sb.appendLine("## Recurring trouble spots")

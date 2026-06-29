@@ -4,6 +4,16 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CP cont. (2026-06-28, v3.30/build 141) — AI export: traffic & congestion section
+
+Enriches the "Share for AI insights" markdown (pure; built + unit tests green; **not pushed**). The summary
+covered safety/comfort/pace/stress/fuel/drawdowns but had **no traffic angle** — odd, since you-vs-traffic is
+a core feature and the ETA data is already stored per trip.
+- `ui/AiInsightsExport.kt` (+2 tests): a new **## Traffic** section — "you vs Google's live-traffic estimate"
+  (mean of actual vs `googleEtaTrafficS`, % faster/slower) and "congestion vs free-flow" (mean of
+  `durationS / googleEtaFreeFlowS − 1`, % longer than clear roads). Emitted only when ETA data exists; pure,
+  from stored aggregates (no schema change, no raw GPS leaves the device).
+
 ## Rev CP cont. (2026-06-28, v3.29/build 140) — shared bar-scale component (bar-sizing audit)
 
 Continues the CP "bar-sizing audit" with a **pure, shared** axis/scale helper so bars stop each picking
