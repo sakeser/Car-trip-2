@@ -68,6 +68,10 @@ ksp {
 }
 
 dependencies {
+    // Phase 0 (UX premium modular): engine module. Currently exposes only the Entitlements seam;
+    // grows to host the real engine API in Phase 1.
+    implementation(project(":core-engine"))
+
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
 

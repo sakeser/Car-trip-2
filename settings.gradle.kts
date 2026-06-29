@@ -21,3 +21,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "CarTripAnalyzer"
 include(":app")
+// Phase 0 (UX premium modular): empty engine module holding only the Entitlements seam for now.
+// Real engine extraction (analysis/data/record/cloud) happens in Phase 1.
+include(":core-engine")
