@@ -183,6 +183,10 @@ pulled DB after** — it's personal location history.
   user_rotation 1` (restore with `user_rotation 0; accelerometer_rotation 1`).
 - The `RecordingService` is `exported=false` — you **cannot** start a trip via `am`; tap the UI
   "Start trip" button. Delete any synthetic test trips afterward (Trip detail → ⋮ → Delete).
+- **Scrolling Insights past the trouble-spots map:** the embedded map has single-finger pan, so an
+  `input swipe` that *starts inside the map* is eaten by the map (the list won't scroll). Start the swipe
+  **above or below** the map region (e.g. on a trouble-spot card) to scroll the `LazyColumn`. The fuel /
+  daypart cards are below the map, so scroll from a card, not the map.
 
 ---
 
