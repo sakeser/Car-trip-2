@@ -186,6 +186,13 @@ The facade decision above is now in motion — first slices built, pushed, and v
   title + "distance · duration" subline + trailing chevron) and a detail built from an elevated card + divider. The
   middle dot is `0x00B7.toChar()` (ASCII source — Cp1252 trap). Behavior unchanged (`observeTrips` / `getTrip` / nav);
   `:ui-next` gained `material-icons-core`. Build green, boundary test still passes.
+- **`3c6afc2` — Drive Stress score on the row + detail (first row-enrichment):** `TripSummary` gained
+  `stressScore: Int?` / `stressBand: String?`, derived in the pure `toSummary()` mapper via the already-engine-side
+  `StressScore.from(entity)` (null for non-drives / too-short → chip hidden). A new `:ui-next` `StressChip` renders a
+  compact green→amber→red score pill whose **palette is owned by `:ui-next`** (mirrors `ui.StressColors` thresholds
+  25/45/65; imports nothing legacy), shown on each list row and as a "Drive stress" detail line. **No helper move was
+  needed** — `StressScore` was already public in `:core-engine`, so the engine-API boundary stayed clean (the guard
+  test still passes). Relocate build green (3-module unit tests + `:app:assembleDebug`, 0 failures), no OneDrive leak.
 
 **On-device render PASS (S25, 2026-06-30):** installed the branch APK; via Diagnostics → "Open :ui-next trip list",
 the new Material 3 list rendered the **real** trips from the existing DB — values match the database (e.g. trip 1189
@@ -200,10 +207,25 @@ dot renders correctly (no mojibake), and the restrained teal theme, the top app 
 with trailing chevron, and the elevated detail card all render as intended in both list and detail. Confirms the
 `:ui-next`-owned `CarTripNextTheme` (no legacy-host-theme inheritance) at runtime; functionality unchanged.
 
-**Next slices (per screen, no god facade):** enrich the row (labels/scores — first decide where the `ui/` helpers
-`TripLabeler`/`TripScores` should live), then more screens; add gateways (`RecordingController`, `SyncGateway`,
-`ExportGateway`, `SettingsStore`) only as a screen needs them. **M1** (engine self-describing manifest) before
-`:ui-next` hosts recording; **M3** (Room migration tests) before any schema change.
+**Drive Stress chip PASS (S25, 2026-06-30, `3c6afc2`):** owner-directed on-device check — all items pass. The chip
+renders **only for scorable drives**: the non-drive trip 1184 (1.3 km / 21:49) shows **no chip** while every
+neighbouring drive does (cross-checked against the pulled Room DB). Values match the documented DB-replay anchors
+(trip 1187 = 40, trip 1189 = **78**) and the bands are correct (23 "Calm", 35 "Moderate", 78 "High stress"). Tapping a
+row opens the detail with a matching "Drive stress" line (trip #1181 → **35 / Moderate**, same as its row). Chip
+shape/colour/contrast read correctly in **dark theme** (list + detail) as well as light, the middle-dot separator
+renders (no mojibake), and the **legacy screens still work** (main, Diagnostics, Past trips with map + Safe/Comf/Pace
++ labels). NB: a **pre-existing, unrelated** crash was found in the *legacy* trip list's custom scrollbar
+(`TripListScreen.kt:660` — `coerceIn(0f, trackH - thumbH)` throws on a transient zero-height draw frame); it is **not**
+in any `:ui-next` / stress-chip code and is tracked separately (fix deferred, owner-decided).
+
+**Next slices (per screen, no god facade):** the row now shows the Drive Stress score (`3c6afc2`). The placement
+question is settled by the `StressScore` precedent — **pure scoring/label logic → `:core-engine` `analysis`; colour →
+the UI module**. So the next enrichment is the **`TripScores` move** (safety/comfort/pace): relocate `TripScores.from`
+from `app/ui` into `:core-engine/analysis` mirroring `StressScore` (drop its Compose `Color`; move `TripScoresTest`),
+then surface it. `TripLabeler` is a later, heavier slice (needs the per-point list + carries a stale hardcoded home).
+Then more screens; add gateways (`RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`) only as a
+screen needs them. **M1** (engine self-describing manifest) before `:ui-next` hosts recording; **M3** (Room migration
+tests) before any schema change.
 
 ## Validation command (run after ANY edit)
 
