@@ -93,9 +93,11 @@ only if a real need appears. The five-package cluster moves as a unit.
 - [x] Phase 1 step 1: relocate `VehiclePrefs` (Phase 1A, `91e1c80`).
 - [x] Phase 1 step 3: move the packages into `:core-engine` (Phase 1B, `e41312e` code + `c43506a` tests).
 - [ ] Phase 1 step 4: add migration tests for schema v22. *(open — needs an emulator)*
-- [ ] Phase 1 step 5: define engine API facade. *(open)*
+- [~] Phase 1 step 5: engine-API facade — **plan decided** (small gateways, grow with `:ui-next`, `TripRepository`
+  first); implementation deferred. See `REDESIGN_PHASE1.md` → "Engine-API facade — decision".
 - [ ] Then Phase 2 (validation track) can begin in parallel with Phase 3 (UI shell).
 
 **Status (updated 2026-06-29): Phase 0 + 1A + 1B all complete and green on `ux-premium-modular-v1` (local, not
-pushed). Engine extracted to `:core-engine`; 223 tests / 0 failures. Outstanding: owner-assisted S25 on-device check
-of the moved recording/auto-record services + notifications. See `REDESIGN_PHASE1.md` for the full handoff.**
+pushed). Engine extracted to `:core-engine`; 223 tests / 0 failures; **on-device verification PASSED (S25)**. The
+engine-API facade plan is recorded (small gateways, grow with `:ui-next`); implementation deferred. See
+`REDESIGN_PHASE1.md` for the full handoff.**

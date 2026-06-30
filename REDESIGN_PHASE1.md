@@ -12,8 +12,9 @@
 
 ## Where we are
 
-- **Branch:** `ux-premium-modular-v1` — **local only, NOT pushed, NOT merged** to `main` (11 commits ahead).
-- **HEAD:** `c43506a`.
+- **Branch:** `ux-premium-modular-v1` — **local only, NOT pushed, NOT merged** to `main`.
+- **Last code commit:** `c43506a` (Phase 1B commit 2); everything since is docs-only. (Intentionally not pinning an
+  exact HEAD / commit count here — it churns with every doc edit; use `git log` for the live value.)
 - **Build state:** green. `:core-engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug` succeeds via the
   OneDrive relocate workaround; no build output leaks into the synced tree.
 - **Tests:** **223 total / 0 failures / 0 errors**, redistributed after the move: **`:app` 83** (13 `ui` suites),
@@ -111,8 +112,54 @@ Only remaining residue: a cosmetic KDoc link `[com.cartrip.analyzer.ui.VehicleSc
 
 1. **(Optional) `MigrationTestHelper` Room migration tests** in `:core-engine` while schema v22 is fresh (needs an
    emulator/instrumented test) — locks the data contract.
-2. **Define a thin engine-API facade** (a stable surface over what `TripViewModel` needs) so a future `:ui-next`
-   never reaches into engine internals. **Do not start the Material 3 UI redesign or Play Billing yet.**
+2. **Engine-API facade — plan decided, implementation deferred** (see the next section). Do **not** build it
+   wholesale now; grow it with `:ui-next`. **Do not start the Material 3 UI redesign or Play Billing yet.**
+
+## Engine-API facade — decision (advisory, owner-approved 2026-06-29)
+
+Grounded in a measured read of the current boundary: `:app` imports **~39 engine symbols across 24 files**;
+`TripEntity` is the lingua franca (12 files); **`TripViewModel` is the only DAO holder** (`AppDatabase.get(app)
+.tripDao()`, exposes `StateFlow<List<TripEntity>>`); recording is driven from `MainActivity` via `Intent(…,
+RecordingService::class).setAction(ACTION_START)` + the global `object RecordingState`; **`Entitlements` is not
+consumed by `:app` yet**.
+
+**Core principle — grow the facade *with* `:ui-next`, do not build it wholesale now.** A facade's seams can only be
+designed correctly when a real second consumer pulls on them; with no `:ui-next` yet, up-front scaffolding would
+ossify into the wrong shape. And while legacy `:app` still imports engine internals, the boundary **cannot be
+compiler-enforced** (`internal` is module-scoped and `:core-engine` is one module) — so the facade is a *forward
+contract for `:ui-next`, enforced by convention*; the internals can only be sealed (`internal`) once legacy `:app/ui`
+is retired.
+
+**Shape — small role-based gateways, NOT a god `EngineFacade`.** Provided by a thin container built once in the
+`Application`; add each gateway only when `:ui-next` needs it:
+- `TripRepository` — reactive trip reads (cold `Flow`s; the consumer does `.stateIn`) + a *curated* write surface
+  (rename / setUserIsDrive / delete / specific updates — **not** a raw `updateTrip(entity)`).
+- `RecordingController` — `start()` / `stop()` + `state: Flow<RecordingState.Live>` (wraps the Intent/Service/singleton).
+- `SyncGateway`, `ExportGateway`, `SettingsStore` — added as needed.
+- `Entitlements` — already exists (Phase 0 seam); the container is its natural provider. **Do not gate anything yet.**
+
+Lives in a new `com.cartrip.engine.api` package inside `:core-engine` (a separate `:engine-api` module is blocked for
+now: Room `@Entity` types can't easily live in an interface-only module).
+
+**Stays PUBLIC (do not hide):** `TripEntity` and the pure analysis value types + stateless functions (`StressScore`,
+`DriverLoad`, `FuelEstimator`, `GeoUtils`, `TripKind`, `DriveEvent`, `EventType`, `TrackPoint`, …). These *are* the
+contract; wrapping pure functions is pointless indirection. Keeping `TripEntity` public is a deliberate tradeoff — a
+later switch to a mapped UI model would be facade-breaking, so revisit only if the schema starts churning.
+
+**First things to HIDE later (in value order):** `AppDatabase` / `TripDao` (the #1 leak — arbitrary reads/writes) →
+recording-service mechanics (`RecordingService` Intents, `AutoRecordWatchService.start/stop`, the `RecordingState`
+singleton) → cloud-sync internals (`TripSync` / `CloudSync` / `RoutesClient` / `GoogleAuth`) → export/settings.
+
+**Do NOT abstract yet:** a parallel UI `Trip` model; the `ui/` presentation-domain helpers (`GeoNamer`,
+`HomeDetector`, `TripLabeler`, `DisplayEvents`, `TripBuckets`, `TripDataQuality`, `EventHotspots` — where they belong
+is a separate question); `Entitlements` wiring.
+
+**First real implementation step:** introduce **`TripRepository` only when the first `:ui-next` screen needs trip
+data** — as that screen's data source, one small green commit. Not before.
+
+**Future boundary test (the only thing that keeps the facade honest while visibility can't):** a JVM unit test that
+scans `:ui-next` sources and asserts they import only `com.cartrip.engine.api.*` + public value types — **never**
+`com.cartrip.analyzer.{data,cloud,record,export,settings}` internals. Add it alongside the first `:ui-next` code.
 
 ## Validation command (run after ANY edit)
 
