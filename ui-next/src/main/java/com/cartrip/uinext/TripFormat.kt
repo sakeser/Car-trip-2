@@ -5,9 +5,13 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Shared trip-summary formatters for the :ui-next screens (list + detail). ASCII-only output on purpose
- * (this Windows build mojibakes non-ASCII string literals in BOM-less .kt files).
+ * Shared trip-summary formatters for the :ui-next screens (list + detail). ASCII-only source on purpose
+ * (this Windows build mojibakes non-ASCII string literals in BOM-less .kt files); the middle-dot separator
+ * is built from a code point rather than pasted.
  */
+
+/** Middle dot (U+00B7) built from a code point so the source stays ASCII. */
+internal val MIDDOT: Char = 0x00B7.toChar()
 
 private val startFormat = SimpleDateFormat("EEE MMM d, h:mm a", Locale.getDefault())
 
