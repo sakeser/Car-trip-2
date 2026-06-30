@@ -62,6 +62,8 @@ android {
 dependencies {
     // The engine module: hosts analysis/data/cloud/record/export/settings (moved in Phase 1B).
     implementation(project(":core-engine"))
+    // The new premium UI module (Phase 1 walking skeleton), hosted behind a debug entry for now.
+    implementation(project(":ui-next"))
 
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)

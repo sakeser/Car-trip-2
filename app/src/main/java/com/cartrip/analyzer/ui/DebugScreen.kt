@@ -48,7 +48,7 @@ import com.cartrip.analyzer.record.RecordingState
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DebugScreen(onBack: () -> Unit) {
+fun DebugScreen(onBack: () -> Unit, onOpenUiNext: () -> Unit) {
     val ctx = LocalContext.current
     val live by RecordingState.state.collectAsStateWithLifecycle()
 
@@ -86,6 +86,9 @@ fun DebugScreen(onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            OutlinedButton(onClick = onOpenUiNext, modifier = Modifier.fillMaxWidth()) {
+                Text("Open :ui-next trip list (preview)")
+            }
             DebugCard("Capture (live)") {
                 if (!live.recording) {
                     KvRow("Status", "Not recording")
