@@ -88,12 +88,14 @@ only if a real need appears. The five-package cluster moves as a unit.
 
 ## 6. Exact next steps
 
-- [ ] Confirm Phase 0 (this report) is accepted.
-- [ ] Decide repackaging policy (keep vs. rename packages) — needed before step 3 above. *(Owner input.)*
-- [ ] Phase 1 step 1: relocate `VehiclePrefs`; rebuild green; small commit.
-- [ ] Phase 1 step 3: move the five packages into `:core-engine`; rebuild green; small commit.
-- [ ] Phase 1 step 4: add migration tests for schema v22.
-- [ ] Phase 1 step 5: define engine API facade.
+- [x] Confirm Phase 0 (this report) is accepted.
+- [x] Decide repackaging policy → **keep packages** `com.cartrip.analyzer.*` (no rename).
+- [x] Phase 1 step 1: relocate `VehiclePrefs` (Phase 1A, `91e1c80`).
+- [x] Phase 1 step 3: move the packages into `:core-engine` (Phase 1B, `e41312e` code + `c43506a` tests).
+- [ ] Phase 1 step 4: add migration tests for schema v22. *(open — needs an emulator)*
+- [ ] Phase 1 step 5: define engine API facade. *(open)*
 - [ ] Then Phase 2 (validation track) can begin in parallel with Phase 3 (UI shell).
 
-**Status: Phase 0 complete and green. Awaiting go-ahead for Phase 1.**
+**Status (updated 2026-06-29): Phase 0 + 1A + 1B all complete and green on `ux-premium-modular-v1` (local, not
+pushed). Engine extracted to `:core-engine`; 223 tests / 0 failures. Outstanding: owner-assisted S25 on-device check
+of the moved recording/auto-record services + notifications. See `REDESIGN_PHASE1.md` for the full handoff.**
