@@ -1,6 +1,7 @@
 package com.cartrip.engine.api
 
 import android.content.Context
+import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.data.AppDatabase
 import com.cartrip.analyzer.data.TripDao
 import com.cartrip.analyzer.data.TripEntity
@@ -32,17 +33,22 @@ interface TripRepository {
 }
 
 /**
- * Pure mapping from the persistence entity to the public summary. Kept as a separate `internal` function so it
- * is directly unit-testable without standing up a fake of the many-method Room [TripDao].
+ * Pure mapping from the persistence entity to the public summary (incl. deriving the Drive Stress score via the
+ * pure `analysis.StressScore`, which reads only the entity's stored metrics). Kept as a separate `internal`
+ * function so it is directly unit-testable without standing up a fake of the many-method Room [TripDao].
  */
-internal fun TripEntity.toSummary(): TripSummary =
-    TripSummary(
+internal fun TripEntity.toSummary(): TripSummary {
+    val stress = StressScore.from(this)
+    return TripSummary(
         id = id,
         startEpochMs = startTime,
         endEpochMs = endTime,
         distanceMeters = distanceM,
         durationSeconds = durationS,
+        stressScore = stress?.score,
+        stressBand = stress?.band,
     )
+}
 
 /** DAO-backed [TripRepository]; a thin adapter (map the entity stream/lookup to summaries). */
 internal class DefaultTripRepository(private val dao: TripDao) : TripRepository {

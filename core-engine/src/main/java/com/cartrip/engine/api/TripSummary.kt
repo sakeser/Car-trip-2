@@ -16,4 +16,11 @@ data class TripSummary(
     val endEpochMs: Long,
     val distanceMeters: Double,
     val durationSeconds: Double,
+    /**
+     * Drive Stress score, 0..100 (higher = more demanding), or `null` when the trip isn't scorable
+     * (a non-drive, or too short). Derived from the trip's stored metrics by `analysis.StressScore`.
+     */
+    val stressScore: Int? = null,
+    /** Human band for [stressScore] ("Calm" / "Moderate" / "Busy" / "High stress"), or `null` when unscored. */
+    val stressBand: String? = null,
 )
