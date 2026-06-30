@@ -180,6 +180,12 @@ The facade decision above is now in motion — first slices built, pushed, and v
   (`TripsNextRoot`, list → `detail/{id}`) → `TripDetailNextScreen`, which loads the tapped trip via
   `TripRepository.getTrip(id)` and shows the basic `TripSummary` fields. The host (`:app`) just calls
   `TripsNextRoot(onExit)` and never sees the inner screens; the boundary test auto-covers the new files (still passes).
+- **`901c66c` — first-pass premium theme / shell:** `:ui-next` no longer inherits the legacy host theme — it has its
+  own `CarTripNextTheme` (a restrained teal-on-deep-neutral palette, dark + light via `isSystemInDarkTheme`), a shared
+  `NextScaffold` (`CenterAlignedTopAppBar` + back arrow), a 3-state list (loading spinner / empty / premium rows: date
+  title + "distance · duration" subline + trailing chevron) and a detail built from an elevated card + divider. The
+  middle dot is `0x00B7.toChar()` (ASCII source — Cp1252 trap). Behavior unchanged (`observeTrips` / `getTrip` / nav);
+  `:ui-next` gained `material-icons-core`. Build green, boundary test still passes.
 
 **On-device render PASS (S25, 2026-06-30):** installed the branch APK; via Diagnostics → "Open :ui-next trip list",
 the new Material 3 list rendered the **real** trips from the existing DB — values match the database (e.g. trip 1189
@@ -188,6 +194,11 @@ walking-skeleton loop (new module → engine API → Room → real data on a scr
 (`cd1f7a6`) was also tap-through-verified on the S25:** tapping a row opened the detail with values matching the DB
 (trip 1195 → #1195 / Mon Jun 29 6:44 p.m. / 3.4 km / 6:32), and Back returned to the list — confirming the
 `getTrip(id)` lookup and the internal nav (and its back-stack) at runtime.
+
+**Premium theme/shell visual PASS (S25, 2026-06-30):** the `901c66c` slice was visual-checked on device — the middle
+dot renders correctly (no mojibake), and the restrained teal theme, the top app bar + back arrow, the premium rows
+with trailing chevron, and the elevated detail card all render as intended in both list and detail. Confirms the
+`:ui-next`-owned `CarTripNextTheme` (no legacy-host-theme inheritance) at runtime; functionality unchanged.
 
 **Next slices (per screen, no god facade):** enrich the row (labels/scores — first decide where the `ui/` helpers
 `TripLabeler`/`TripScores` should live), then more screens; add gateways (`RecordingController`, `SyncGateway`,
