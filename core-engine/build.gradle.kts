@@ -50,4 +50,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     testImplementation("junit:junit:4.13.2")
+    // The cloud JSON-parser tests exercise org.json via the cloud code; Android stubs it (returns null)
+    // in JVM unit tests, so a real impl is needed at test runtime (moved with the tests in Phase 1B commit 2).
+    testImplementation("org.json:json:20231013")
 }
