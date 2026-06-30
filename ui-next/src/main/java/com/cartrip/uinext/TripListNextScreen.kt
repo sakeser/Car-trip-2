@@ -1,5 +1,6 @@
 package com.cartrip.uinext
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,22 +28,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
- * First :ui-next screen - a deliberately tiny trip list rendered from the engine's [TripRepository]
- * ([TripSummary]). Walking skeleton: real module, real data, minimal row (date/time, distance, duration).
- * No labels / scores / maps / nav / recording / polish - those are later slices. Reaches the engine ONLY
- * through com.cartrip.engine.api.* (guarded by EngineBoundaryTest). Renders inside the host's MaterialTheme.
- *
- * Strings are kept ASCII on purpose: this Windows build mojibakes non-ASCII string literals in BOM-less
- * .kt files. If a real glyph is ever needed, build it from a code point, do not paste it in.
+ * :ui-next trip list - a deliberately tiny list rendered from the engine's [TripRepository] ([TripSummary]).
+ * Rows are tappable -> trip detail (see [TripsNextRoot]). Walking skeleton: real module, real data, minimal
+ * row (date/time, distance, duration); no labels / scores / maps / charts / recording / polish. Reaches the
+ * engine ONLY through com.cartrip.engine.api.* (guarded by EngineBoundaryTest); renders in the host theme.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TripListNextScreen(onBack: () -> Unit) {
+fun TripListNextScreen(onOpenTrip: (Long) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val repo = remember { TripRepository.create(context) }
     val trips by repo.observeTrips().collectAsState(initial = emptyList())
@@ -68,15 +63,17 @@ fun TripListNextScreen(onBack: () -> Unit) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(trips, key = { it.id }) { TripRow(it) }
+                items(trips, key = { it.id }) { trip ->
+                    TripRow(trip, onClick = { onOpenTrip(trip.id) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TripRow(trip: TripSummary) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+private fun TripRow(trip: TripSummary, onClick: () -> Unit) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -93,16 +90,4 @@ private fun TripRow(trip: TripSummary) {
             )
         }
     }
-}
-
-private val startFormat = SimpleDateFormat("EEE MMM d, h:mm a", Locale.getDefault())
-
-private fun formatStart(epochMs: Long): String =
-    if (epochMs <= 0L) "-" else startFormat.format(Date(epochMs))
-
-private fun formatKm(meters: Double): String = "%.1f km".format(meters / 1000.0)
-
-private fun formatDuration(seconds: Double): String {
-    val total = seconds.toLong().coerceAtLeast(0L)
-    return "%d:%02d".format(total / 60, total % 60)
 }

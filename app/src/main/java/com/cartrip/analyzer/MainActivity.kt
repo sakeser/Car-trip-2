@@ -36,7 +36,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.cartrip.analyzer.record.RecordingService
 import com.cartrip.analyzer.record.RecordingState
-import com.cartrip.uinext.TripListNextScreen
+import com.cartrip.uinext.TripsNextRoot
 import com.cartrip.analyzer.ui.CarTripTheme
 import com.cartrip.analyzer.ui.DebugScreen
 import com.cartrip.analyzer.ui.GuideScreen
@@ -194,7 +194,7 @@ private fun AppRoot() {
             )
         }
         composable("uinext") {
-            TripListNextScreen(onBack = { nav.popBackStack() })
+            TripsNextRoot(onExit = { nav.popBackStack() })
         }
         composable("insights") {
             InsightsScreen(
