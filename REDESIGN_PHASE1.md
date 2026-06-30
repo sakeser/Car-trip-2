@@ -176,11 +176,18 @@ The facade decision above is now in motion — first slices built, pushed, and v
   duration) from `TripRepository`. Hosted from legacy `:app` behind a **debug entry** (a `DebugScreen` button → new
   `"uinext"` nav route); legacy screens untouched. `EngineBoundaryTest` (source-scan) guards the import boundary.
   Built via the now-**3-module** relocate toolchain; `ui-next/build` does not leak into the OneDrive tree.
+- **`cd1f7a6` — tap-to-detail slice:** rows are clickable → an internal `navigation-compose` `NavHost`
+  (`TripsNextRoot`, list → `detail/{id}`) → `TripDetailNextScreen`, which loads the tapped trip via
+  `TripRepository.getTrip(id)` and shows the basic `TripSummary` fields. The host (`:app`) just calls
+  `TripsNextRoot(onExit)` and never sees the inner screens; the boundary test auto-covers the new files (still passes).
 
 **On-device render PASS (S25, 2026-06-30):** installed the branch APK; via Diagnostics → "Open :ui-next trip list",
 the new Material 3 list rendered the **real** trips from the existing DB — values match the database (e.g. trip 1189
 = 45.8 km / 44:23; 1190 = 7.7 km / 14:28), no crashes, and the **legacy screens still open normally** afterward. The
-walking-skeleton loop (new module → engine API → Room → real data on a screen) is closed.
+walking-skeleton loop (new module → engine API → Room → real data on a screen) is closed. **Tap-to-detail
+(`cd1f7a6`) was also tap-through-verified on the S25:** tapping a row opened the detail with values matching the DB
+(trip 1195 → #1195 / Mon Jun 29 6:44 p.m. / 3.4 km / 6:32), and Back returned to the list — confirming the
+`getTrip(id)` lookup and the internal nav (and its back-stack) at runtime.
 
 **Next slices (per screen, no god facade):** enrich the row (labels/scores — first decide where the `ui/` helpers
 `TripLabeler`/`TripScores` should live), then more screens; add gateways (`RecordingController`, `SyncGateway`,
