@@ -5,8 +5,8 @@
 >    tests now live in `:core-engine`. Build green, 223 tests / 0 failures. See "Phase 1B — DONE" below.
 > 2. **Do NOT rename packages.** They stay `com.cartrip.analyzer.*` inside `:core-engine` (deliberate — renaming
 >    on top of the module move was judged too risky; rename later, if ever).
-> 3. **One outstanding item before further work:** owner-assisted **S25 on-device verification** of recording /
->    auto-record / notification icons / notification tap-to-open (assemble + unit tests cannot prove it).
+> 3. **On-device verification PASSED** (2026-06-29, S25): the relocated `.record.*` services resolve and run at
+>    runtime; recording + both notification icons + tap-to-open all work. See "On-device verification" below.
 
 ---
 
@@ -19,6 +19,8 @@
 - **Tests:** **223 total / 0 failures / 0 errors**, redistributed after the move: **`:app` 83** (13 `ui` suites),
   **`:core-engine` 140** (22 engine suites + the `Entitlements` test).
 - **App unchanged behaviorally:** v3.36 / build 147, Room schema v22.
+- **On-device (S25, 2026-06-29):** PASSED — moved `RecordingService` runs as an FGS, both notification icons render,
+  notification tap-to-open works, saved trips render. See "On-device verification" below.
 
 ## What Phase 0 did
 
@@ -82,21 +84,28 @@ Two commits, each green via the relocate build:
 5. **`org.json` at test runtime** — the `cloud` JSON-parser tests exercise `org.json` via cloud code; Android stubs it
    to null in JVM unit tests, so `:core-engine` needs `testImplementation("org.json:json:20231013")`.
 
-## ⚠️ Outstanding before any further phase work
+## On-device verification — PASSED ✅ (S25, 2026-06-29)
 
-- **Owner-assisted S25 on-device verification (NOT done).** Assemble + unit tests cannot prove runtime behavior of
-  the moved code. The `.record.*` services (`RecordingService`, `AutoRecordWatchService`, `BootReceiver`,
-  `CarPresenceService`) now live in the **library**, while the **app** manifest still declares them by kept package
-  name. Install the branch APK (owner present — it overwrites the live app on the data-bearing phone) and confirm:
-  - **recording works** end-to-end: tap "Start trip" → the recording FGS notification appears with the **record-dot
-    icon**; stop → trip saved.
-  - **auto-record works**: trigger the charger/BT path → the "Auto-record on" notification shows its icon.
-  - **notification tap-to-open**: tapping each notification opens the app's main screen (covers the `d0ee440`
-    content-intent change from `MainActivity::class.java` → launch intent).
-  - the three launcher-icon notices still render (icon decouple).
-  `RecordingService` is `exported=false`, so a trip can only be started by tapping the UI — hence owner-assisted.
-- Cosmetic: a KDoc link `[com.cartrip.analyzer.ui.VehicleScreen]` in `settings/VehiclePrefs.kt` is now a cross-module
-  doc ref; kotlinc ignores KDoc (no build impact) — tidy when convenient.
+Installed the branch APK (`adb install -r`, data preserved; app stays v3.36/147) on the owner's S25 and ran an
+owner-assisted pass. The runtime behavior that assemble + unit tests cannot prove is confirmed:
+
+- ✅ **Relocated `.record.*` services resolve at runtime.** `dumpsys` showed `ServiceRecord{…
+  com.cartrip.analyzer/.record.RecordingService}` `isForeground=true` (type LOCATION) — the app manifest's `.record.*`
+  declaration correctly binds to the class now in `:core-engine`. Gyro/gravity sensors registered, GPS fixes
+  accumulating.
+- ✅ **Both notification-icon decouples render.** Recording notice small icon = `engine_ic_stat_record`
+  (`:core-engine` drawable, merged as `0x7f060013`); the "Trip not recorded" notice small icon = `applicationInfo.icon`
+  (launcher `mipmap 0x7f0a0000`). Both resolve and draw in the shade/status bar.
+- ✅ **Notification tap-to-open works** (the `d0ee440` `getLaunchIntentForPackage` change): tapping the recording
+  notification foregrounded `com.cartrip.analyzer/.MainActivity`.
+- ✅ **Full `RecordingService` lifecycle** start → record → stop → finalize ran; finalize correctly rejected a
+  stationary 0 m trip as too-short. **Saved trips render** normally in Past trips (moved `data`/`analysis` read path).
+- ⚪ **`AutoRecordWatchService` (auto-record watcher) not exercised** this pass (optional, owner ended early) — but it
+  reuses the exact engine-icon + `getLaunchIntentForPackage` patterns already verified in `RecordingService`, and the
+  `d0ee440` edit to its single call site is identical. Low risk; verify opportunistically on a future charger/BT cycle.
+
+Only remaining residue: a cosmetic KDoc link `[com.cartrip.analyzer.ui.VehicleScreen]` in `settings/VehiclePrefs.kt`
+(cross-module doc ref; kotlinc ignores KDoc — no build impact). Tidy when convenient.
 
 ## Recommended next steps (after the on-device check)
 
