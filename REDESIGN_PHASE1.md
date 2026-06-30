@@ -7,6 +7,8 @@
 >    on top of the module move was judged too risky; rename later, if ever).
 > 3. **On-device verification PASSED** (2026-06-29, S25): the relocated `.record.*` services resolve and run at
 >    runtime; recording + both notification icons + tap-to-open all work. See "On-device verification" below.
+> 4. **Phase 1 has begun:** the engine-API `TripRepository` seam + a `:ui-next` Compose module (first trip-list
+>    screen) are built, pushed, and **render-verified on the S25**. See ":ui-next walking skeleton" below.
 
 ---
 
@@ -161,13 +163,37 @@ data** — as that screen's data source, one small green commit. Not before.
 scans `:ui-next` sources and asserts they import only `com.cartrip.engine.api.*` + public value types — **never**
 `com.cartrip.analyzer.{data,cloud,record,export,settings}` internals. Add it alongside the first `:ui-next` code.
 
+## :ui-next walking skeleton — DONE + render-verified (S25, 2026-06-30)
+
+The facade decision above is now in motion — first slices built, pushed, and verified end-to-end:
+
+- **`9b5489e` — engine-API seam:** `com.cartrip.engine.api.TripRepository` (read-only: `observeTrips():
+  Flow<List<TripSummary>>`, `getTrip(id)`), a **`TripSummary` DTO** (owner-chosen over exposing Room's `TripEntity`,
+  so `:ui-next` never imports persistence types), an `internal` DAO-backed impl + an `internal` pure mapper (the
+  mapper is unit-tested directly rather than faking the many-method Room `TripDao`).
+- **`1d0604c` — `:ui-next` module (walking skeleton):** a new Compose / Material 3 **library** (`com.cartrip.uinext`)
+  depending on `:core-engine` only. `TripListNextScreen` renders real `TripSummary` rows (date/time, distance,
+  duration) from `TripRepository`. Hosted from legacy `:app` behind a **debug entry** (a `DebugScreen` button → new
+  `"uinext"` nav route); legacy screens untouched. `EngineBoundaryTest` (source-scan) guards the import boundary.
+  Built via the now-**3-module** relocate toolchain; `ui-next/build` does not leak into the OneDrive tree.
+
+**On-device render PASS (S25, 2026-06-30):** installed the branch APK; via Diagnostics → "Open :ui-next trip list",
+the new Material 3 list rendered the **real** trips from the existing DB — values match the database (e.g. trip 1189
+= 45.8 km / 44:23; 1190 = 7.7 km / 14:28), no crashes, and the **legacy screens still open normally** afterward. The
+walking-skeleton loop (new module → engine API → Room → real data on a screen) is closed.
+
+**Next slices (per screen, no god facade):** enrich the row (labels/scores — first decide where the `ui/` helpers
+`TripLabeler`/`TripScores` should live), then more screens; add gateways (`RecordingController`, `SyncGateway`,
+`ExportGateway`, `SettingsStore`) only as a screen needs them. **M1** (engine self-describing manifest) before
+`:ui-next` hosts recording; **M3** (Room migration tests) before any schema change.
+
 ## Validation command (run after ANY edit)
 
 ```powershell
 $env:ANDROID_HOME='C:\Users\sinan\AppData\Local\cartrip-build-tools\android-sdk'
 $env:JAVA_HOME='C:\Users\sinan\AppData\Local\cartrip-build-tools\jdk17\jdk-17.0.19+10'
 .\gradlew.bat --init-script 'C:\Users\sinan\cartrip-build-tools\relocate-build.gradle' `
-  :core-engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug --no-daemon
+  :ui-next:testDebugUnitTest :core-engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug --no-daemon
 ```
 Then confirm: `BUILD SUCCESSFUL` (the build pipe can mask failures — grep for it); 223 tests / 0 failures in
 `cartrip-build-out/{app,core-engine}/test-results/`; no fresh `*/build` in the OneDrive tree. *(cmd-redirected logs
