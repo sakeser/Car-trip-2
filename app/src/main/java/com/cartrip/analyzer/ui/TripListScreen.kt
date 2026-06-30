@@ -657,6 +657,9 @@ private fun Modifier.drawVerticalScrollbar(state: LazyListState, color: Color): 
         val thumbFrac = visible.size.toFloat() / total
         val offFrac = visible.first().index.toFloat() / total
         val thumbH = (trackH * thumbFrac).coerceAtLeast(24.dp.toPx())
+        // A transient zero-height (or sub-thumb-height) draw frame makes trackH - thumbH negative, which
+        // crashes coerceIn with an empty range. Nothing useful to draw then, so bail.
+        if (trackH <= thumbH) return@drawWithContent
         val thumbY = (trackH * offFrac).coerceIn(0f, trackH - thumbH)
         val w = 3.dp.toPx()
         drawRoundRect(
