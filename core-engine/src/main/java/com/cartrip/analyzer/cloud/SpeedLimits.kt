@@ -155,7 +155,7 @@ object SpeedLimits {
      * crediting the higher recent limit while you decelerate; right after a *rise* it adopts the new higher
      * limit immediately (the window's max). So neither transition fabricates speeding.
      */
-    internal fun speedingSummary(
+    fun speedingSummary(
         times: List<Long>,
         speeds: List<Double>,
         limits: List<Double?>,

@@ -3,7 +3,6 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
 }
 
 val localProperties = Properties().apply {
@@ -60,16 +59,8 @@ android {
     }
 }
 
-// Export the Room schema as JSON so migrations are validated at compile time and future versions have a
-// captured baseline for MigrationTestHelper tests. (Retroactive 1->20 schemas were never captured — this
-// starts the record at the current version forward.)
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
-    // Phase 0 (UX premium modular): engine module. Currently exposes only the Entitlements seam;
-    // grows to host the real engine API in Phase 1.
+    // The engine module: hosts analysis/data/cloud/record/export/settings (moved in Phase 1B).
     implementation(project(":core-engine"))
 
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
@@ -88,18 +79,13 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-
     implementation("com.google.maps.android:maps-compose:4.4.2")
     implementation("com.google.android.gms:play-services-maps:20.0.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
-    // Google sign-in (for Sheets/Drive auth) + HTTP + Excel writing
+    // Google sign-in (for Sheets/Drive auth) — still used directly by app/ui.
+    // (okhttp + fastexcel moved to :core-engine with cloud/export in Phase 1B.)
     implementation("com.google.android.gms:play-services-auth:21.2.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.dhatim:fastexcel:0.18.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
