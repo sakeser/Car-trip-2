@@ -20,8 +20,8 @@ android {
         applicationId = "com.cartrip.analyzer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 149
-        versionName = "3.38"
+        versionCode = 150
+        versionName = "3.39"
         vectorDrawables { useSupportLibrary = true }
         manifestPlaceholders["MAPS_API_KEY"] =
             localProperties.getProperty("MAPS_API_KEY")

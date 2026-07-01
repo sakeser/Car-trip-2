@@ -46,6 +46,11 @@ threshold change — pure roll-up of existing aggregates. **On-device verify sti
   mojibake); Insights shows the Driving Intelligence summary card (Smoothness 88 / Demand 42 / Efficiency 80,
   "25 trips … mostly easy & smooth") atop the pillar section headers. **Polish fix (v3.38):** the pillar-read
   label column wrapped "Smoothness:" -> widened to 104dp + softWrap=false, verified fixed on-device.
+- **`:ui-next` list row (v3.39/build 150):** the premium trip row now shows the **Drive Quality verdict**
+  (`TripSummary.driveQuality`, which already encodes style x demand) as a third line + the **Smoothness**
+  number as a green=good `ScoreChip` (swapped in for the old stress chip — demand is folded into the verdict).
+  **On-device PASS (S25):** rows read e.g. "Easy, smooth drive / 92" and the 45.8 km commute "Smooth for a
+  demanding drive / 81" (the SMOOTH_UNDER_PRESSURE quadrant). `:ui-next:testDebugUnitTest` (incl. EngineBoundaryTest) green.
 
 ## Rev CW (2026-06-29, v3.35/build 146) — Driver Load / "Drive readiness" model (marquee R&D, v1)
 

@@ -91,9 +91,18 @@ private fun TripRow(trip: TripSummary, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Driving Intelligence verdict (the conditional Drive Quality headline). It already encodes
+                // both style and demand, so the row shows it here and the Smoothness (style) number as the chip.
+                trip.driveQuality?.let { verdict ->
+                    Text(
+                        verdict,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            trip.stressScore?.let { score ->
-                StressChip(score)
+            trip.smoothnessScore?.let { score ->
+                ScoreChip(score)
                 Spacer(Modifier.width(12.dp))
             }
             Icon(
