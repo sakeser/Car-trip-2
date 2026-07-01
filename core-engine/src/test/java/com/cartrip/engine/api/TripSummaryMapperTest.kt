@@ -104,33 +104,36 @@ class TripSummaryMapperTest {
         assertEquals(43.77, route[1].lat, 0.0)
     }
 
-    @Test fun toTrack_offsets_from_start_sorts_and_nulls_unknown_limit() {
-        val start = 1_700_000_000_000L
+    @Test fun toTrack_offsets_from_first_sample_sorts_and_nulls_unknown_limit() {
+        // Sample t is a MONOTONIC RECORDING CLOCK (e.g. elapsedRealtime), NOT epoch ms. Using a big non-epoch
+        // base guards the real bug we hit on-device: offsetting from the trip's epoch startTime crushed every
+        // point to x=0. Origin must come from the samples themselves (the earliest t).
+        val base = 262_520_731L
         fun pt(tMs: Long, speed: Double, limit: Double) =
             AnalysisPointEntity(tripId = 1L, t = tMs, lat = 0.0, lon = 0.0, speedKmh = speed, longAccel = 0.0, latAccel = 0.0, speedLimitKmh = limit)
         val track = listOf(
-            pt(start + 2_000L, 50.0, 60.0),   // 2 s in
-            pt(start, 0.0, 0.0),              // t0, limit unknown -> null
-            pt(start - 500L, 3.0, 40.0),      // just before start -> clamped to 0 s
-        ).toTrack(start)
+            pt(base + 2_000L, 50.0, 60.0),   // 2 s in
+            pt(base, 0.0, 0.0),              // origin, limit unknown -> null
+            pt(base + 500L, 3.0, 40.0),      // 0.5 s -> truncates to 0 s
+        ).toTrack()
 
-        // Sorted by time: the pre-start sample first (offset clamped to 0), then t0, then +2 s.
+        // Sorted by time: origin (0 s), +0.5 s (->0), +2 s. Offsets are relative to the earliest sample.
         assertEquals(listOf(0, 0, 2), track.map { it.offsetSeconds })
-        assertEquals(3.0, track[0].speedKmh, 0.0)
-        assertEquals(40.0, track[0].speedLimitKmh!!, 0.0)
-        assertNull("a <=0 limit is unknown, not 0 km/h", track[1].speedLimitKmh)
+        assertNull("a <=0 limit is unknown, not 0 km/h", track[0].speedLimitKmh)
+        assertEquals(3.0, track[1].speedKmh, 0.0)
+        assertEquals(40.0, track[1].speedLimitKmh!!, 0.0)
         assertEquals(60.0, track[2].speedLimitKmh!!, 0.0)
     }
 
     @Test fun toTrack_drops_non_finite_speed_and_nulls_non_finite_limit() {
-        val start = 1_700_000_000_000L
+        val base = 262_520_731L
         fun pt(tMs: Long, speed: Double, limit: Double) =
             AnalysisPointEntity(tripId = 1L, t = tMs, lat = 0.0, lon = 0.0, speedKmh = speed, longAccel = 0.0, latAccel = 0.0, speedLimitKmh = limit)
         val track = listOf(
-            pt(start, 40.0, Double.NaN),            // limit NaN -> null, point kept
-            pt(start + 1_000L, Double.NaN, 50.0),   // speed NaN -> point dropped
-            pt(start + 2_000L, 55.0, Double.POSITIVE_INFINITY), // limit inf -> null, point kept
-        ).toTrack(start)
+            pt(base, 40.0, Double.NaN),            // limit NaN -> null, point kept
+            pt(base + 1_000L, Double.NaN, 50.0),   // speed NaN -> point dropped
+            pt(base + 2_000L, 55.0, Double.POSITIVE_INFINITY), // limit inf -> null, point kept
+        ).toTrack()
 
         assertEquals("the NaN-speed sample is dropped", 2, track.size)
         assertEquals(40.0, track[0].speedKmh, 0.0)

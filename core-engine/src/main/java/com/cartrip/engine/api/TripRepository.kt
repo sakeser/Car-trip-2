@@ -95,32 +95,39 @@ internal fun List<AnalysisPointEntity>.toRoute(): List<RoutePoint> =
     }
 
 /**
- * Pure: map persisted analysis points to the speed-timeline [TripTrackPoint]s. Offsets are seconds since
- * [startEpochMs] (clamped at 0 so a sample logged just before the recorded start still lands on the axis);
- * points are sorted by time so the line is monotonic in x. Unknown limits (`<= 0`) surface as `null` rather
- * than 0 km/h. Unlike [toRoute] this keeps every sample — a speed line needs no valid coordinate.
+ * Pure: map persisted analysis points to the speed-timeline [TripTrackPoint]s. Offsets are seconds since the
+ * track's own first sample — NB the point `t` is a monotonic recording clock (e.g. elapsedRealtime), NOT epoch
+ * ms, so the origin must come from the samples themselves, never from the trip's epoch `startTime`. Points are
+ * sorted by time so the line is monotonic in x, and the origin is the earliest `t`. Unknown limits (`<= 0`)
+ * surface as `null` rather than 0 km/h. Unlike [toRoute] this keeps every sample — a speed line needs no
+ * valid coordinate.
  */
-internal fun List<AnalysisPointEntity>.toTrack(startEpochMs: Long): List<TripTrackPoint> =
-    sortedBy { it.t }.mapNotNull { p ->
+internal fun List<AnalysisPointEntity>.toTrack(): List<TripTrackPoint> {
+    val sorted = sortedBy { it.t }
+    val origin = sorted.firstOrNull()?.t ?: return emptyList()
+    return sorted.mapNotNull { p ->
         // Defend the boundary: drop any non-finite speed (a corrupt sample would poison a chart's scaling with
         // NaN/Infinity), and treat a non-finite or <= 0 limit as "unknown" (null) rather than a real 0 km/h.
         if (!p.speedKmh.isFinite()) return@mapNotNull null
         TripTrackPoint(
-            offsetSeconds = (((p.t - startEpochMs) / 1000L).toInt()).coerceAtLeast(0),
+            offsetSeconds = (((p.t - origin) / 1000L).toInt()).coerceAtLeast(0),
             speedKmh = p.speedKmh,
             speedLimitKmh = if (p.speedLimitKmh.isFinite() && p.speedLimitKmh > 0.0) p.speedLimitKmh else null,
         )
     }
+}
 
 /**
- * Pure: map persisted drive events to timeline [TripEvent]s (offsets seconds since [startEpochMs], same x-axis
- * as [toTrack]), sorted by time. The raw detector `type` (an `analysis.EventType.name`) is folded into the
- * UI-stable [TripEventKind]; an unrecognized type maps to [TripEventKind.OTHER] rather than being dropped.
+ * Pure: map persisted drive events to timeline [TripEvent]s, sorted by time. Offsets are seconds since
+ * [originMs] — pass the SAME origin as [toTrack] (the track's first-sample `t`) so events land on the same
+ * x-axis; events use the same monotonic recording clock as the analysis points. The raw detector `type` (an
+ * `analysis.EventType.name`) is folded into the UI-stable [TripEventKind]; an unrecognized type maps to
+ * [TripEventKind.OTHER] rather than being dropped.
  */
-internal fun List<DriveEventEntity>.toEvents(startEpochMs: Long): List<TripEvent> =
+internal fun List<DriveEventEntity>.toEvents(originMs: Long): List<TripEvent> =
     sortedBy { it.t }.map { e ->
         TripEvent(
-            offsetSeconds = (((e.t - startEpochMs) / 1000L).toInt()).coerceAtLeast(0),
+            offsetSeconds = (((e.t - originMs) / 1000L).toInt()).coerceAtLeast(0),
             kind = eventKindOf(e.type),
             magnitude = e.magnitude,
         )
@@ -147,13 +154,12 @@ internal class DefaultTripRepository(private val dao: TripDao) : TripRepository 
     override suspend fun getRoute(id: Long): List<RoutePoint> =
         dao.getAnalysisPoints(id).toRoute()
 
-    override suspend fun getTrack(id: Long): List<TripTrackPoint> {
-        val start = dao.getTrip(id)?.startTime ?: return emptyList()
-        return dao.getAnalysisPoints(id).toTrack(start)
-    }
+    override suspend fun getTrack(id: Long): List<TripTrackPoint> =
+        dao.getAnalysisPoints(id).toTrack()
 
     override suspend fun getEvents(id: Long): List<TripEvent> {
-        val start = dao.getTrip(id)?.startTime ?: return emptyList()
-        return dao.getDriveEvents(id).toEvents(start)
+        // Align events to the track's clock origin (the first analysis sample), not the trip's epoch startTime.
+        val origin = dao.getFirstAnalysisPointTime(id) ?: return emptyList()
+        return dao.getDriveEvents(id).toEvents(origin)
     }
 }

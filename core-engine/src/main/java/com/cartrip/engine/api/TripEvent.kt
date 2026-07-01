@@ -5,7 +5,7 @@ package com.cartrip.engine.api
  * timeline — an engine-API value type so UI consumers (e.g. the `:ui-next` Trip Line) can mark events without
  * importing persistence (`DriveEventEntity`) internals. Sourced via [TripRepository.getEvents].
  *
- * [offsetSeconds] is seconds since the trip's start (`TripEntity.startTime`, same x-axis as [TripTrackPoint]). [kind] is
+ * [offsetSeconds] is seconds since the trip's first analysis sample (same recording-clock origin/x-axis as [TripTrackPoint]). [kind] is
  * a UI-stable classification mapped from the raw detector type; unrecognized raw types map to [TripEventKind.OTHER]
  * rather than being dropped. [magnitude] is the detector's severity (g for motion events), for optional weighting.
  */

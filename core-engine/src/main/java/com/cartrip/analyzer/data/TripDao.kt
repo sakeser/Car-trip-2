@@ -145,6 +145,10 @@ interface TripDao {
     @Query("SELECT * FROM drive_events WHERE tripId = :id ORDER BY t ASC")
     suspend fun getDriveEvents(id: Long): List<DriveEventEntity>
 
+    /** The earliest analysis-sample timestamp for a trip (its recording-clock origin), or null if none. */
+    @Query("SELECT MIN(t) FROM analysis_points WHERE tripId = :id")
+    suspend fun getFirstAnalysisPointTime(id: Long): Long?
+
     @Query(
         """
         UPDATE trips SET
