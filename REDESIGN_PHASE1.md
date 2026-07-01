@@ -14,7 +14,12 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.47 / build 158, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.48 / build 159, Room schema v22** (no schema change in any recent UI work).
+- **Health-tab v2 (2026-07-01, commit `55dd432`, S25 PASS):** the Health tab now has the shared recency chips +
+  a windowed Driving-Intelligence overview (N scorable drives / km, avg Smoothness + Demand) + a **Smoothness
+  trend sparkline** + drive mix. Pure aggregation/visualization of existing scores (`DrivingHealth.kt`:
+  `drivingHealth()` + tests) — no scoring/explanation logic (owner deferred the Drive-Stress explainer while the
+  model may change). `RecencyFilterRow` extracted to a shared file (Trips + Health both use it).
 - **Map-interaction batch (2026-07-01, commit `f12e5d3`, S25 PASS):** 1-finger map pan + Trip Line<->map scrub
   sync (see priority #1 below). `TripTrackPoint` gained `lat`/`lon`/`hasPosition`.
 - **Trips-tab v2 (2026-07-01, commit `80a5ccd`, S25 PASS):** recency filter chips (24h/3d/7d/30d/All) + a
@@ -88,9 +93,10 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
 ### Known gaps / carry-forward
 - `8f6c44e` (map-first detail) is **committed locally on `main` but not pushed.**
 - `:ui-next` still doesn't replace legacy: **no Drive (record) tab, no Map tab, no More/Settings, no efficiency
-  pillar, no fuel/cost on the detail, no Drive-Stress explainer, no Health-tab windowing/filters.** (DONE since
-  this note: Trip Line + events + you-vs-traffic on the detail, map<->timeline scrub sync, 1-finger map pan, and
-  Trips-tab recency filters + summary + non-drive rows.)
+  pillar, no fuel/cost on the detail.** (DONE since this note: Trip Line + events + you-vs-traffic on the detail,
+  map<->timeline scrub sync, 1-finger map pan, Trips-tab recency filters + summary + non-drive rows, and Health-tab
+  windowed overview + smoothness trend.) **Drive-Stress explainer: DEFERRED by the owner** (scoring/explanation
+  model still subject to change — don't build UI explaining it yet).
 - Naming: `:ui-next` has no trip **route names** yet (`TripSummary` has none) — the detail headline uses the
   date. Real names come from legacy `GeoNamer`/`TripLabeler` (presentation-domain, not engine) — a later gateway.
 - Do NOT reopen: **Speed-Interruption / Traffic-Wave** (real-data calibration decided *no new detector*) and
