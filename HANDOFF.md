@@ -1,6 +1,15 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-30 · Source **3.37 (build 148), schema v22** · **Rev CX (branch `ux-premium-modular-v1`):
+_Last updated: 2026-07-01 · Source **3.42 (build 153), schema v22** · **The premium-modular redesign is now
+MERGED to `main`** (branch `ux-premium-modular-v1` → `main`, merge commit `3dcb781`, pushed): `:core-engine`
+extraction + `com.cartrip.engine.api` seam, the `:ui-next` premium Compose module (Trips/Health bottom-nav shell +
+**map-first Trip Detail**, still debug-gated behind Diagnostics), Rev CX Driving Intelligence in the legacy
+screens, Connected-Features privacy gating, and speed-interruption evidence tooling (real-data calibration →
+**no new detector**). Legacy `app/ui` is unchanged as the working oracle. ⚠️ **Post-merge commit `8f6c44e`
+(map-first detail) is on LOCAL `main`, NOT pushed** (push pending owner OK; check `git log origin/main..main`).
+**For continuing the premium UI, the detailed next-agent handoff — `:ui-next` state, the engine-API surface to
+build against, the boundary rule, build workflow, gaps, and the next UI priorities from the owner UX spec — is at
+the TOP of `REDESIGN_PHASE1.md`.** · Prior source **3.37 (build 148)** · **Rev CX (branch `ux-premium-modular-v1`):
 Driving Intelligence three-pillar consolidation** — new pure `analysis/DrivingIntelligence.kt` (Smoothness /
 Demand-Load / Efficiency + a 2×2 style×demand "Drive Quality" conditional headline; NO blended composite),
 `TripScores` moved `ui`→`analysis` (colour → `ui/ScoreColors`), surfaced in legacy Trip Detail / Insights /

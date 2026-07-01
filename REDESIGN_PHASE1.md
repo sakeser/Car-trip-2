@@ -1,5 +1,96 @@
 # UX Premium Redesign — Phase 1 Handoff (engine extraction)
 
+---
+
+## ⭐ NEXT-AGENT HANDOFF (2026-07-01) — premium `:ui-next` UI: state + next priorities
+
+**Read this first; the older phase notes below are historical detail.** You are continuing the premium UI
+redesign (the ChatGPT/owner build spec, kept in Downloads as `CarTrip_UX_Redesign_Build_Spec_for_Claude.md`;
+its vision = a Material-3 **5-tab** product: **Drive · Trips · Insights · Map · More**, map-first, plain-English,
+local-first). Legacy `app/ui` is the **working oracle — do not break it**; `:ui-next` is the new premium UI,
+still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip list (preview)").
+
+### Where things stand
+- **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
+  merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `8f6c44e`** (the
+  map-first Trip Detail below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
+- **Version 3.42 / build 153, Room schema v22** (no schema change in any recent UI work).
+- **Modules:** `:app` (legacy UI + host), `:core-engine` (all engine: analysis/data/cloud/record/export/settings
+  + the `com.cartrip.engine.api` seam), `:ui-next` (premium Compose UI). Packages stay `com.cartrip.analyzer.*`
+  inside the engine — **do not rename.**
+
+### What `:ui-next` has today (all S25-verified)
+- **App shell:** `TripsNextRoot` → `HomeShell` = one `Scaffold` with a **bottom nav (Trips / Health)** + top bar;
+  trip data observed once and shared; trip **detail is a full-screen drill-in** (nav route `detail/{id}`).
+- **Trips tab** (`TripListContent`): premium rows — date, `km · duration`, the **Drive-Quality verdict**, a
+  green=good **Smoothness** `ScoreChip`. Tap → detail.
+- **Trip Detail** (`TripDetailNextScreen`): **map-first** — `TripMapHero` (route polyline + start/end markers,
+  framed to the route) → date/distance/duration summary → the **Driving Intelligence** card (Drive-Quality
+  headline + Smoothness & Demand pillars via `PillarRow`/`ScoreChip`/`StressChip`). **Efficiency pillar is
+  deliberately omitted** (needs a vehicle profile the engine-api mapper can't hold).
+- **Health tab** (`InsightsContent`): a Driving-Intelligence overview aggregated from `TripSummary` — avg
+  Smoothness + Demand pillars + a Drive-Quality "drive mix" count.
+- Own theme `CarTripNextTheme` (teal-on-deep-neutral, dark/light). ASCII source only (Cp1252 trap; build glyphs
+  from code points, e.g. `MIDDOT = 0x00B7.toChar()`).
+
+### Engine-API surface you build against (the ONLY way `:ui-next` reaches the engine)
+`com.cartrip.engine.api`:
+- `TripRepository.create(context)` → `observeTrips(): Flow<List<TripSummary>>`, `suspend getTrip(id)`,
+  `suspend getRoute(id): List<RoutePoint>` (1 Hz track lat/lon, invalid fixes dropped).
+- `TripSummary` (DTO, no Room leak): id, start/end epoch, distanceMeters, durationSeconds, `stressScore`/
+  `stressBand` (= Demand), `smoothnessScore`/`smoothnessBand`, `driveQuality` (the conditional headline).
+- `RoutePoint(lat, lon)`.
+- Pure value types that stay public: `DrivingIntelligence`, `StressScore`, `TripScores`, `DriverLoad`,
+  `FuelEstimator`, `StopAndGo`, `TripKind` (in `analysis`), but **`:ui-next` must NOT import `analysis.*`** — the
+  `EngineBoundaryTest` (a source scan in `:ui-next` test) fails the build if `:ui-next` imports
+  `com.cartrip.analyzer.{data,cloud,record,export,settings,ui}`. Derive band words / colours locally in `:ui-next`.
+- **Add gateways only when a screen needs one** (the last one added was `getRoute` for the map). Documented but
+  not built: `RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`/vehicle gateway.
+
+### Build / validate / device (the workflow — do NOT use plain gradlew)
+OneDrive relocate workaround (output goes to `cartrip-build-out/<module>`, nothing leaks into the tree):
+```powershell
+$env:ANDROID_HOME='C:\Users\sinan\AppData\Local\cartrip-build-tools\android-sdk'
+$env:JAVA_HOME='C:\Users\sinan\AppData\Local\cartrip-build-tools\jdk17\jdk-17.0.19+10'
+.\gradlew.bat --init-script 'C:\Users\sinan\cartrip-build-tools\relocate-build.gradle' `
+  :ui-next:testDebugUnitTest :core-engine:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug --no-daemon
+```
+Grep the log for `BUILD SUCCESSFUL` (the pipe can mask Gradle failures). **~237 tests green.** APK →
+`C:\Users\sinan\cartrip-build-out\app\outputs\apk\debug\app-debug.apk`. **Bump `versionCode`/`versionName` in
+`app/build.gradle.kts` before the install-facing assemble.** Batch device testing: local Gradle while iterating,
+one S25 pass at the end of a coherent batch (ADB at `...\cartrip-build-tools\android-sdk\platform-tools\adb.exe`;
+screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — it can't be unit-verified).
+
+### Known gaps / carry-forward
+- `8f6c44e` (map-first detail) is **committed locally on `main` but not pushed.**
+- `:ui-next` is far from replacing legacy: **no Drive (record) tab, no Map tab, no More/Settings, no Trip Line,
+  no events/you-vs-traffic/fuel on the detail, no efficiency pillar, no windowing/filters on Trips/Health.**
+- Naming: `:ui-next` has no trip **route names** yet (`TripSummary` has none) — the detail headline uses the
+  date. Real names come from legacy `GeoNamer`/`TripLabeler` (presentation-domain, not engine) — a later gateway.
+- Do NOT reopen: **Speed-Interruption / Traffic-Wave** (real-data calibration decided *no new detector*) and
+  **Driving-Intelligence scoring tuning** (needs owner-labeled trips), unless a UI need directly requires it.
+
+### Recommended next UI priorities (from the spec, highest visible value first)
+1. **Trip Detail depth (signature work).** Add the spec's **Trip Line** (a horizontal speed/events/stops timeline
+   synced to the map — `ui/TripLine.kt` in the spec) and the **You-vs-Traffic** + **Drive-Stress explainer** +
+   **events** sections. Each needs a small engine-api read (analysis points w/ speed+limit, events, ETA fields) —
+   add those to `getRoute`/a new `getTripTrack`/`getEvents` gateway as needed. This is the "most polished screen."
+2. **Trips tab polish:** recency filter chips (24h/3d/7d/30d/All) + a frozen map preview header + explicit
+   "Open details" affordance (the spec calls out replacing the legacy hidden two-tap).
+3. **Efficiency pillar** across detail + Health: add a **vehicle gateway** (`SettingsStore` exposing the
+   `settings/VehiclePrefs` profile through engine-api) so `DrivingIntelligence.from(trip, vehicle)` can run in
+   `:ui-next`; then show the 3rd pillar + fuel/cost.
+4. **Map tab** (spec's 5th tab): a Map Hub with a route heatmap + trouble-spots layer (reuse engine data via new
+   read gateways). High spatial-intelligence value.
+5. **Drive tab + recording** (biggest, do later): needs a `RecordingController` gateway + the `RecordingState`
+   surface + M1 (engine self-describing manifest) before `:ui-next` can host the foreground recording flow.
+6. **More/Settings** hub (consolidate the scattered legacy prefs behind engine-api-backed settings) — see the
+   "Settings architecture" spec in `ROADMAP_NEW.md`.
+
+Deeper detail on each phase + the engine-API facade decision is in the historical sections below.
+
+---
+
 > **HANDOFF FOR THE NEXT AGENT — read this first.**
 > 1. **Phase 1B (the engine extraction) is COMPLETE** — `analysis/data/cloud/record/export/settings` + their
 >    tests now live in `:core-engine`. Build green, 223 tests / 0 failures. See "Phase 1B — DONE" below.
@@ -241,16 +332,18 @@ Drive-Quality "drive mix" count) — no vehicle needed, efficiency still deferre
 (boundary-clean). Device-verified: 43 scorable drives, Smoothness 88 / Demand 41, mix 26 easy-smooth / 16
 smooth-under-pressure / 1 demanding-rough; tab switching + `EngineBoundaryTest` green.
 
-**`:ui-next` map-first Trip Detail (v3.42/build 153, on `main`; build green, ON-DEVICE VERIFY PENDING — S25
-was disconnected):** implements the UX-spec's #1 principle ("map first, numbers second") on the detail screen.
+**`:ui-next` map-first Trip Detail (v3.42/build 153, on `main`; build green, ON-DEVICE PASS 2026-07-01):**
+implements the UX-spec's #1 principle ("map first, numbers second") on the detail screen. **S25-verified:** the
+route map renders (real Google tiles, blue route polyline + start/end markers framed to the route) above the
+date/distance/duration summary and the Driving Intelligence card — confirming the Maps API key propagates across
+the merged manifest from the host `:app`.
 Added the first read gateway beyond summaries: engine-API **`RoutePoint`** value type + **`TripRepository.getRoute(id)`**
 (maps the persisted 1 Hz `AnalysisPointEntity` track to lat/lon, drops zero/invalid fixes; pure `toRoute()` mapper,
 unit-tested). New **`TripMapHero`** (`maps-compose` added to `:ui-next`; API key from the host app's merged
 manifest) renders the route polyline + start/end markers, framed to the route on `onMapLoaded`. `TripDetailNextScreen`
 restructured: map hero -> date/distance/duration summary card -> the DI card. Boundary still clean (map SDK imports
-allowed; only `com.cartrip.engine.api.*` from the engine). **NEXT: on-device check that the map tiles render (key
-propagation across the merged manifest can only be confirmed on a device); then push.** Efficiency pillar still
-deferred (vehicle gateway).
+allowed; only `com.cartrip.engine.api.*` from the engine). Committed on local `main` as `8f6c44e` (**push pending
+owner OK** at handoff time). Efficiency pillar still deferred (vehicle gateway).
 
 Then more screens; add gateways (`RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`) only as a
 screen needs them. **M1** (engine self-describing manifest) before `:ui-next` hosts recording; **M3** (Room migration

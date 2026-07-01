@@ -4,6 +4,18 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Premium-modular redesign MERGED to `main` + post-merge UI (2026-07-01, v3.42/build 153)
+
+The whole `ux-premium-modular-v1` branch was **merged into `main`** (merge commit `3dcb781`, pushed): `:core-engine`
+extraction + engine-API seam, `:ui-next` module, Rev CX Driving Intelligence (legacy screens), Connected-Features
+privacy, and the speed-interruption evidence tooling (real-data calibration → **no new detector**). Then, on `main`,
+the premium `:ui-next` UI advanced: a **Trips/Health bottom-nav shell** (v3.41) and a **map-first Trip Detail**
+(v3.42, `TripMapHero` route map + summary + Driving-Intelligence card; new engine-API `RoutePoint` +
+`TripRepository.getRoute`). All S25-verified. ⚠️ **The map-first commit `8f6c44e` is on local `main`, NOT pushed
+(push pending owner OK).** `:ui-next` stays debug-gated; legacy `app/ui` unchanged as the oracle. **The detailed
+next-agent handoff (state, engine-API surface, build workflow, gaps, next UI priorities from the spec) is at the
+top of `REDESIGN_PHASE1.md`.**
+
 ## Rev CX (2026-06-30, v3.37/build 148) — Driving Intelligence: three-pillar scoring consolidation
 
 Owner-directed product consolidation (branch `ux-premium-modular-v1`): move the public read from five
