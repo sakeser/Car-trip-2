@@ -34,13 +34,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Context
+import android.content.Intent
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.core.content.FileProvider
 import com.cartrip.analyzer.analysis.GnssQuality
 import com.cartrip.analyzer.cloud.RoutesClient
 import com.cartrip.analyzer.cloud.RoutesConfig
 import com.cartrip.analyzer.cloud.SpeedLimits
+import com.cartrip.analyzer.data.AppDatabase
+import com.cartrip.analyzer.export.SweepTrackExport
 import com.cartrip.analyzer.record.AutoRecordLog
 import com.cartrip.analyzer.record.GnssLoggingPrefs
 import com.cartrip.analyzer.record.RecordingState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * Developer diagnostics: live capture health (motion/GPS rates, GNSS satellites/signal) so the field
@@ -60,6 +70,8 @@ fun DebugScreen(onBack: () -> Unit, onOpenUiNext: () -> Unit) {
         }.getOrDefault("?")
     }
     val mapsKey = remember { RoutesConfig.apiKey(ctx) != null }
+    val scope = rememberCoroutineScope()
+    var sweepStatus by remember { mutableStateOf<String?>(null) }
 
     val elapsed = live.elapsedS.coerceAtLeast(1)
     val motionHz = if (live.recording) live.motionSamples.toDouble() / elapsed else 0.0
@@ -163,6 +175,35 @@ fun DebugScreen(onBack: () -> Unit, onOpenUiNext: () -> Unit) {
                 }
             }
 
+            DebugCard("Speed-interruption sweep (export)") {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            sweepStatus = "Exporting…"
+                            runCatching {
+                                val dao = AppDatabase.get(ctx).tripDao()
+                                val res = withContext(Dispatchers.IO) { SweepTrackExport.exportCombined(ctx, dao) }
+                                withContext(Dispatchers.Main) { shareCsv(ctx, res.file) }
+                                res
+                            }.onSuccess {
+                                sweepStatus = "Exported ${it.tripCount} trips · ${it.pointCount} points -> ${it.file.name}"
+                            }.onFailure {
+                                sweepStatus = "Export failed: ${it.message ?: it.javaClass.simpleName}"
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Export trip tracks (CSV)") }
+                Text(
+                    sweepStatus
+                        ?: "Writes all_tracks.csv (tripId,tMs,speedKmh,speedLimitKmh) to app files + opens a " +
+                        "share sheet. Feed it to the SpeedInterruptionSweep harness to compare drawdown configs " +
+                        "against your real trips (e.g. 1187/1189/845/847).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             DebugCard("Auto-record log") {
                 val ctx = LocalContext.current
                 var logKey by remember { mutableStateOf(0) }
@@ -187,6 +228,18 @@ fun DebugScreen(onBack: () -> Unit, onOpenUiNext: () -> Unit) {
             }
         }
     }
+}
+
+private fun shareCsv(context: Context, file: File) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        Intent.createChooser(send, "Share sweep CSV").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
 }
 
 private fun gnssColor(level: GnssQuality.Level): Color? = when (level) {
