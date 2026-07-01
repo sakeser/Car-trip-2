@@ -14,7 +14,9 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.44 / build 155, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.46 / build 157, Room schema v22** (no schema change in any recent UI work).
+- **Map-interaction batch (2026-07-01, commit `f12e5d3`, S25 PASS):** 1-finger map pan + Trip Line<->map scrub
+  sync (see priority #1 below). `TripTrackPoint` gained `lat`/`lon`/`hasPosition`.
 - **Latest batch (2026-07-01, commits `589d8fd` + fix `65b6af8`, build-green, S25 PASS):** Trip Detail depth — the
   **Trip Line** (`TripLine.kt`, a Canvas speed-vs-time chart: filled speed curve + dashed posted-limit + coloured
   event ticks + adaptive legend) and **You-vs-Traffic** (`YouVsTraffic.kt`, verdict + proportional
@@ -88,12 +90,17 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
   **Driving-Intelligence scoring tuning** (needs owner-labeled trips), unless a UI need directly requires it.
 
 ### Recommended next UI priorities (from the spec, highest visible value first)
-1. **Trip Detail depth (signature work).** ✅ **DONE (commit `589d8fd`):** the **Trip Line** (speed/limit/events
-   timeline) + **You-vs-Traffic** now render on the detail via `getTrack`/`getEvents` + the ETA fields on
-   `TripSummary`. **Still open on this screen:** (a) **map<->timeline scrub sync** (a draggable marker on the map
-   that tracks a scrubber on the Trip Line — needs lat/lon on `TripTrackPoint`, currently omitted), (b) a plain-
-   English **Drive-Stress explainer** (why this trip scored its Demand), (c) the **Efficiency pillar** (blocked on
-   the vehicle gateway, see #3). This was the "most polished screen"; it's now genuinely deep.
+1. **Trip Detail depth (signature work).** ✅ **DONE (`589d8fd`, `f12e5d3`):** the **Trip Line**
+   (speed/limit/events timeline) + **You-vs-Traffic**, plus **1-finger map pan** (legacy `mapTouched` scroll-gate)
+   and the **map<->Trip Line scrub sync** (tap/drag the timeline -> a cyan marker tracks the same sample along the
+   route + a speed readout; `TripTrackPoint` now carries lat/lon + `hasPosition`). All S25-verified (trip 1190,
+   North York->401->Yorkdale). **Still open on this screen:** (a) a plain-English **Drive-Stress explainer** (why
+   this trip scored its Demand), (b) the **Efficiency pillar** (blocked on the vehicle gateway, see #3). This is
+   now the polished, interactive signature screen.
+   - **Map-marker gotcha (maps-compose 4.4.2):** there is NO `rememberUpdatedMarkerState`, and a fresh
+     `MarkerState(pos)` each recomposition does NOT move the marker — keep one `rememberMarkerState()` and push
+     positions in via `SideEffect`. A scrubber gesture needs a single `awaitPointerEventScope` loop (tap+drag);
+     `detectHorizontalDragGestures` + `detectTapGestures` together conflict.
 2. **Trips tab polish:** recency filter chips (24h/3d/7d/30d/All) + a frozen map preview header + explicit
    "Open details" affordance (the spec calls out replacing the legacy hidden two-tap).
 3. **Efficiency pillar** across detail + Health: add a **vehicle gateway** (`SettingsStore` exposing the
