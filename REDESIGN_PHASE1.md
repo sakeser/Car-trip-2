@@ -35,7 +35,11 @@ cosmetic polish for its own sake, but do not let rough scaffolding harden into t
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). Recent `:ui-next` UI batches continue as normal commits on `main`; always confirm
   live push/local state with `git status --short --branch` and `git log origin/main..main` before pushing.
-- **Version 3.58 / build 169, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.59 / build 170, Room schema v22** (no schema change in any recent UI work).
+- **Drive tab v2 (2026-07-01, commit `dc56302`, S25 PASS):** the Drive tab now leads with an interpretation-first
+  recent-activity glance — **Last drive** (Drive-Quality headline first, then facts + Smoothness chip, tap to
+  open) + **This week** (drives / km / avg smoothness via `TripWindow`) — alongside the "Ready to drive" hero and
+  the recording placeholder. Read-only. **All 5 tabs now feel real.**
 - **More drill-in sections (2026-07-01, commit `4eadced`, S25 PASS):** the More rows now navigate to a
   `MoreDetailScreen` (nav route `more/{key}`) — **About** is real read-only content; the rest are structured
   "coming soon" details. Establishes the More -> detail -> back settings pattern. Read-only, no gateway.
