@@ -47,4 +47,6 @@ data class TripSummary(
     val etaFreeFlowSeconds: Double? = null,
     /** True for a real drive, false for a walk / non-drive (a driving score/ETA is meaningless then). */
     val isDrive: Boolean = true,
+    /** Raw at-a-glance trip stats (speeds, moving/idle time, hard-event counts) for the detail grid. */
+    val stats: TripStats? = null,
 )

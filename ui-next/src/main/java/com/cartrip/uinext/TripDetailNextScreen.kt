@@ -34,6 +34,7 @@ import com.cartrip.engine.api.RoutePoint
 import com.cartrip.engine.api.TripEvent
 import com.cartrip.engine.api.TripEventKind
 import com.cartrip.engine.api.TripRepository
+import com.cartrip.engine.api.TripStats
 import com.cartrip.engine.api.TripSummary
 import com.cartrip.engine.api.TripTrackPoint
 
@@ -115,6 +116,9 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                             }
                         }
                     }
+
+                    // At a glance: raw trip stats (speeds, moving/idle, hard-event counts).
+                    t.stats?.let { StatsGridCard(it) }
 
                     // Trip Line: speed-vs-time story with the posted limit + events.
                     if (track.size >= 2) {
@@ -223,6 +227,36 @@ private fun eventLabel(kind: TripEventKind): String = when (kind) {
     TripEventKind.HARD_CORNER -> "Hard corner"
     TripEventKind.ROUGH_ROAD -> "Rough road"
     TripEventKind.OTHER -> "Event"
+}
+
+/** "At a glance" grid of raw trip stats (speeds, moving/idle, hard-event counts) — factual, not scored. */
+@Composable
+private fun StatsGridCard(stats: TripStats) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Text(
+                "AT A GLANCE",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            StatGridRow("Top speed" to "${stats.maxSpeedKmh.toInt()} km/h", "Avg moving" to "${stats.avgMovingSpeedKmh.toInt()} km/h")
+            StatGridRow("Moving" to formatDuration(stats.movingSeconds), "Idle" to formatDuration(stats.idleSeconds))
+            StatGridRow("Hard brakes" to "${stats.hardBrakeCount}", "Hard accels" to "${stats.hardAccelCount}")
+            StatGridRow("Hard corners" to "${stats.hardCornerCount}", null)
+        }
+    }
+}
+
+/** One row of the stats grid: two weighted [Stat] cells (the right may be absent on an odd final row). */
+@Composable
+private fun StatGridRow(left: Pair<String, String>, right: Pair<String, String>?) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f)) { Stat(left.first, left.second) }
+        Column(modifier = Modifier.weight(1f)) { right?.let { Stat(it.first, it.second) } }
+    }
 }
 
 /** A stacked label + value stat (used in the summary headline row). */

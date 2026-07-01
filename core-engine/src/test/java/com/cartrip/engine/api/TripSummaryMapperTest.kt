@@ -86,6 +86,22 @@ class TripSummaryMapperTest {
         assertFalse(walk.isDrive)
     }
 
+    @Test fun stats_map_raw_measured_quantities_with_speed_in_kmh() {
+        val s = TripEntity(
+            id = 1L, startTime = 1_000L, endTime = 700_000L, durationS = 700.0,
+            maxSpeedMps = 30.0, avgMovingSpeedMps = 15.0, movingS = 600.0, idleS = 100.0,
+            hardBrakeCount = 2, hardAccelCount = 1, hardCornerCount = 3,
+        ).toSummary()
+        val stats = s.stats!!
+        assertEquals(108.0, stats.maxSpeedKmh, 1e-9)     // 30 m/s * 3.6
+        assertEquals(54.0, stats.avgMovingSpeedKmh, 1e-9) // 15 m/s * 3.6
+        assertEquals(600.0, stats.movingSeconds, 0.0)
+        assertEquals(100.0, stats.idleSeconds, 0.0)
+        assertEquals(2, stats.hardBrakeCount)
+        assertEquals(1, stats.hardAccelCount)
+        assertEquals(3, stats.hardCornerCount)
+    }
+
     @Test fun ongoing_trip_maps_zero_end_and_defaulted_metrics() {
         // Only the required fields set; endTime 0 = ongoing, distance/duration default to 0.0.
         val s = TripEntity(id = 7L, startTime = 1_000L, endTime = 0L).toSummary()

@@ -83,6 +83,15 @@ internal fun TripEntity.toSummary(): TripSummary {
         etaTrafficSeconds = if (hasEta) googleEtaTrafficS else null,
         etaFreeFlowSeconds = if (hasEta) googleEtaFreeFlowS.takeIf { it > 0.0 } else null,
         isDrive = isDrive,
+        stats = TripStats(
+            maxSpeedKmh = maxSpeedMps * 3.6,
+            avgMovingSpeedKmh = avgMovingSpeedMps * 3.6,
+            movingSeconds = movingS,
+            idleSeconds = idleS,
+            hardBrakeCount = hardBrakeCount,
+            hardAccelCount = hardAccelCount,
+            hardCornerCount = hardCornerCount,
+        ),
     )
 }
 
