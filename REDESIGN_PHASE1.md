@@ -14,7 +14,10 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.55 / build 166, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.56 / build 167, Room schema v22** (no schema change in any recent UI work).
+- **Map tap-to-peek (2026-07-01, commit `b9cd0b5`, S25 PASS):** tapping an event dot or speeding segment shows a
+  lightweight `MapPeek` card (what / when = trip date + offset / Open trip) instead of jumping straight to the
+  full detail. Events + segments now carry their trip id. No new gateway.
 - **Map Speeding layer + event-dot refinement (2026-07-01, commit `5406064`, S25 PASS):** the Speeding chip is a
   real layer now — over-limit route segments tiered yellow (0-10 over) / red (10+), from the pure
   `SpeedingLayer.kt` (`speedingSegments` over the position-enriched `getTrack`); no new gateway. Event markers
@@ -154,8 +157,8 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
    `:ui-next`; then show the 3rd pillar + fuel/cost.
 4. **Map tab** (spec's 4th tab): ✅ **RICH SURFACE (`b587073`, `bdb6219`, `1388e17`, `cce481a`, `5406064`):**
    `MapHubScreen` = routes coloured by Smoothness + tap-to-open + an **Events** dot layer + a **Speeding** overlay
-   (yellow/red over-limit segments). **Next depth:** wire the **Heatmap** chip (route/event density) — likely a
-   real aggregate read gateway; optional pin clustering; a tap-an-event/segment peek.
+   (yellow/red over-limit segments) + a **tap-to-peek** card on dots/segments. **Next depth:** wire the **Heatmap**
+   chip (route/event density) — likely a real aggregate read gateway; optional pin clustering.
 5. **Drive tab + recording** (biggest): ✅ **PLACEHOLDER IN (`b587073`, `DriveScreen`).** The real flow still
    needs a `RecordingController` gateway + the `RecordingState` surface + M1 (engine self-describing manifest)
    before `:ui-next` can host the foreground recording flow — do later.
