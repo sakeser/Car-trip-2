@@ -45,15 +45,16 @@ import com.google.maps.android.compose.rememberCameraPositionState
  * now). Routes are downsampled for a light overview. ASCII source (Cp1252 trap).
  */
 @Composable
-internal fun MapHubScreen(trips: List<TripSummary>?) {
+internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit) {
     val context = LocalContext.current
     val repo = remember { TripRepository.create(context) }
     val recentIds = remember(trips) { trips.orEmpty().filter { it.isDrive }.take(RECENT_LIMIT).map { it.id } }
-    val routes by produceState<List<List<LatLng>>?>(initialValue = null, recentIds) {
-        value = recentIds
-            .map { id -> repo.getRoute(id) }
-            .filter { it.size >= 2 }
-            .map { it.downsample(MAX_POINTS_PER_ROUTE).map { p -> LatLng(p.lat, p.lon) } }
+    // Keep each route paired with its trip id so a tap can open that trip.
+    val routes by produceState<List<Pair<Long, List<LatLng>>>?>(initialValue = null, recentIds) {
+        value = recentIds.mapNotNull { id ->
+            val r = repo.getRoute(id)
+            if (r.size < 2) null else id to r.downsample(MAX_POINTS_PER_ROUTE).map { p -> LatLng(p.lat, p.lon) }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -69,7 +70,7 @@ internal fun MapHubScreen(trips: List<TripSummary>?) {
         Text(
             when (val r = routes) {
                 null -> "Loading recent routes..."
-                else -> "${r.size} recent ${if (r.size == 1) "route" else "routes"}"
+                else -> "${r.size} recent ${if (r.size == 1) "route" else "routes"} $MIDDOT tap a route to open it"
             },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -86,15 +87,15 @@ internal fun MapHubScreen(trips: List<TripSummary>?) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                else -> RouteOverlayMap(r)
+                else -> RouteOverlayMap(r, onOpenTrip)
             }
         }
     }
 }
 
 @Composable
-private fun RouteOverlayMap(routes: List<List<LatLng>>) {
-    val all = remember(routes) { routes.flatten() }
+private fun RouteOverlayMap(routes: List<Pair<Long, List<LatLng>>>, onOpenTrip: (Long) -> Unit) {
+    val all = remember(routes) { routes.flatMap { it.second } }
     val bounds = remember(all) {
         val b = LatLngBounds.builder()
         all.forEach(b::include)
@@ -113,8 +114,16 @@ private fun RouteOverlayMap(routes: List<List<LatLng>>) {
         onMapLoaded = { mapLoaded = true },
         uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false, myLocationButtonEnabled = false),
     ) {
-        routes.forEach { line ->
-            Polyline(points = line, color = RouteBlue, width = 8f, jointType = JointType.ROUND)
+        routes.forEach { (id, line) ->
+            Polyline(
+                points = line,
+                color = RouteBlue,
+                width = 8f,
+                jointType = JointType.ROUND,
+                clickable = true,
+                tag = id,
+                onClick = { poly -> (poly.tag as? Long)?.let(onOpenTrip) },
+            )
         }
     }
 }

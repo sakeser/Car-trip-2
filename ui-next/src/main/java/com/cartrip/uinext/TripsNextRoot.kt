@@ -125,7 +125,7 @@ private fun HomeShell(onOpenTrip: (Long) -> Unit, onExit: () -> Unit) {
                 0 -> DriveScreen()
                 1 -> TripListContent(trips, onOpenTrip)
                 2 -> InsightsContent(trips)
-                3 -> MapHubScreen(trips)
+                3 -> MapHubScreen(trips, onOpenTrip)
                 else -> MoreScreen()
             }
         }
