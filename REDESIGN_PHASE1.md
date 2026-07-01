@@ -12,9 +12,18 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 
 ### Where things stand
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
-  merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `8f6c44e`** (the
-  map-first Trip Detail below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.42 / build 153, Room schema v22** (no schema change in any recent UI work).
+  merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
+  + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
+- **Version 3.43 / build 154, Room schema v22** (no schema change in any recent UI work).
+- **Latest batch (2026-07-01, commit `589d8fd`, build-green, S25 verify PENDING — no device attached at build
+  time):** Trip Detail depth — the **Trip Line** (`TripLine.kt`, a Canvas speed-vs-time chart: filled speed
+  curve + dashed posted-limit + coloured event ticks + adaptive legend) and **You-vs-Traffic** (`YouVsTraffic.kt`,
+  verdict + proportional You/Typical/Free-flow bars). New engine-api reads: `TripRepository.getTrack`/`getEvents`
+  (+ `TripTrackPoint`/`TripEvent`/`TripEventKind` value types, pure unit-tested mappers) and
+  `TripSummary.etaTrafficSeconds`/`etaFreeFlowSeconds` (gated to real drives with a fetched ETA). Codex-reviewed
+  (boundary clean, non-finite-speed guard added in `toTrack`). **This knocks out most of priority #1's detail
+  sections; still open on the detail: map<->timeline scrub sync, an explicit Drive-Stress explainer, efficiency
+  pillar.**
 - **Modules:** `:app` (legacy UI + host), `:core-engine` (all engine: analysis/data/cloud/record/export/settings
   + the `com.cartrip.engine.api` seam), `:ui-next` (premium Compose UI). Packages stay `com.cartrip.analyzer.*`
   inside the engine — **do not rename.**
@@ -36,7 +45,11 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 ### Engine-API surface you build against (the ONLY way `:ui-next` reaches the engine)
 `com.cartrip.engine.api`:
 - `TripRepository.create(context)` → `observeTrips(): Flow<List<TripSummary>>`, `suspend getTrip(id)`,
-  `suspend getRoute(id): List<RoutePoint>` (1 Hz track lat/lon, invalid fixes dropped).
+  `suspend getRoute(id): List<RoutePoint>` (1 Hz track lat/lon, invalid fixes dropped),
+  `suspend getTrack(id): List<TripTrackPoint>` (speed timeline: offsetSeconds-from-start + speedKmh +
+  nullable OSM limit), `suspend getEvents(id): List<TripEvent>` (typed hard-brake/accel/corner/road ticks on
+  the same x-axis). Both use pure mappers (`toTrack`/`toEvents`/`eventKindOf`) unit-tested in
+  `TripSummaryMapperTest`.
 - `TripSummary` (DTO, no Room leak): id, start/end epoch, distanceMeters, durationSeconds, `stressScore`/
   `stressBand` (= Demand), `smoothnessScore`/`smoothnessBand`, `driveQuality` (the conditional headline).
 - `RoutePoint(lat, lon)`.
@@ -71,10 +84,12 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
   **Driving-Intelligence scoring tuning** (needs owner-labeled trips), unless a UI need directly requires it.
 
 ### Recommended next UI priorities (from the spec, highest visible value first)
-1. **Trip Detail depth (signature work).** Add the spec's **Trip Line** (a horizontal speed/events/stops timeline
-   synced to the map — `ui/TripLine.kt` in the spec) and the **You-vs-Traffic** + **Drive-Stress explainer** +
-   **events** sections. Each needs a small engine-api read (analysis points w/ speed+limit, events, ETA fields) —
-   add those to `getRoute`/a new `getTripTrack`/`getEvents` gateway as needed. This is the "most polished screen."
+1. **Trip Detail depth (signature work).** ✅ **DONE (commit `589d8fd`):** the **Trip Line** (speed/limit/events
+   timeline) + **You-vs-Traffic** now render on the detail via `getTrack`/`getEvents` + the ETA fields on
+   `TripSummary`. **Still open on this screen:** (a) **map<->timeline scrub sync** (a draggable marker on the map
+   that tracks a scrubber on the Trip Line — needs lat/lon on `TripTrackPoint`, currently omitted), (b) a plain-
+   English **Drive-Stress explainer** (why this trip scored its Demand), (c) the **Efficiency pillar** (blocked on
+   the vehicle gateway, see #3). This was the "most polished screen"; it's now genuinely deep.
 2. **Trips tab polish:** recency filter chips (24h/3d/7d/30d/All) + a frozen map preview header + explicit
    "Open details" affordance (the spec calls out replacing the legacy hidden two-tap).
 3. **Efficiency pillar** across detail + Health: add a **vehicle gateway** (`SettingsStore` exposing the
