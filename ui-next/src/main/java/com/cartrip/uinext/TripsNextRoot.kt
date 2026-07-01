@@ -7,6 +7,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,8 +66,9 @@ fun TripsNextRoot(onExit: () -> Unit) {
 }
 
 /**
- * The bottom-nav home: a single shell [Scaffold] (top bar + bottom nav) that switches between the Trips list
- * and the Health (Driving Intelligence) overview. Trip data is observed ONCE here and shared by both tabs.
+ * The bottom-nav home: a single shell [Scaffold] (top bar + a 5-tab bottom nav = the spec's Drive / Trips /
+ * Insights / Map / More). Trip data is observed ONCE here and shared by the tabs that need it. Drive / Map /
+ * More are roughed-in (read-only) surfaces that flesh out the product shape ahead of their engine-api work.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,11 +76,13 @@ private fun HomeShell(onOpenTrip: (Long) -> Unit, onExit: () -> Unit) {
     val context = LocalContext.current
     val repo = remember { TripRepository.create(context) }
     val trips: List<TripSummary>? by repo.observeTrips().collectAsState(initial = null)
-    var tab by rememberSaveable { mutableStateOf(0) }
+    // Tabs: 0 Drive, 1 Trips, 2 Insights, 3 Map, 4 More. Open on Trips (the populated surface).
+    var tab by rememberSaveable { mutableStateOf(1) }
+    val titles = listOf("Drive", "Trips", "Insights", "Map", "More")
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(if (tab == 0) "Trips" else "Health") },
+                title = { Text(titles[tab]) },
                 navigationIcon = {
                     IconButton(onClick = onExit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -87,24 +93,40 @@ private fun HomeShell(onOpenTrip: (Long) -> Unit, onExit: () -> Unit) {
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
+                    selected = tab == 0, onClick = { tab = 0 },
+                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                    label = { Text("Drive") },
+                )
+                NavigationBarItem(
+                    selected = tab == 1, onClick = { tab = 1 },
                     icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                     label = { Text("Trips") },
                 )
                 NavigationBarItem(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
+                    selected = tab == 2, onClick = { tab = 2 },
                     icon = { Icon(Icons.Filled.Favorite, contentDescription = null) },
-                    label = { Text("Health") },
+                    label = { Text("Insights") },
+                )
+                NavigationBarItem(
+                    selected = tab == 3, onClick = { tab = 3 },
+                    icon = { Icon(Icons.Filled.Place, contentDescription = null) },
+                    label = { Text("Map") },
+                )
+                NavigationBarItem(
+                    selected = tab == 4, onClick = { tab = 4 },
+                    icon = { Icon(Icons.Filled.Menu, contentDescription = null) },
+                    label = { Text("More") },
                 )
             }
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> TripListContent(trips, onOpenTrip)
-                else -> InsightsContent(trips)
+                0 -> DriveScreen()
+                1 -> TripListContent(trips, onOpenTrip)
+                2 -> InsightsContent(trips)
+                3 -> MapHubScreen(trips)
+                else -> MoreScreen()
             }
         }
     }

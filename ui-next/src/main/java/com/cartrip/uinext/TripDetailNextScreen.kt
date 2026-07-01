@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.RoutePoint
 import com.cartrip.engine.api.TripEvent
+import com.cartrip.engine.api.TripEventKind
 import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
 import com.cartrip.engine.api.TripTrackPoint
@@ -164,13 +165,64 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                                 t.stressScore?.let { s ->
                                     PillarRow("Demand", t.stressBand) { StressChip(s) }
                                 }
+                                // Efficiency is the 3rd Driving-Intelligence pillar; it needs a vehicle profile
+                                // the engine-api mapper can't hold yet. Rough placeholder so the shape is visible.
+                                PillarRow("Efficiency", "Coming soon") {
+                                    Text(
+                                        "--",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
+
+                    // Events: the notable driving events on this trip (real data via getEvents).
+                    if (events.isNotEmpty()) EventsCard(events)
                 }
             }
         }
     }
+}
+
+/** A rough list of the trip's driving events (kind + time offset). Real, read-only engine-api data. */
+@Composable
+private fun EventsCard(events: List<TripEvent>) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                "EVENTS (${events.size})",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            for (e in events) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(eventLabel(e.kind), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        formatDuration(e.offsetSeconds.toDouble()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** UI label for an event kind (presentation; the kinds are the engine-api enum). */
+private fun eventLabel(kind: TripEventKind): String = when (kind) {
+    TripEventKind.HARD_BRAKE -> "Hard brake"
+    TripEventKind.HARD_ACCEL -> "Hard accel"
+    TripEventKind.HARD_CORNER -> "Hard corner"
+    TripEventKind.ROUGH_ROAD -> "Rough road"
+    TripEventKind.OTHER -> "Event"
 }
 
 /** A stacked label + value stat (used in the summary headline row). */
