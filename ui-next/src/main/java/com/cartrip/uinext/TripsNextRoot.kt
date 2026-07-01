@@ -133,7 +133,7 @@ private fun HomeShell(onOpenTrip: (Long) -> Unit, onOpenSection: (String) -> Uni
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> DriveScreen()
+                0 -> DriveScreen(trips, onOpenTrip)
                 1 -> TripListContent(trips, onOpenTrip)
                 2 -> InsightsContent(trips)
                 3 -> MapHubScreen(trips, onOpenTrip)
