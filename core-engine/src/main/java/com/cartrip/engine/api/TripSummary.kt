@@ -45,4 +45,6 @@ data class TripSummary(
     val etaTrafficSeconds: Double? = null,
     /** Google's **free-flow** (no-traffic, best-case) ETA for the route (seconds), or `null` when unknown. */
     val etaFreeFlowSeconds: Double? = null,
+    /** True for a real drive, false for a walk / non-drive (a driving score/ETA is meaningless then). */
+    val isDrive: Boolean = true,
 )

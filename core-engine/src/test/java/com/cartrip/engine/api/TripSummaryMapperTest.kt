@@ -74,6 +74,18 @@ class TripSummaryMapperTest {
         assertNull(walk.etaTrafficSeconds)
     }
 
+    @Test fun isDrive_reflects_trip_kind() {
+        val drive = TripEntity(
+            id = 1L, startTime = 1_000L, endTime = 700_000L, durationS = 700.0, maxSpeedMps = 25.0,
+        ).toSummary()
+        assertTrue(drive.isDrive)
+
+        val walk = TripEntity(
+            id = 2L, startTime = 1_000L, endTime = 700_000L, durationS = 700.0, maxSpeedMps = 1.5,
+        ).toSummary()
+        assertFalse(walk.isDrive)
+    }
+
     @Test fun ongoing_trip_maps_zero_end_and_defaulted_metrics() {
         // Only the required fields set; endTime 0 = ongoing, distance/duration default to 0.0.
         val s = TripEntity(id = 7L, startTime = 1_000L, endTime = 0L).toSummary()

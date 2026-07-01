@@ -67,7 +67,8 @@ internal fun TripEntity.toSummary(): TripSummary {
     val di = DrivingIntelligence.from(this)
     // "You vs traffic" is only meaningful for a real drive with a fetched with-traffic ETA (mirrors the legacy
     // TripDetail gate). Expose the raw seconds; the UI derives the verdict/colours.
-    val hasEta = !TripKind.isLikelyNonDrive(this) && etaSource.isNotEmpty() && googleEtaTrafficS > 0.0
+    val isDrive = !TripKind.isLikelyNonDrive(this)
+    val hasEta = isDrive && etaSource.isNotEmpty() && googleEtaTrafficS > 0.0
     return TripSummary(
         id = id,
         startEpochMs = startTime,
@@ -81,6 +82,7 @@ internal fun TripEntity.toSummary(): TripSummary {
         driveQuality = di?.headline,
         etaTrafficSeconds = if (hasEta) googleEtaTrafficS else null,
         etaFreeFlowSeconds = if (hasEta) googleEtaFreeFlowS.takeIf { it > 0.0 } else null,
+        isDrive = isDrive,
     )
 }
 

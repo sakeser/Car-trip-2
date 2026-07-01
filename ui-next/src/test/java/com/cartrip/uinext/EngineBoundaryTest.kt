@@ -6,8 +6,10 @@ import java.io.File
 
 /**
  * Architectural guard: `:ui-next` may reach the engine ONLY through `com.cartrip.engine.api.*`. It must not
- * import legacy/internal engine packages (`data` / `cloud` / `record` / `export` / `settings`) or the legacy
- * `ui` package / `MainActivity` / `TripApp`.
+ * import legacy/internal engine packages (`analysis` / `data` / `cloud` / `record` / `export` / `settings`) or
+ * the legacy `ui` package / `MainActivity` / `TripApp`. `analysis` is included deliberately: although some pure
+ * value types there are public, `:ui-next` derives its band words / colours locally and reaches the engine only
+ * through the api facade — importing `analysis.*` directly would bypass that seam.
  *
  * While legacy `:app` still imports engine internals the boundary cannot be compiler-enforced (`internal` is
  * module-scoped, and the engine is one module), so this source scan IS the enforcement. Konsist-lite - swap
@@ -16,7 +18,7 @@ import java.io.File
 class EngineBoundaryTest {
 
     private val forbiddenPackages = Regex(
-        "^\\s*import\\s+com\\.cartrip\\.analyzer\\.(data|cloud|record|export|settings|ui)\\."
+        "^\\s*import\\s+com\\.cartrip\\.analyzer\\.(analysis|data|cloud|record|export|settings|ui)\\."
     )
     private val forbiddenExact = listOf(
         "com.cartrip.analyzer.MainActivity",
