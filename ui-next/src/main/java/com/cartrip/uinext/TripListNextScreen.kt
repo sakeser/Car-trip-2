@@ -1,7 +1,6 @@
 package com.cartrip.uinext
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,12 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -85,26 +82,6 @@ internal fun TripListContent(trips: List<TripSummary>?, onOpenTrip: (Long) -> Un
                     TripRow(trip, onClick = { onOpenTrip(trip.id) })
                 }
             }
-        }
-    }
-}
-
-/** The recency filter chips (24h / 3d / 7d / 30d / All), horizontally scrollable so they never clip. */
-@Composable
-private fun RecencyFilterRow(selected: RecencyWindow, onSelect: (RecencyWindow) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        RecencyWindow.values().forEach { w ->
-            FilterChip(
-                selected = w == selected,
-                onClick = { onSelect(w) },
-                label = { Text(w.label) },
-            )
         }
     }
 }

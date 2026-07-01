@@ -14,55 +14,63 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.TripSummary
-import kotlin.math.roundToInt
 
 /**
- * Health-tab content: the premium **Driving Intelligence** overview over all scorable drives — average
- * Smoothness (style) and Demand/Load (context), plus the Drive-Quality mix. Aggregated purely from the
- * [TripSummary] fields already produced by the engine (`smoothnessScore` / `stressScore` / `driveQuality`),
- * so it needs no vehicle profile — **Efficiency is intentionally omitted here** until a vehicle gateway lands
- * (same reason the trip detail omits it). Band words are derived locally: the UI module owns its own
- * presentation and never imports `analysis.*` (the engine-boundary rule). ASCII source (Cp1252 trap).
+ * Health-tab content: a windowed premium **Driving Intelligence** overview over the scorable drives in the
+ * selected recency window — average Smoothness (style) and Demand/Load (context), a Smoothness trend, and the
+ * Drive-Quality mix. Aggregated purely from the [TripSummary] fields the engine already produces
+ * (`smoothnessScore` / `stressScore` / `driveQuality`) via the pure [drivingHealth] helper — no scoring logic
+ * and no vehicle profile (**Efficiency is intentionally omitted** until a vehicle gateway lands). Band words are
+ * derived locally: the UI module owns its presentation and never imports `analysis.*` (the boundary rule).
+ * ASCII source (Cp1252 trap).
  */
 @Composable
 internal fun InsightsContent(trips: List<TripSummary>?) {
-    when {
-        trips == null -> Centered { CircularProgressIndicator() }
-        else -> {
-            val drives = trips.filter { it.smoothnessScore != null }
-            if (drives.isEmpty()) {
-                Centered {
-                    Text(
-                        "No scorable drives yet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                val avgSmooth = drives.mapNotNull { it.smoothnessScore }.average().roundToInt()
-                val avgDemand = drives.mapNotNull { it.stressScore }.average().roundToInt()
-                val mix = drives.mapNotNull { it.driveQuality }
-                    .groupingBy { it }.eachCount()
-                    .entries.sortedByDescending { it.value }
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    item { OverviewCard(drives.size, avgSmooth, avgDemand) }
-                    if (mix.isNotEmpty()) item { MixCard(mix) }
-                }
+    if (trips == null) {
+        Centered { CircularProgressIndicator() }
+        return
+    }
+
+    var window by remember { mutableStateOf(RecencyWindow.ALL) }
+    val health = remember(trips, window) {
+        trips.inWindow(window, System.currentTimeMillis()).drivingHealth()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        RecencyFilterRow(selected = window, onSelect = { window = it })
+        if (health.driveCount == 0) {
+            Centered {
+                Text(
+                    if (window == RecencyWindow.ALL) "No scorable drives yet"
+                    else "No scorable drives in the last ${window.label}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item { OverviewCard(health) }
+                if (health.smoothnessTrend.size >= 2) item { TrendCard(health.smoothnessTrend) }
+                if (health.mix.isNotEmpty()) item { MixCard(health.mix) }
             }
         }
     }
 }
 
 @Composable
-private fun OverviewCard(driveCount: Int, avgSmooth: Int, avgDemand: Int) {
+private fun OverviewCard(health: DrivingHealthSummary) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(20.dp),
@@ -79,35 +87,43 @@ private fun OverviewCard(driveCount: Int, avgSmooth: Int, avgDemand: Int) {
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
+                val drives = if (health.driveCount == 1) "scorable drive" else "scorable drives"
                 Text(
-                    "$driveCount ${if (driveCount == 1) "scorable drive" else "scorable drives"}",
+                    "${health.driveCount} $drives $MIDDOT ${"%.1f".format(health.totalKm)} km",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             HorizontalDivider()
-            PillarRow("Smoothness", smoothnessBand(avgSmooth)) { ScoreChip(avgSmooth) }
-            PillarRow("Demand", demandBand(avgDemand)) { StressChip(avgDemand) }
+            health.avgSmoothness?.let { PillarRow("Smoothness", smoothnessBand(it)) { ScoreChip(it) } }
+            health.avgDemand?.let { PillarRow("Demand", demandBand(it)) { StressChip(it) } }
         }
     }
 }
 
 @Composable
-private fun MixCard(mix: List<Map.Entry<String, Int>>) {
+private fun TrendCard(trend: List<Int>) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        SmoothnessTrend(values = trend, modifier = Modifier.fillMaxWidth().padding(20.dp))
+    }
+}
+
+@Composable
+private fun MixCard(mix: List<Pair<String, Int>>) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Your drive mix", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            for (entry in mix) {
+            for ((verdict, count) in mix) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(entry.key, style = MaterialTheme.typography.bodyMedium)
+                    Text(verdict, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "${entry.value}",
+                        "$count",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
