@@ -51,7 +51,11 @@ fun TripsNextRoot(onExit: () -> Unit) {
             val nav = rememberNavController()
             NavHost(navController = nav, startDestination = "home") {
                 composable("home") {
-                    HomeShell(onOpenTrip = { id -> nav.navigate("detail/$id") }, onExit = onExit)
+                    HomeShell(
+                        onOpenTrip = { id -> nav.navigate("detail/$id") },
+                        onOpenSection = { key -> nav.navigate("more/$key") },
+                        onExit = onExit,
+                    )
                 }
                 composable(
                     "detail/{id}",
@@ -59,6 +63,13 @@ fun TripsNextRoot(onExit: () -> Unit) {
                 ) { entry ->
                     val id = entry.arguments?.getLong("id") ?: 0L
                     TripDetailNextScreen(tripId = id, onBack = { nav.popBackStack() })
+                }
+                composable(
+                    "more/{key}",
+                    arguments = listOf(navArgument("key") { type = NavType.StringType }),
+                ) { entry ->
+                    val key = entry.arguments?.getString("key") ?: ""
+                    MoreDetailScreen(sectionKey = key, onBack = { nav.popBackStack() })
                 }
             }
         }
@@ -72,7 +83,7 @@ fun TripsNextRoot(onExit: () -> Unit) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeShell(onOpenTrip: (Long) -> Unit, onExit: () -> Unit) {
+private fun HomeShell(onOpenTrip: (Long) -> Unit, onOpenSection: (String) -> Unit, onExit: () -> Unit) {
     val context = LocalContext.current
     val repo = remember { TripRepository.create(context) }
     val trips: List<TripSummary>? by repo.observeTrips().collectAsState(initial = null)
@@ -126,7 +137,7 @@ private fun HomeShell(onOpenTrip: (Long) -> Unit, onExit: () -> Unit) {
                 1 -> TripListContent(trips, onOpenTrip)
                 2 -> InsightsContent(trips)
                 3 -> MapHubScreen(trips, onOpenTrip)
-                else -> MoreScreen()
+                else -> MoreScreen(onOpenSection)
             }
         }
     }

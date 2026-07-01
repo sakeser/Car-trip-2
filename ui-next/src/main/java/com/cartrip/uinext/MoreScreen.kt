@@ -1,5 +1,6 @@
 package com.cartrip.uinext
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,29 +23,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * More tab (spec's 5th tab) — a settings/hub menu. **Rough / read-only placeholder:** it lays out the intended
- * settings architecture (Vehicle & fuel, Units & display, Connected features, Privacy & data, About) as inert
- * rows so the product shape is visible. Each destination lands later behind an engine-api `SettingsStore` /
- * gateway; nothing here writes state yet. ASCII source (Cp1252 trap).
+ * More tab (spec's 5th tab) — a settings/hub menu. Rows drill in to a [MoreDetailScreen] section (nav route
+ * `more/{key}`). "About" has real read-only content today; the rest show their intent + a "Soon" marker until
+ * they land behind an engine-api `SettingsStore` / gateway (nothing here writes state yet). ASCII source.
  */
-private data class MoreItem(val title: String, val subtitle: String)
+internal data class MoreItem(val key: String, val title: String, val subtitle: String, val ready: Boolean = false)
 
-private val MORE_ITEMS = listOf(
-    MoreItem("Vehicle & fuel", "Set your car to estimate fuel and cost"),
-    MoreItem("Units & display", "Distance units, theme, trip icon"),
-    MoreItem("Connected features", "Cloud sync, traffic + map data, integrations"),
-    MoreItem("Privacy & data", "What's stored, export, and delete"),
-    MoreItem("About", "Version, licenses, and credits"),
+internal val MORE_ITEMS = listOf(
+    MoreItem("vehicle", "Vehicle & fuel", "Set your car to estimate fuel and cost"),
+    MoreItem("units", "Units & display", "Distance units, theme, trip icon"),
+    MoreItem("connected", "Connected features", "Cloud sync, traffic + map data, integrations"),
+    MoreItem("privacy", "Privacy & data", "What's stored, export, and delete"),
+    MoreItem("about", "About", "Version, licenses, and credits", ready = true),
 )
 
 @Composable
-internal fun MoreScreen() {
+internal fun MoreScreen(onOpenSection: (String) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(MORE_ITEMS) { item -> MoreRow(item) }
+        items(MORE_ITEMS) { item -> MoreRow(item, onClick = { onOpenSection(item.key) }) }
         item {
             Text(
                 "CarTrip premium preview $MIDDOT :ui-next",
@@ -57,8 +57,8 @@ internal fun MoreScreen() {
 }
 
 @Composable
-private fun MoreRow(item: MoreItem) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+private fun MoreRow(item: MoreItem, onClick: () -> Unit) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -71,11 +71,13 @@ private fun MoreRow(item: MoreItem) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                "Soon",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            if (!item.ready) {
+                Text(
+                    "Soon",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
