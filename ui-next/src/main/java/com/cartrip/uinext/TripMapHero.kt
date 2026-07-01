@@ -2,14 +2,17 @@ package com.cartrip.uinext
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.cartrip.engine.api.RoutePoint
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLng
@@ -19,6 +22,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberMarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 
 /**
@@ -28,7 +32,11 @@ import com.google.maps.android.compose.rememberCameraPositionState
  * [RoutePoint] only (boundary-clean); the map SDK imports are allowed.
  */
 @Composable
-internal fun TripMapHero(route: List<RoutePoint>, modifier: Modifier = Modifier) {
+internal fun TripMapHero(
+    route: List<RoutePoint>,
+    modifier: Modifier = Modifier,
+    selected: RoutePoint? = null,
+) {
     if (route.size < 2) return
     val latLngs = remember(route) { route.map { LatLng(it.lat, it.lon) } }
     val bounds = remember(latLngs) {
@@ -57,6 +65,19 @@ internal fun TripMapHero(route: List<RoutePoint>, modifier: Modifier = Modifier)
         Polyline(points = latLngs, color = RouteBlue, width = 12f, jointType = JointType.ROUND)
         Marker(state = MarkerState(latLngs.first()), title = "Start")
         Marker(state = MarkerState(latLngs.last()), title = "End")
+        // The Trip Line scrubber's position, synced onto the route (a cyan "you are here" dot). maps-compose
+        // 4.4.2 has no rememberUpdatedMarkerState, and a fresh MarkerState(pos) each recomposition does NOT move
+        // the marker, so keep one remembered state and push new positions into it via SideEffect.
+        selected?.let { sel ->
+            val markerState = rememberMarkerState()
+            SideEffect { markerState.position = LatLng(sel.lat, sel.lon) }
+            Marker(
+                state = markerState,
+                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN),
+                anchor = Offset(0.5f, 0.5f),
+                zIndex = 5f,
+            )
+        }
     }
 }
 

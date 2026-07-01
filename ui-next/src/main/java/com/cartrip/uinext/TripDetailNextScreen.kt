@@ -19,10 +19,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,11 +59,36 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
         } else {
+            // Pause page scroll while a finger is on the map so the map pans with ONE finger (matches legacy).
+            // Without this the parent verticalScroll steals single-finger drags and the map needs two fingers.
+            var mapTouched by remember { mutableStateOf(false) }
+            // Trip Line scrubber <-> map sync: the selected track index drives a marker on the route. Reset when
+            // the trip changes. The selected sample only marks the map when it has a usable fix (hasPosition).
+            var selectedIndex by remember(tripId) { mutableStateOf<Int?>(null) }
+            val selectedOnMap = selectedIndex?.let { track.getOrNull(it) }
+                ?.takeIf { it.hasPosition }?.let { RoutePoint(it.lat, it.lon) }
             Column(
-                modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxSize().padding(padding)
+                    .verticalScroll(rememberScrollState(), enabled = !mapTouched),
             ) {
                 if (route.size >= 2) {
-                    TripMapHero(route = route, modifier = Modifier.fillMaxWidth().height(240.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp)
+                            // Watch presses on the Initial pass so scroll re-enables on lift (the map's
+                            // AndroidView would otherwise swallow the release event).
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val e = awaitPointerEvent(PointerEventPass.Initial)
+                                        mapTouched = e.changes.any { it.pressed }
+                                    }
+                                }
+                            },
+                    ) {
+                        TripMapHero(route = route, selected = selectedOnMap, modifier = Modifier.fillMaxSize())
+                    }
                 }
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -92,6 +121,8 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                             TripLine(
                                 track = track,
                                 events = events,
+                                selectedIndex = selectedIndex,
+                                onScrub = { selectedIndex = it },
                                 modifier = Modifier.fillMaxWidth().padding(20.dp),
                             )
                         }

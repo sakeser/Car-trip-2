@@ -1,6 +1,7 @@
 package com.cartrip.uinext
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.TripEvent
@@ -49,11 +51,21 @@ internal fun TripLine(
     track: List<TripTrackPoint>,
     events: List<TripEvent>,
     modifier: Modifier = Modifier,
+    selectedIndex: Int? = null,
+    onScrub: (Int?) -> Unit = {},
 ) {
     if (track.size < 2) return
 
     val maxOffset = max(1, track.last().offsetSeconds - track.first().offsetSeconds)
     val originSec = track.first().offsetSeconds
+    // Map an x pixel (within a plot of [width] px) to the nearest track index by time — the scrubber's hit test.
+    fun indexAtX(px: Float, width: Float): Int {
+        if (width <= 0f) return 0
+        val frac = (px / width).coerceIn(0f, 1f)
+        val targetOffset = originSec + frac * maxOffset
+        return track.indices.minByOrNull { kotlin.math.abs(track[it].offsetSeconds - targetOffset) } ?: 0
+    }
+    val selected = selectedIndex?.let { track.getOrNull(it) }
     val peakSpeed = track.maxOf { it.speedKmh }
     val peakLimit = track.mapNotNull { it.speedLimitKmh }.maxOrNull() ?: 0.0
     // Y scale: headroom above the peak of speed/limit, with a sane floor so a slow crawl still fills the panel.
@@ -61,6 +73,8 @@ internal fun TripLine(
 
     val lineColor = MaterialTheme.colorScheme.primary
     val limitColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val scrubColor = MaterialTheme.colorScheme.onSurface
+    val surfaceColor = MaterialTheme.colorScheme.surface
     val fillTop = lineColor.copy(alpha = 0.22f)
     val fillBottom = lineColor.copy(alpha = 0.02f)
 
@@ -75,15 +89,43 @@ internal fun TripLine(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // While scrubbing, read out the selected point's speed; otherwise the trip's peak.
             Text(
-                "peak ${peakSpeed.toInt()} km/h",
+                if (selected != null) "${selected.speedKmh.toInt()} km/h" else "peak ${peakSpeed.toInt()} km/h",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (selected != null) lineColor else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.SemiBold,
             )
         }
 
-        Canvas(modifier = Modifier.fillMaxWidth().height(132.dp)) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(132.dp)
+                // A tap or horizontal drag scrubs the timeline: on every press/move report the nearest track
+                // index (so the map can mark the same point) and consume it so the parent scroll doesn't fight
+                // the scrub. Reading size.width at gesture time keeps it correct once laid out.
+                .pointerInput(track) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            onScrub(indexAtX(down.position.x, size.width.toFloat()))
+                            down.consume()
+                            var pressed = true
+                            while (pressed) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change == null || !change.pressed) {
+                                    pressed = false
+                                } else {
+                                    onScrub(indexAtX(change.position.x, size.width.toFloat()))
+                                    change.consume()
+                                }
+                            }
+                        }
+                    }
+                },
+        ) {
             val topPad = 14f            // room for the event ticks along the top
             val plotH = size.height - topPad
             val w = size.width
@@ -134,6 +176,20 @@ internal fun TripLine(
                     strokeWidth = 1.5f,
                 )
                 drawCircle(color = color, radius = 4f, center = Offset(ex, topPad - 2f))
+            }
+
+            // Scrubber: a vertical cursor + a ringed dot on the curve at the selected point (drawn on top).
+            if (selected != null) {
+                val sx = x(selected.offsetSeconds).coerceIn(0f, w)
+                val sy = y(selected.speedKmh)
+                drawLine(
+                    color = scrubColor.copy(alpha = 0.55f),
+                    start = Offset(sx, topPad),
+                    end = Offset(sx, topPad + plotH),
+                    strokeWidth = 2f,
+                )
+                drawCircle(color = lineColor, radius = 6f, center = Offset(sx, sy))
+                drawCircle(color = surfaceColor, radius = 3f, center = Offset(sx, sy))
             }
         }
 

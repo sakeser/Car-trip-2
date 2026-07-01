@@ -113,6 +113,8 @@ internal fun List<AnalysisPointEntity>.toTrack(): List<TripTrackPoint> {
             offsetSeconds = (((p.t - origin) / 1000L).toInt()).coerceAtLeast(0),
             speedKmh = p.speedKmh,
             speedLimitKmh = if (p.speedLimitKmh.isFinite() && p.speedLimitKmh > 0.0) p.speedLimitKmh else null,
+            lat = p.lat,
+            lon = p.lon,
         )
     }
 }

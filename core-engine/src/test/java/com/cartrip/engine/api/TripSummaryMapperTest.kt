@@ -6,8 +6,10 @@ import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.DriveEventEntity
 import com.cartrip.analyzer.data.TripEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -140,6 +142,22 @@ class TripSummaryMapperTest {
         assertNull(track[0].speedLimitKmh)
         assertEquals(55.0, track[1].speedKmh, 0.0)
         assertNull(track[1].speedLimitKmh)
+    }
+
+    @Test fun toTrack_carries_position_and_flags_invalid_fixes() {
+        val base = 262_520_731L
+        fun pt(tMs: Long, lat: Double, lon: Double) =
+            AnalysisPointEntity(tripId = 1L, t = tMs, lat = lat, lon = lon, speedKmh = 10.0, longAccel = 0.0, latAccel = 0.0)
+        val track = listOf(
+            pt(base, 43.76, -79.41),      // valid fix
+            pt(base + 1_000L, 0.0, 0.0),  // gap-fill / cold fix -> hasPosition false, but KEPT for the timeline
+        ).toTrack()
+
+        assertEquals("invalid-coord samples are kept on the speed timeline", 2, track.size)
+        assertEquals(43.76, track[0].lat, 0.0)
+        assertEquals(-79.41, track[0].lon, 0.0)
+        assertTrue(track[0].hasPosition)
+        assertFalse("a (0,0) fix has no usable position for a map marker", track[1].hasPosition)
     }
 
     @Test fun toEvents_folds_raw_types_and_offsets_from_start() {
