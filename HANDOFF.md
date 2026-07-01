@@ -1,7 +1,12 @@
 # Car Trip Analyzer — Comprehensive Handoff
 
-_Last updated: 2026-06-29 · Source **3.36 (build 147), schema v22** (Rev CW + phase 2: **Driver Load / "Drive
-readiness"** — `analysis/DriverLoad.kt`, a pure recency-weighted leaky integrator of stress-weighted driving
+_Last updated: 2026-06-30 · Source **3.37 (build 148), schema v22** · **Rev CX (branch `ux-premium-modular-v1`):
+Driving Intelligence three-pillar consolidation** — new pure `analysis/DrivingIntelligence.kt` (Smoothness /
+Demand-Load / Efficiency + a 2×2 style×demand "Drive Quality" conditional headline; NO blended composite),
+`TripScores` moved `ui`→`analysis` (colour → `ui/ScoreColors`), surfaced in legacy Trip Detail / Insights /
+AI export; Safety/Comfort/Pace/Stress/Fuel kept as drill-downs. Build green, +8 tests; **on-device verify owed**.
+Source-of-truth `DRIVING_INTELLIGENCE_SCORING.md`; Phases C–E tabled. · Prior: **3.36 (build 147)** (Rev CW +
+phase 2: **Driver Load / "Drive readiness"** — `analysis/DriverLoad.kt`, a pure recency-weighted leaky integrator of stress-weighted driving
 time (TAU 28.8 h) that builds with recent stressful driving + decays with rest, DB-replay-calibrated
 (`SATURATION_K=1.0`), surfaced as an Insights card with load/readiness + a one-line read + a 24 h recovery
 curve + a not-a-medical-assessment disclaimer; **device-verified** live load 67/Elevated decaying from the
@@ -1285,3 +1290,12 @@ or capped (§8), what to do next + the owner backlog (§9), how to build the mar
 commercialization/Play-Store roadmap (§12), and **what shipped + the hard-won lessons of the latest
 session, the detailed backlog status, the Places cost analysis, and the launch roadmap (§13)**.
 Also see `ROADMAP_NEW.md` for the owner's newest item list with per-item assessment._
+
+_The Driving-Health **score taxonomy** + the science-backed **Style / Demand / Efficiency** metric model
+(why Safety/Comfort/Pace/Stress/Fuel collapse to ~2 driver axes + 1 outcome, the evidence-based metric menu,
+the "don't average style with demand" composite guardrail, and the ACWR-ratio caveat) live in
+`ADVISORY_ASSESSMENT.md` §1 / §1.1, with a direction entry in `ROADMAP_NEW.md` → "Metric consolidation."
+The **scoring source-of-truth** (full product + UI + phased-engineering spec, incl. the `Rev CX` UI-only
+first-rev ticket) is `DRIVING_INTELLIGENCE_SCORING.md`. Guardrail for any future agent: separate driver
+**style** from road **demand**, keep fuel/cost as an **outcome**, and do NOT build a raw composite that
+blends all three without preserving that explanation._

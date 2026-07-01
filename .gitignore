@@ -9,3 +9,6 @@
 .cxx
 local.properties
 /app/build
+/core-engine/build
+# Safety net for future modules (the OneDrive relocate workaround moves output out of the tree anyway).
+**/build/

@@ -207,6 +207,129 @@ foreground-only default, privacy policy, Data Safety), monetization infra (repla
 account/backend storing only compact summaries; Play Billing), and the premium dashboard (stress/drawdown
 trends — built; Places destination analytics; cohort comparisons; AI coaching).
 
+## Settings architecture — graduate from scattered options to a proper Settings system (premium redesign, UX item)
+**Status: future redesign requirement (owner-requested 2026-06-29). NOT scheduled for implementation yet — this is
+product/navigation/settings-architecture direction, not a task. Belongs to the premium-redesign track (see
+`REDESIGN_PHASE1.md` and the `ux-premium-modular-v1` branch), and should land only after the engine extraction +
+new UI shell, not before.**
+
+**Problem.** Settings/preferences are currently scattered with no single home: the Home **Options sheet** (`Tune` icon
+→ Guide / Diagnostics / Vehicle & fuel / Auto-record + an inline auto-record toggle), plus separate Vehicle, Auto-record,
+Diagnostics, Guide screens, plus 8+ independent pref stores (`UiPrefs` — satellite map mode, "your trip" icon, event
+threshold; `AutoRecordPrefs`; `GnssLoggingPrefs`; `settings/VehiclePrefs`; `cloud/CloudPrefs`; `cloud/PlacesPrefs`;
+plus state in `GeoNamer`/`TripViewModel`). A user has no clear place to understand or customize app behavior.
+
+**Direction.** As the app becomes a premium/local-first driving-intelligence product, the redesign should add a proper
+top-level **Settings** area (the "More/Settings" tab in the UX build spec). Proposed sections:
+1. **Recording** — manual vs auto-record; foreground-only vs background hands-free; wireless-charging requirement;
+   Bluetooth/car pairing; haptics; battery/data retention.
+2. **Vehicle & Fuel** — vehicle profile; fuel price; auto-update gas price; calibration. *(backed by `settings/VehiclePrefs`)*
+3. **Maps & Display** — default map mode (satellite); "your trip" icon; event marker/filter prefs; units (if added). *(`UiPrefs`)*
+4. **Insights** — stress trend smoothing; event sensitivity / g-force threshold; show/hide **beta** metrics; Places
+   naming toggle (only if billing/API enabled).
+5. **Privacy & Data** — exported-file cleanup; raw GNSS logging; delete all data; data retention; AI-export disclosure;
+   cloud/Sheets sync controls. *(`GnssLoggingPrefs`, export retention, `CloudPrefs`)*
+6. **Premium / Account (later)** — subscription status; enabled premium features; cloud backup; billing/account
+   controls. *(driven by the `Entitlements` seam in `:core-engine`; wires up when Play Billing lands)*
+
+**Notes / boundaries.**
+- The current Home **Options sheet stays as the legacy-app mechanism** — do not rip it out. The redesigned premium app
+  graduates to the proper Settings screen/system; legacy `ui/` remains the working oracle during extraction.
+- Natural backend consolidation point: the `com.cartrip.analyzer.settings` package (created in Phase 1A) can grow into
+  a coherent settings layer that the scattered `*Prefs` migrate behind, with a Settings UI on top.
+- Sequencing: depends on the new UI shell; the beta-metric toggles (4) also depend on the analytics-validation track
+  (so users can hide not-yet-trustworthy scores). Premium/Account (6) depends on the Entitlements→Play Billing swap.
+- Keep it honest and local-first: privacy/data controls (5) are a launch-credibility headline, pairs with CO encryption.
+
+## ⭐ Metric consolidation — Style / Demand / Efficiency (science-backed taxonomy)
+**Status: direction (owner-requested 2026-06-30). NOT scheduled — product/analytics direction; validate by
+DB-replay before any score change. The analytical core lives in [ADVISORY_ASSESSMENT.md](ADVISORY_ASSESSMENT.md)
+§1.1; the fuller product + UI + phased-engineering spec is [DRIVING_INTELLIGENCE_SCORING.md](DRIVING_INTELLIGENCE_SCORING.md)
+(owner-supplied 2026-06-30, claims verified vs code) — that doc is the scoring source-of-truth.**
+
+The five scores (Safety / Comfort / Pace / Stress / Fuel) are **~2 driver axes + 1 outcome, not five
+independent dimensions** — Safety + Comfort are one accelerometer signal at two magnitudes, Pace straddles
+aggression + efficiency, Stress is about the road, Fuel is an outcome. The science-backed reorganization
+(Sagberg 2015 style-vs-context; ISO 2631 ride comfort; Jiménez VSP / RPA / PKE eco-driving; the ACWR-pitfall
+literature):
+- **Smoothness (Style — you control it)** ← Safety (the spikes) + Comfort (the ripple).
+- **Demand / Load (Context — road-imposed)** ← Stress + Driver-Load; **partly shipped** as `StopAndGo`.
+- **Efficiency (Outcome)** ← Fuel + Pace (RPA / PKE / VSP family).
+
+**Guardrails for the planned "Overall Driving Health" composite (ADVISORY §1):**
+- **Never average a style score with a demand score** into one number — it re-creates the trip-1189 confound
+  (a hard-but-smooth commute reads "bad"). Instead report style **conditioned on** demand ("smooth *for how
+  demanding this drive was*").
+- **Replace the ACWR ratio** (acute/chronic is mathematically coupled → spurious correlations) with a
+  **personal-baseline z-score / EWMA** of load — this also removes the awkward ≥14-day suppression gate.
+- **Don't call a sensor-derived metric "mental/cognitive load"** — phone accel+GPS can measure *task demand*,
+  not human-factors workload (NASA-TLX / DRT). Keep the wellness framing + medical disclaimer.
+
+Evidence-based metric menu (RPA / PKE / VSP / RMS-jerk / ISO-2631 RMS-accel / harsh-rate / stop-and-go
+density / speed-CV) with per-metric data feasibility in the advisory. All pure / DB-replayable — gate behind
+the §7 parameter-sweep + an explicit recalibration before touching owner-calibrated Stress / DriverLoad.
+
+### Rev CX — three-pillar taxonomy, UI/model-only first rev — ✅ DONE (v3.37/build 148, 2026-06-30; on-device verify owed)
+Shipped the actionable slice (DRIVING_INTELLIGENCE_SCORING.md §9 ticket): pure `analysis/DrivingIntelligence.kt`
+rolled up from **existing** aggregates (no new formulas / thresholds / schema) → a "Drive Quality" headline +
+three pillar tiles on Trip Detail (Smoothness / Demand-Load / Efficiency), Insights re-sectioned under the three
+pillars (+ a top summary card), a "Driving Intelligence" block in the AI export, and the 2×2 trip label
+(easy-smooth / smooth-under-pressure / rough-on-easy-road / demanding-and-rough). Safety/Comfort/Pace/Stress/Fuel
+kept as drill-downs. Guardrails honoured: conditional headline (NO blended composite); Demand is context not
+blame; medical/fatigue disclaimer retained. Also moved `TripScores` `ui`→`core-engine/analysis` (queued slice).
+Build green, all unit tests pass (+8). **Left: on-device S25 verification; then adopt in `:ui-next`; Phases C–E
+(new engine aggregates / z-score baseline / premium) still tabled behind DB-replay.** See `REV_HISTORY.md` Rev CX.
+
+**Tabled for further review/assessment (do NOT start until validated):** the rest of DRIVING_INTELLIGENCE_SCORING.md
+Phases C–E — new persisted aggregates (`speedCv`, `stopGoDensity`, `rpa`, `pke`, `vspApprox`; schema add),
+the personal-baseline / z-score model that supplements ACWR, and the premium-intelligence / backend-cohort
+layer. Each is gated on DB-replay calibration (incl. the trip-1189 anchor) + the ADVISORY §7 sweep.
+
+_Note: the companion `SCORING_MODEL_ROADMAP_PATCH.md` (owner-supplied, written without repo access) proposed
+inserting the three-pillar model into this roadmap / HANDOFF / README. Those edits were **reconciled into this
+existing section rather than applied verbatim** (the patch predates it and would have duplicated content); its
+one net-new item, the Rev CX ticket, is captured above._
+
+## Future concept - offline/map intelligence layer
+**Status: concept backlog (owner-requested 2026-06-30). NOT scheduled.** This is a high-level product /
+analytics direction for later map features. It builds on an important engine advantage that already exists:
+trip analysis is post-drive/offline, so the app can use the whole trip at once. `TripAnalyzer` already uses a
+forward Kalman filter plus a backward RTS smoother for speed/acceleration, which lets completed-trip analysis
+be less noisy and less laggy than real-time-only tracking. Future map intelligence should lean into that:
+prefer retrospective, DB-replayable detectors over live-only guesses, and make every threshold user-visible
+or testable before it affects scoring.
+
+Candidate features:
+- **Speeding heatmap with customizable threshold.** Use stored `AnalysisPointEntity.speedKmh` +
+  `speedLimitKmh` to draw route segments where speed was over the posted limit. Let the user choose the
+  threshold, e.g. any overage, >5 km/h, >10 km/h, >15 km/h, or a severity-weighted view. This should be a
+  review/exploration layer first, not a scoring change. Gate on speed-limit coverage and explain when limits
+  are unknown.
+- **Rough / bump heatmap.** Aggregate pothole, rough-road, harsh-stop, and `bumpyScore`/rough-stretch signals
+  by small spatial cells or route segments. Use recurrence across trips to separate "this road is rough" from
+  "one noisy phone jolt." Include a sensitivity slider (g-force / roughness floor) and keep it distinct from
+  driver smoothness, since rough road is context.
+- **Clickable route history on the Google map.** Make map polylines/selectable route segments interactive:
+  tapping a route opens that trip directly; tapping an overlapping route cluster opens a bottom sheet/list of
+  matching trips, then the user can drill into one trip. Implementation sketch: index simplified route cells
+  or polyline segments, hit-test the tap against nearby segments, group matches by trip, and preserve the
+  current frozen-map/list behavior until this is proven.
+- **Parked-car / large-parking-lot detection.** Detect a likely parking moment from the end of a drive using
+  a stationary GPS cluster, auto-stop timing, charger unplug / car Bluetooth disconnect when available, then
+  a transition to walking away from the cluster. Store a local "car pin" with confidence and clear it when the
+  next drive starts or the user returns. In a large lot, improve the pin by using the centroid of the last
+  several stationary fixes before the walk, not the first post-stop point; optionally confirm with Places /
+  venue context later. Keep battery bounded with a short arrival/return window rather than continuous
+  tracking, and treat this as local/private data.
+
+Sequencing notes:
+- Start with read-only overlays and exports; do not feed heatmap thresholds into Stress/DriverLoad until they
+  are validated by DB replay.
+- Real-trip calibration matters: synthetic sweeps can prove the method, but heatmaps and parked-car detection
+  need on-device traces from real lots, commutes, and rough roads.
+- These features fit the future Settings/Privacy area: threshold sliders, map layer toggles, connected-feature
+  disclosure if Places is used, and a one-tap "clear parked-car pin."
+
 ## Cross-cutting principle (owner): always look for novel, innovative ways to present and add value/analysis.
 Examples to fold in opportunistically: AI coaching from the CN export; stress/drawdown trends over time;
 "your worst-traffic times/routes"; per-destination analytics once POI naming (CM) lands.

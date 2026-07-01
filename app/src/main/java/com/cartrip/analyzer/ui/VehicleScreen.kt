@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.cloud.GasPrice
+import com.cartrip.analyzer.settings.VehiclePrefs
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import java.util.Locale

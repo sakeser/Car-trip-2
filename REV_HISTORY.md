@@ -4,6 +4,54 @@ This file is the working handoff for the main branch. The UX redesign worktree w
 
 For the full Claude Code continuation brief, including UX worktree notes, GNSS/raw-measurement findings, and a prioritized next-step backlog, see `HANDOFF.md` (authoritative; supersedes `CLAUDE_CODE_HANDOFF.md`).
 
+## Rev CX (2026-06-30, v3.37/build 148) — Driving Intelligence: three-pillar scoring consolidation
+
+Owner-directed product consolidation (branch `ux-premium-modular-v1`): move the public read from five
+overlapping scores (Safety/Comfort/Pace/Stress/Fuel) to the three-pillar **Driving Intelligence** model —
+**Smoothness** (driver style), **Demand / Load** (context), **Efficiency** (fuel/cost outcome) — with a
+**conditional "Drive Quality" headline** instead of a blended average. Spec: `DRIVING_INTELLIGENCE_SCORING.md`
+/ ADVISORY §1.1. Built + **all unit tests green** (3-module relocate build, `:app:assembleDebug` OK, +8 tests:
+7 `DrivingIntelligence` + 1 AI-export; `TripScoresTest` moved engine-side). No schema change, no detector/
+threshold change — pure roll-up of existing aggregates. **On-device verify still owed (needs the owner's S25).**
+
+- **`analysis/DrivingIntelligence.kt` (new, pure, +7 tests):** `from(trip, vehicle, personalAvgL100?)` rolls up
+  Smoothness = 0.55·Safety + 0.45·Comfort, Demand = the calibrated Stress v2 score, Efficiency = fuel economy
+  vs the vehicle rating / the driver's own norm. Classifies each trip on a **2×2 style×demand grid** →
+  `Quadrant` {EASY_SMOOTH, SMOOTH_UNDER_PRESSURE, ROUGH_ON_EASY_ROAD, DEMANDING_AND_ROUGH}; the headline is the
+  quadrant phrase (e.g. "Smooth for a demanding drive" — the trip-1189 case, tested). Each pillar carries a
+  0..100 score, a band word, and a plain-language read. Never averages style with demand.
+- **`TripScores` moved `ui` → `core-engine/analysis` (the queued slice):** pure model now engine-side mirroring
+  `StressScore`; the green=good `color()` split into new `ui/ScoreColors`; callers re-imported; `TripScoresTest`
+  moved to the engine test package.
+- **Trip Detail (`ui/TripDetailScreen.kt`):** new `DrivingIntelligenceHero` — "Drive Quality" headline +
+  coaching line, three pillar tiles (Smoothness/Demand/Efficiency, green=good vs green=calm colours) + per-pillar
+  reads; the old Safety/Comfort/Pace/Stress values demoted to one subordinate drill-down line (middle-dot built
+  via `0x00B7.toChar()` — Cp1252 source trap).
+- **Insights (`ui/InsightsScreen.kt`):** a top `DrivingIntelligenceSummaryCard` (window avg pillars + dominant
+  trip-mix) then every existing card **regrouped under three pillar section headers** — Smoothness (Drive score,
+  score trends, trouble spots), Demand & Load (stress trend, driver load, traffic, when-you-drive), Efficiency
+  (fuel & cost). No card logic changed, only order + headers.
+- **AI export (`ui/AiInsightsExport.kt`):** coaching prompt rewritten around the three pillars (separate style
+  from demand); new "Driving Intelligence (style vs demand vs outcome)" section (avg pillars + style×demand trip
+  mix) + per-drive verdict tag on the recent-drives list. +1 test.
+- **`:ui-next` adoption (premium module):** `DrivingIntelligence.from` made vehicle-optional (efficiency null
+  without a profile) so the pure engine-api mapper can compute it; `TripSummary` gained `smoothnessScore` /
+  `smoothnessBand` / `driveQuality` (the headline) — **Demand = the existing `stressScore`, Efficiency deferred**
+  until a vehicle gateway. `TripDetailNextScreen` now shows a Driving Intelligence hero (Drive Quality headline +
+  Smoothness & Demand pillar rows) via a new green=good `ScoreChip`; `EngineBoundaryTest` still passes (no legacy
+  imports), `TripSummaryMapperTest` extended. Row/list unchanged this pass.
+- **On-device PASS (S25, 2026-07-01, v3.38/build 149):** Trip Detail renders the Driving Intelligence hero
+  correctly ("Easy, smooth drive" + Smoothness 92 / Demand 23 / Efficiency 80 tiles + per-pillar reads + the
+  demoted "Safety 88 · Comfort 96 · Pace 100 · Stress 23 (Calm)" drill-down line, middle-dots clean = no Cp1252
+  mojibake); Insights shows the Driving Intelligence summary card (Smoothness 88 / Demand 42 / Efficiency 80,
+  "25 trips … mostly easy & smooth") atop the pillar section headers. **Polish fix (v3.38):** the pillar-read
+  label column wrapped "Smoothness:" -> widened to 104dp + softWrap=false, verified fixed on-device.
+- **`:ui-next` list row (v3.39/build 150):** the premium trip row now shows the **Drive Quality verdict**
+  (`TripSummary.driveQuality`, which already encodes style x demand) as a third line + the **Smoothness**
+  number as a green=good `ScoreChip` (swapped in for the old stress chip — demand is folded into the verdict).
+  **On-device PASS (S25):** rows read e.g. "Easy, smooth drive / 92" and the 45.8 km commute "Smooth for a
+  demanding drive / 81" (the SMOOTH_UNDER_PRESSURE quadrant). `:ui-next:testDebugUnitTest` (incl. EngineBoundaryTest) green.
+
 ## Rev CW (2026-06-29, v3.35/build 146) — Driver Load / "Drive readiness" model (marquee R&D, v1)
 
 The owner's "drive stress built up over time" concept: a single 0-100 number that **builds with recent

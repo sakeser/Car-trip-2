@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-files-path name="trips" path="trips/" />
+    <!-- Diagnostics "Export trip tracks (CSV)" writes .../files/sweep/all_tracks.csv (SweepTrackExport);
+         without this root FileProvider.getUriForFile throws when sharing it. -->
+    <external-files-path name="sweep" path="sweep/" />
 </paths>

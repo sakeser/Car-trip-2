@@ -3,7 +3,6 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
 }
 
 val localProperties = Properties().apply {
@@ -21,8 +20,8 @@ android {
         applicationId = "com.cartrip.analyzer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 147
-        versionName = "3.36"
+        versionCode = 152
+        versionName = "3.41"
         vectorDrawables { useSupportLibrary = true }
         manifestPlaceholders["MAPS_API_KEY"] =
             localProperties.getProperty("MAPS_API_KEY")
@@ -60,14 +59,12 @@ android {
     }
 }
 
-// Export the Room schema as JSON so migrations are validated at compile time and future versions have a
-// captured baseline for MigrationTestHelper tests. (Retroactive 1->20 schemas were never captured — this
-// starts the record at the current version forward.)
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
+    // The engine module: hosts analysis/data/cloud/record/export/settings (moved in Phase 1B).
+    implementation(project(":core-engine"))
+    // The new premium UI module (Phase 1 walking skeleton), hosted behind a debug entry for now.
+    implementation(project(":ui-next"))
+
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
 
@@ -84,18 +81,13 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-
     implementation("com.google.maps.android:maps-compose:4.4.2")
     implementation("com.google.android.gms:play-services-maps:20.0.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
-    // Google sign-in (for Sheets/Drive auth) + HTTP + Excel writing
+    // Google sign-in (for Sheets/Drive auth) — still used directly by app/ui.
+    // (okhttp + fastexcel moved to :core-engine with cloud/export in Phase 1B.)
     implementation("com.google.android.gms:play-services-auth:21.2.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.dhatim:fastexcel:0.18.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

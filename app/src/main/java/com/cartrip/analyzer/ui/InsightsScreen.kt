@@ -68,9 +68,12 @@ import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.analysis.DriverLoad
+import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TripKind
+import com.cartrip.analyzer.analysis.TripScores
+import com.cartrip.analyzer.settings.VehiclePrefs
 import com.cartrip.analyzer.data.TripEntity
 import java.util.Locale
 import kotlin.math.max
@@ -154,6 +157,14 @@ fun InsightsScreen(
         ) {
             item { WindowSelector(window) { window = it } }
 
+            // Rev CX — Driving Intelligence overview, then Insights grouped under the three pillars
+            // (Smoothness = style, Demand/Load = context, Efficiency = outcome). Existing cards are kept but
+            // regrouped so the older Safety/Comfort/Pace/Stress/Fuel families read as drill-downs, not peers.
+            item { DrivingIntelligenceSummaryCard(windowTrips, vehicle, window.label) }
+
+            // ===== Smoothness — your driving style =====
+            item { SectionTitle("Smoothness - your driving style") }
+
             item { DriveScoreHero(averages, windowTrips.size, window.label) }
 
             // Compact "this window vs previous" delta strip (the re-imagined Health metrics).
@@ -161,48 +172,12 @@ fun InsightsScreen(
                 item { WindowDeltaStrip(averages, prevAverages, window.label) }
             }
 
-            // Drive Stress Score: km-normalized average + a smoothed trend showing how it's evolved.
-            run {
-                val series = StressScore.series(windowTrips)
-                if (series.isNotEmpty()) {
-                    val kmAvg = StressScore.kmWeightedAvg(windowTrips) ?: series.average().roundToInt()
-                    val smoothed = StressScore.trailingAvg(series, STRESS_SMOOTH_TRIPS)
-                    val prevKmAvg = StressScore.kmWeightedAvg(prevWindowTrips)
-                    item { StressTrendCard(kmAvg, prevKmAvg, smoothed, series.size, window.label) }
-                }
+            item {
+                SectionTitle("Score trends")
+                ScoreTrendsCard(wScores, window.label)
             }
 
-            // Driver Load / readiness: a recency-weighted "right now" state over ALL trips (not the window),
-            // since load is cumulative + self-attenuating. Shown only when there's recent driving load.
-            run {
-                val load = DriverLoad.state(completed, now)
-                if (load.drivesCounted > 0) {
-                    item { DriverLoadCard(load, now) }
-                }
-            }
-
-            // Fuel & cost — directly below the drive score.
-            run {
-                val fuel = FuelInsights.summarize(windowTrips, vehicle)
-                if (fuel.hasData) {
-                    // Spend buckets are fixed recency windows over ALL drives, not the selected window.
-                    val spend = FuelInsights.spend(completed, vehicle, now)
-                    item {
-                        SectionTitle("Fuel & cost")
-                        FuelSection(fuel, spend, vehicle)
-                    }
-                }
-            }
-
-            run {
-                // Net minutes ahead of typical traffic over the last 30 days (headline, window-independent).
-                val minutesAheadLast30 = completed
-                    .filter { it.startTime >= now - thirtyDays && it.googleEtaTrafficS > 0 && it.durationS > 0 && !TripKind.isLikelyNonDrive(it) }
-                    .sumOf { (it.googleEtaTrafficS - it.durationS) / 60.0 }
-                item { GoogleVsYouHero(windowTrips, minutesAheadLast30) }
-            }
-
-            // Trouble spots — directly below the traffic comparison.
+            // Trouble spots — recurring hard-maneuver spots (a driving-style / control detail).
             item {
                 SectionTitle("Trouble spots")
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -256,11 +231,51 @@ fun InsightsScreen(
                 }
             }
 
+            // ===== Demand & Load — how hard the drives were (context, not the driver's fault) =====
+            item { SectionTitle("Demand & Load - how hard the drives were") }
+
+            // Drive Stress Score: km-normalized average + a smoothed trend showing how it's evolved.
+            run {
+                val series = StressScore.series(windowTrips)
+                if (series.isNotEmpty()) {
+                    val kmAvg = StressScore.kmWeightedAvg(windowTrips) ?: series.average().roundToInt()
+                    val smoothed = StressScore.trailingAvg(series, STRESS_SMOOTH_TRIPS)
+                    val prevKmAvg = StressScore.kmWeightedAvg(prevWindowTrips)
+                    item { StressTrendCard(kmAvg, prevKmAvg, smoothed, series.size, window.label) }
+                }
+            }
+
+            // Driver Load / readiness: a recency-weighted "right now" state over ALL trips (not the window),
+            // since load is cumulative + self-attenuating. Shown only when there's recent driving load.
+            run {
+                val load = DriverLoad.state(completed, now)
+                if (load.drivesCounted > 0) {
+                    item { DriverLoadCard(load, now) }
+                }
+            }
+
+            // Traffic / congestion — how your drives compared to Google's typical + free-flow times.
+            run {
+                // Net minutes ahead of typical traffic over the last 30 days (headline, window-independent).
+                val minutesAheadLast30 = completed
+                    .filter { it.startTime >= now - thirtyDays && it.googleEtaTrafficS > 0 && it.durationS > 0 && !TripKind.isLikelyNonDrive(it) }
+                    .sumOf { (it.googleEtaTrafficS - it.durationS) / 60.0 }
+                item { GoogleVsYouHero(windowTrips, minutesAheadLast30) }
+            }
+
             item { WhenYouDriveCard(windowTrips) }
 
-            item {
-                SectionTitle("Score trends")
-                ScoreTrendsCard(wScores, window.label)
+            // ===== Efficiency — fuel & cost outcome =====
+            run {
+                val fuel = FuelInsights.summarize(windowTrips, vehicle)
+                if (fuel.hasData) {
+                    // Spend buckets are fixed recency windows over ALL drives, not the selected window.
+                    val spend = FuelInsights.spend(completed, vehicle, now)
+                    item {
+                        SectionTitle("Efficiency - fuel & cost")
+                        FuelSection(fuel, spend, vehicle)
+                    }
+                }
             }
 
             item {
@@ -604,7 +619,7 @@ private fun DeltaCell(label: String, delta: Int?, modifier: Modifier = Modifier)
 
 @Composable
 private fun DriveScoreHero(averages: ScoreAverages, tripCount: Int, windowLabel: String) {
-    val driveColor = TripScores.color(averages.drive)
+    val driveColor = ScoreColors.color(averages.drive)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -841,7 +856,7 @@ private fun WhenYouDriveCard(trips: List<TripEntity>) {
                         b.avgSafety?.toString() ?: "-",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = b.avgSafety?.let { TripScores.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = b.avgSafety?.let { ScoreColors.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.End,
                         modifier = Modifier.width(34.dp)
                     )
@@ -969,6 +984,84 @@ private fun SectionTitle(text: String) {
     )
 }
 
+/**
+ * Rev CX — the Driving Intelligence overview at the top of Insights: the window's average Smoothness (style),
+ * Demand/Load (context) and Efficiency (outcome), plus the dominant style x demand trip mix. The three older
+ * score families are grouped as drill-downs under the pillar section headers below this card.
+ */
+@Composable
+private fun DrivingIntelligenceSummaryCard(
+    trips: List<TripEntity>,
+    vehicle: FuelEstimator.Vehicle,
+    windowLabel: String
+) {
+    val fuel = FuelInsights.summarize(trips, vehicle)
+    val avgL100 = if (fuel.hasData) fuel.avgL100 else null
+    val dis = trips.mapNotNull { DrivingIntelligence.from(it, vehicle, avgL100) }
+    if (dis.isEmpty()) return
+    fun avg(xs: List<Int>) = if (xs.isEmpty()) 0 else xs.average().roundToInt()
+    val smooth = avg(dis.map { it.smoothness.score })
+    val demand = avg(dis.map { it.demand.score })
+    val effList = dis.mapNotNull { it.efficiency?.score }
+    val eff = if (effList.isEmpty()) null else avg(effList)
+    val dominant = dis.groupingBy { it.quadrant }.eachCount().maxByOrNull { it.value }!!.key
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column {
+                Text(
+                    "DRIVING INTELLIGENCE",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "How you drove, how hard it was, what it cost",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${dis.size} trips - $windowLabel - mostly ${quadName(dominant)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DiPillar("Smoothness", smooth, ScoreColors.color(smooth), "style", Modifier.weight(1f))
+                DiPillar("Demand", demand, StressColors.color(demand), "context", Modifier.weight(1f))
+                DiPillar("Efficiency", eff, eff?.let { ScoreColors.color(it) }, "outcome", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiPillar(label: String, score: Int?, color: Color?, sub: String, modifier: Modifier) {
+    val c = color ?: MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(c.copy(alpha = 0.10f))
+            .padding(vertical = 10.dp, horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(score?.toString() ?: "-", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = c)
+        Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun quadName(q: DrivingIntelligence.Quadrant): String = when (q) {
+    DrivingIntelligence.Quadrant.EASY_SMOOTH -> "easy & smooth"
+    DrivingIntelligence.Quadrant.SMOOTH_UNDER_PRESSURE -> "smooth under pressure"
+    DrivingIntelligence.Quadrant.ROUGH_ON_EASY_ROAD -> "rough on easy roads"
+    DrivingIntelligence.Quadrant.DEMANDING_AND_ROUGH -> "demanding & rough"
+}
+
 @Composable
 private fun FuelSection(s: FuelInsights.Summary, spend: FuelInsights.Spend, v: FuelEstimator.Vehicle) {
     Card(
@@ -1087,7 +1180,7 @@ private fun TroubleSpotsList(hotspots: List<EventHotspots.Hotspot>) {
                             String.format(Locale.US, "%.2fg", peakG),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = TripScores.color(((1.0 - (peakG / 0.6).coerceIn(0.0, 1.0)) * 100).roundToInt())
+                            color = ScoreColors.color(((1.0 - (peakG / 0.6).coerceIn(0.0, 1.0)) * 100).roundToInt())
                         )
                         Text(
                             "peak",

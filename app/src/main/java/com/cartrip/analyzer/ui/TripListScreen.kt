@@ -64,6 +64,7 @@ import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripKind
+import com.cartrip.analyzer.analysis.TripScores
 import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.TripEntity
 
@@ -672,7 +673,7 @@ private fun Modifier.drawVerticalScrollbar(state: LazyListState, color: Color): 
 
 @Composable
 private fun MiniScore(value: Int?) {
-    val color = value?.let { TripScores.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val color = value?.let { ScoreColors.color(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
     Box(modifier = Modifier.width(SCORE_COL_WIDTH), contentAlignment = Alignment.Center) {
         Text(
             value?.toString() ?: "-",

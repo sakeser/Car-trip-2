@@ -36,6 +36,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.cartrip.analyzer.record.RecordingService
 import com.cartrip.analyzer.record.RecordingState
+import com.cartrip.uinext.TripsNextRoot
 import com.cartrip.analyzer.ui.CarTripTheme
 import com.cartrip.analyzer.ui.DebugScreen
 import com.cartrip.analyzer.ui.GuideScreen
@@ -187,7 +188,13 @@ private fun AppRoot() {
             AutoRecordScreen(onBack = { nav.popBackStack() })
         }
         composable("debug") {
-            DebugScreen(onBack = { nav.popBackStack() })
+            DebugScreen(
+                onBack = { nav.popBackStack() },
+                onOpenUiNext = { nav.navigate("uinext") }
+            )
+        }
+        composable("uinext") {
+            TripsNextRoot(onExit = { nav.popBackStack() })
         }
         composable("insights") {
             InsightsScreen(
