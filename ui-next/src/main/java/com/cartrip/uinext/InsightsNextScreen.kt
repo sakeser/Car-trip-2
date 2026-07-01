@@ -40,9 +40,12 @@ internal fun InsightsContent(trips: List<TripSummary>?) {
     }
 
     var window by remember { mutableStateOf(RecencyWindow.ALL) }
-    val health = remember(trips, window) {
-        trips.inWindow(window, System.currentTimeMillis()).drivingHealth()
+    val filtered = remember(trips, window) { trips.inWindow(window, System.currentTimeMillis()) }
+    val health = remember(filtered) { filtered.drivingHealth() }
+    val daily = remember(filtered) {
+        filtered.dailyDistanceKm(days = 7, nowMs = System.currentTimeMillis(), zone = java.time.ZoneId.systemDefault())
     }
+    val dayparts = remember(filtered) { filtered.daypartCounts(java.time.ZoneId.systemDefault()) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         RecencyFilterRow(selected = window, onSelect = { window = it })
@@ -63,6 +66,8 @@ internal fun InsightsContent(trips: List<TripSummary>?) {
             ) {
                 item { OverviewCard(health) }
                 if (health.smoothnessTrend.size >= 2) item { TrendCard(health.smoothnessTrend) }
+                item { DailyDistanceCard(daily) }
+                item { WhenYouDriveCard(dayparts) }
                 if (health.mix.isNotEmpty()) item { MixCard(health.mix) }
             }
         }
