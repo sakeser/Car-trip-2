@@ -11,8 +11,10 @@ come from **OpenStreetMap** via the free Overpass API (cached locally). Target d
 S25 (Android 14/15), minSdk 26.
 
 > **Note:** this README covers the original v1.x build flow + core concepts. The app has since grown
-> well past it (auto-record, fuel/cost, drawdowns, Drive Stress Score, Insights, Google Sheets sync).
-> See **HANDOFF.md** for the authoritative current state (source 3.27 / build 138, Room schema v21).
+> well past it (auto-record, fuel/cost, drawdowns, Drive Stress Score, Driver Load, Insights, Google Sheets
+> sync, and an in-progress modular `:core-engine` + `:ui-next` premium redesign). See **HANDOFF.md** for the
+> authoritative current state (source 3.36 / build 147, Room schema v22) and **DRIVING_INTELLIGENCE_SCORING.md**
+> for the scoring/product strategy (the three-pillar **Smoothness / Demand-Load / Efficiency** direction).
 
 ---
 

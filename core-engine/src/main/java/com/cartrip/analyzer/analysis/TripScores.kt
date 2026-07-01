@@ -1,7 +1,5 @@
-package com.cartrip.analyzer.ui
+package com.cartrip.analyzer.analysis
 
-import androidx.compose.ui.graphics.Color
-import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.data.TripEntity
 import kotlin.math.max
 import kotlin.math.min
@@ -30,6 +28,9 @@ import kotlin.math.roundToInt
  * 1 Hz GPS exposure is near-zero even on hard drives, so on dense-motion trips Safety is driven by the
  * corner-corrected sensor hard-event rate (field-calibrated on narrated trips 845/847), blended by the
  * same motion-Hz trust. GPS exposure still drives it for old/low-rate trips.
+ *
+ * Pure domain logic — lives in `analysis`, not `ui` (Rev CX move, mirroring [StressScore]). The
+ * green=good render colour is `ui.ScoreColors`; Safety/Comfort feed the [DrivingIntelligence] Smoothness pillar.
  */
 data class TripScores(
     val overall: Int,
@@ -124,12 +125,6 @@ data class TripScores(
                 (safety * 0.56 + comfort * 0.44).roundToInt()
             }
             return TripScores(overall, safety, comfort, speed)
-        }
-
-        fun color(score: Int): Color = when {
-            score >= 80 -> Color(0xFF22C55E)
-            score >= 60 -> Color(0xFFF59E0B)
-            else -> Color(0xFFEF4444)
         }
     }
 }

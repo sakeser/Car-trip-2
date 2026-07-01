@@ -220,9 +220,13 @@ in any `:ui-next` / stress-chip code and is tracked separately (fix deferred, ow
 
 **Next slices (per screen, no god facade):** the row now shows the Drive Stress score (`3c6afc2`). The placement
 question is settled by the `StressScore` precedent — **pure scoring/label logic → `:core-engine` `analysis`; colour →
-the UI module**. So the next enrichment is the **`TripScores` move** (safety/comfort/pace): relocate `TripScores.from`
-from `app/ui` into `:core-engine/analysis` mirroring `StressScore` (drop its Compose `Color`; move `TripScoresTest`),
-then surface it. `TripLabeler` is a later, heavier slice (needs the per-point list + carries a stale hardcoded home).
+the UI module**. ✅ **The `TripScores` move is DONE (Rev CX, 2026-06-30):** `TripScores.from` now lives in
+`:core-engine/analysis` (Compose `Color` dropped; green=good colour → new `ui/ScoreColors`; `TripScoresTest` moved
+engine-side). It shipped alongside the new pure `analysis/DrivingIntelligence.kt` three-pillar model, currently
+surfaced in the **legacy** `app/ui` screens (Trip Detail / Insights / AI export). **`:ui-next` adoption of the
+Driving Intelligence hero + pillar cards is the next enrichment slice** (add Safety/Comfort/efficiency to
+`TripSummary` or compute the pillars engine-side for `:ui-next`). `TripLabeler` is a later, heavier slice (needs the
+per-point list + carries a stale hardcoded home).
 Then more screens; add gateways (`RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`) only as a
 screen needs them. **M1** (engine self-describing manifest) before `:ui-next` hosts recording; **M3** (Room migration
 tests) before any schema change.

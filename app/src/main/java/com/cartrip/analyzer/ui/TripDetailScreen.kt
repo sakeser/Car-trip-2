@@ -106,10 +106,12 @@ import com.cartrip.analyzer.analysis.EventType
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.settings.VehiclePrefs
 import com.cartrip.analyzer.analysis.SpeedTier
+import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TrackPoint
 import com.cartrip.analyzer.analysis.TripAnalysis
 import com.cartrip.analyzer.analysis.TripKind
+import com.cartrip.analyzer.analysis.TripScores
 import com.cartrip.analyzer.cloud.CloudState
 import com.cartrip.analyzer.data.TripEntity
 import kotlinx.coroutines.delay
@@ -510,10 +512,14 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
     // Headline fuel cost: recomputed live from the current vehicle profile + this trip's aggregates
     // (no Re-analyze needed). Matches the Fuel & cost card below.
     val distanceKm = m.distanceM / 1000.0
-    val cost = if (distanceKm >= 0.05 && !TripKind.isLikelyNonDrive(trip)) {
-        val v = VehiclePrefs.load(LocalContext.current)
-        FuelEstimator.cost(FuelEstimator.litres(distanceKm, m.avgMovingSpeedMps * 3.6, m.idleS, v), v)
-    } else null
+    val vehicle = VehiclePrefs.load(LocalContext.current)
+    val isDrive = !TripKind.isLikelyNonDrive(trip)
+    val cost = if (distanceKm >= 0.05 && isDrive)
+        FuelEstimator.cost(FuelEstimator.litres(distanceKm, m.avgMovingSpeedMps * 3.6, m.idleS, vehicle), vehicle)
+    else null
+    // Rev CX — the public three-pillar Driving Intelligence read (Smoothness / Demand / Efficiency) + the
+    // conditional "Drive Quality" headline. Rolls up the existing scores; null only for non-drives/too-short.
+    val di = if (isDrive) DrivingIntelligence.from(trip, vehicle) else null
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -568,6 +574,11 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            } else if (di != null) {
+                // Rev CX — Driving Intelligence is the headline: the conditional "Drive Quality" verdict + the
+                // three pillars (Smoothness / Demand / Efficiency). Safety/Comfort/Pace/Stress survive below as
+                // a subordinate drill-down line, not peer top-level scores.
+                DrivingIntelligenceHero(di, scores, StressScore.from(trip))
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -577,8 +588,6 @@ private fun TripHero(trip: TripEntity, m: DriveMetrics, scores: TripScores) {
                     MiniScoreRing("Comfort", scores.comfort)
                     MiniScoreRing("Pace", scores.speed)
                 }
-                // Drive Stress Score: higher = MORE demanding, the inverse of the green=good rings above, so
-                // it gets its own pill + green->red scale rather than a fourth ring (which would read as good).
                 StressScore.from(trip)?.let { s -> StressHeroPill(s) }
             }
         }
@@ -613,6 +622,115 @@ private fun StressHeroPill(s: StressScore.Result) {
             fontWeight = FontWeight.Bold,
             color = color
         )
+    }
+}
+
+/**
+ * Rev CX — the Driving Intelligence hero: a conditional "Drive Quality" headline (style read against the
+ * demand band) over the three pillars Smoothness / Demand / Efficiency, with the older Safety/Comfort/Pace/
+ * Stress scores kept as a subordinate drill-down line below (not peer headline scores).
+ */
+@Composable
+private fun DrivingIntelligenceHero(
+    di: DrivingIntelligence.Result,
+    scores: TripScores,
+    stress: StressScore.Result?,
+) {
+    val dot = "  " + 0x00B7.toChar() + "  "  // middle dot built from code point (Cp1252 source trap)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "DRIVE QUALITY",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                di.headline,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                di.quadrant.coaching,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PillarChip(Modifier.weight(1f), "Smoothness", di.smoothness, ScoreColors.color(di.smoothness.score))
+            PillarChip(Modifier.weight(1f), "Demand", di.demand, StressColors.color(di.demand.score))
+            di.efficiency?.let {
+                PillarChip(Modifier.weight(1f), "Efficiency", it, ScoreColors.color(it.score))
+            }
+        }
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            PillarRead("Smoothness", di.smoothness.read)
+            PillarRead("Demand", di.demand.read)
+            di.efficiency?.let { PillarRead("Efficiency", it.read) }
+        }
+        val details = buildString {
+            append("Safety ${scores.safety}").append(dot).append("Comfort ${scores.comfort}")
+            scores.speed?.let { append(dot).append("Pace $it") }
+            stress?.let { append(dot).append("Stress ${it.score} (${it.band})") }
+        }
+        Text(
+            details,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/** One compact pillar tile: label + big coloured score + band word. */
+@Composable
+private fun PillarChip(
+    modifier: Modifier,
+    label: String,
+    pillar: DrivingIntelligence.Pillar,
+    color: Color
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.10f))
+            .padding(vertical = 10.dp, horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${pillar.score}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = color)
+        Text(pillar.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = color)
+    }
+}
+
+/** A full-width "Pillar: plain-language read" line under the pillar tiles. */
+@Composable
+private fun PillarRead(label: String, read: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            "$label:",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(82.dp)
+        )
+        Text(read, style = MaterialTheme.typography.bodySmall)
     }
 }
 

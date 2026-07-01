@@ -1,8 +1,10 @@
 package com.cartrip.analyzer.ui
 
+import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.FuelEstimator
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.analysis.TripKind
+import com.cartrip.analyzer.analysis.TripScores
 import com.cartrip.analyzer.data.TripEntity
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -36,9 +38,12 @@ object AiInsightsExport {
         sb.appendLine("# My driving data (for AI analysis)")
         sb.appendLine()
         sb.appendLine(
-            "You are an expert driving coach. Using the aggregated data below (no raw GPS), give me " +
-                "specific, actionable insights about my safety, smoothness, efficiency, fuel cost and " +
-                "stress, point out patterns, and list the top 3 things to improve. Be concise and concrete."
+            "You are an expert driving coach. Using the aggregated data below (no raw GPS), coach me with the " +
+                "three-pillar Driving Intelligence model: Smoothness (my driving style/control), Demand/Load " +
+                "(how hard the road and traffic were — context, not my fault), and Efficiency (fuel and cost). " +
+                "Crucially, separate what I controlled (style) from what the road imposed (demand): a smoothly " +
+                "handled high-demand trip is good driving, while a rough low-demand trip is the most actionable. " +
+                "Give specific, concrete insights and the top 3 things to improve. Be concise."
         )
         sb.appendLine()
         if (drives.isEmpty()) {
@@ -82,6 +87,24 @@ object AiInsightsExport {
                 "(on roads with known limits)")
         }
         sb.appendLine()
+
+        // Driving Intelligence: the three-pillar roll-up + the style x demand trip mix. The point for the AI is
+        // to coach style and demand separately (don't blame the driver for traffic).
+        val dis = drives.mapNotNull { DrivingIntelligence.from(it, vehicle, fuel.avgL100) }
+        if (dis.isNotEmpty()) {
+            sb.appendLine("## Driving Intelligence (style vs demand vs outcome)")
+            sb.appendLine("- Smoothness (style, higher better): ${avg(dis.map { it.smoothness.score })}")
+            sb.appendLine("- Demand/Load (context, higher = harder drive): ${avg(dis.map { it.demand.score })}")
+            dis.mapNotNull { it.efficiency?.score }.let {
+                if (it.isNotEmpty()) sb.appendLine("- Efficiency (outcome, higher better): ${avg(it)}")
+            }
+            val byQuad = dis.groupingBy { it.quadrant }.eachCount()
+            val mix = DrivingIntelligence.Quadrant.values()
+                .filter { (byQuad[it] ?: 0) > 0 }
+                .joinToString(", ") { "${quadName(it)} ${byQuad[it]}" }
+            sb.appendLine("- Trip mix (style x demand): $mix")
+            sb.appendLine()
+        }
 
         // Traffic: how the user's actual time compares to Google's live-traffic estimate, and how much
         // slower than free-flow (no-traffic) their drives ran — the congestion they actually sat in.
@@ -141,9 +164,10 @@ object AiInsightsExport {
         drives.takeLast(RECENT_LIMIT).reversed().forEach { t ->
             val sc = TripScores.from(t)
             val stress = StressScore.from(t)?.let { ", stress ${it.band}" } ?: ""
+            val verdict = DrivingIntelligence.from(t, vehicle, fuel.avgL100)?.let { " [${it.headline}]" } ?: ""
             val name = names[t.id] ?: t.name.ifBlank { "Trip" }
             sb.appendLine(
-                "- ${dt.format(Date(t.startTime))} $name: " +
+                "- ${dt.format(Date(t.startTime))} $name:$verdict " +
                     "${"%.1f".format(t.distanceM / 1000.0)}km, " +
                     "${(t.durationS / 60).roundToInt()}min, " +
                     "Safety ${sc.safety}/Comfort ${sc.comfort}/Pace ${sc.speed ?: '-'}" +
@@ -151,6 +175,13 @@ object AiInsightsExport {
             )
         }
         return sb.toString()
+    }
+
+    private fun quadName(q: DrivingIntelligence.Quadrant): String = when (q) {
+        DrivingIntelligence.Quadrant.EASY_SMOOTH -> "easy & smooth"
+        DrivingIntelligence.Quadrant.SMOOTH_UNDER_PRESSURE -> "smooth under pressure"
+        DrivingIntelligence.Quadrant.ROUGH_ON_EASY_ROAD -> "rough on easy roads"
+        DrivingIntelligence.Quadrant.DEMANDING_AND_ROUGH -> "demanding & rough"
     }
 
     private fun money(v: Double) = "$" + String.format(Locale.US, "%.2f", v)
