@@ -131,20 +131,35 @@ internal fun List<AnalysisPointEntity>.toTrack(): List<TripTrackPoint> {
 }
 
 /**
- * Pure: map persisted drive events to timeline [TripEvent]s, sorted by time. Offsets are seconds since
- * [originMs] — pass the SAME origin as [toTrack] (the track's first-sample `t`) so events land on the same
- * x-axis; events use the same monotonic recording clock as the analysis points. The raw detector `type` (an
- * `analysis.EventType.name`) is folded into the UI-stable [TripEventKind]; an unrecognized type maps to
- * [TripEventKind.OTHER] rather than being dropped.
+ * Pure: map persisted drive events to timeline [TripEvent]s, sorted by time, correlated to a map position. The
+ * offset origin and each event's position both come from [points] (the trip's analysis track, sorted by `t`):
+ * offsets are seconds since the earliest sample (same x-axis as [toTrack]); position is the nearest sample by
+ * time, but only within [EVENT_MATCH_TOLERANCE_MS] and if that sample has a valid coordinate (else `(0,0)` ->
+ * `hasPosition` false). The events and the track share the same monotonic recording clock. The raw detector
+ * `type` (an `analysis.EventType.name`) folds into the UI-stable [TripEventKind]; unknown -> [TripEventKind.OTHER]
+ * (never dropped). Empty when there is no track to anchor the offsets/positions.
  */
-internal fun List<DriveEventEntity>.toEvents(originMs: Long): List<TripEvent> =
-    sortedBy { it.t }.map { e ->
+internal fun List<DriveEventEntity>.toEvents(points: List<AnalysisPointEntity>): List<TripEvent> {
+    val origin = points.minByOrNull { it.t }?.t ?: return emptyList()
+    return sortedBy { it.t }.map { e ->
+        val nearest = points.minByOrNull { abs(it.t - e.t) }
+        val positioned = nearest != null &&
+            abs(nearest.t - e.t) <= EVENT_MATCH_TOLERANCE_MS &&
+            !(nearest.lat == 0.0 && nearest.lon == 0.0) &&
+            abs(nearest.lat) <= 90.0 && abs(nearest.lon) <= 180.0
         TripEvent(
-            offsetSeconds = (((e.t - originMs) / 1000L).toInt()).coerceAtLeast(0),
+            offsetSeconds = (((e.t - origin) / 1000L).toInt()).coerceAtLeast(0),
             kind = eventKindOf(e.type),
             magnitude = e.magnitude,
+            lat = if (positioned) nearest!!.lat else 0.0,
+            lon = if (positioned) nearest!!.lon else 0.0,
         )
     }
+}
+
+/** Max time gap when snapping an event to the nearest analysis sample (points are downsampled; events can come
+ *  from a faster motion clock, so an exact match would drop most). Mirrors the legacy TripMap tolerance. */
+private const val EVENT_MATCH_TOLERANCE_MS = 15_000L
 
 /** Fold a raw `analysis.EventType.name` into the UI-stable [TripEventKind]. Unknown -> [TripEventKind.OTHER]. */
 internal fun eventKindOf(rawType: String): TripEventKind = when (rawType) {
@@ -171,8 +186,9 @@ internal class DefaultTripRepository(private val dao: TripDao) : TripRepository 
         dao.getAnalysisPoints(id).toTrack()
 
     override suspend fun getEvents(id: Long): List<TripEvent> {
-        // Align events to the track's clock origin (the first analysis sample), not the trip's epoch startTime.
-        val origin = dao.getFirstAnalysisPointTime(id) ?: return emptyList()
-        return dao.getDriveEvents(id).toEvents(origin)
+        // The analysis track anchors both the offset origin and each event's map position (nearest sample).
+        val points = dao.getAnalysisPoints(id)
+        if (points.isEmpty()) return emptyList()
+        return dao.getDriveEvents(id).toEvents(points)
     }
 }

@@ -1,5 +1,6 @@
 package com.cartrip.uinext
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -26,35 +26,51 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.RoutePoint
+import com.cartrip.engine.api.TripEvent
+import com.cartrip.engine.api.TripEventKind
 import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 
 /**
- * Map tab (spec's 4th tab) — a **Map Hub** roughing in the spatial-intelligence surface. Real, read-only data:
- * it overlays the routes of the recent drives (via the engine-api `getRoute`), framed to fit. Placeholder layer
- * chips show where a route heatmap + trouble-spots layer will go (those need new read gateways; disabled for
- * now). Routes are downsampled for a light overview. ASCII source (Cp1252 trap).
+ * Map tab (spec's 4th tab) — a **Map Hub** for the spatial-intelligence surface. Real, read-only data: it
+ * overlays the recent drives' routes (via `getRoute`) and, when the Events layer is on, the trouble spots
+ * (hard brake/accel/corner + rough-road events, via the position-enriched `getEvents`) as coloured pins, framed
+ * to fit. Layer chips toggle Routes + Events; Speeding / Heatmap are disabled placeholders for later aggregate
+ * gateways. Rough, read-only. ASCII source (Cp1252 trap).
  */
 @Composable
 internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit) {
     val context = LocalContext.current
     val repo = remember { TripRepository.create(context) }
     val recentIds = remember(trips) { trips.orEmpty().filter { it.isDrive }.take(RECENT_LIMIT).map { it.id } }
+
+    var showRoutes by remember { mutableStateOf(true) }
+    var showEvents by remember { mutableStateOf(false) }
+
     // Keep each route paired with its trip id so a tap can open that trip.
     val routes by produceState<List<Pair<Long, List<LatLng>>>?>(initialValue = null, recentIds) {
         value = recentIds.mapNotNull { id ->
             val r = repo.getRoute(id)
             if (r.size < 2) null else id to r.downsample(MAX_POINTS_PER_ROUTE).map { p -> LatLng(p.lat, p.lon) }
         }
+    }
+    // Positioned events across the recent trips — loaded lazily only when the layer is on (getEvents reads the
+    // analysis track to place each event, so it isn't free). Capped so a busy history can't flood the map.
+    val events by produceState<List<TripEvent>>(initialValue = emptyList(), recentIds, showEvents) {
+        value = if (!showEvents) emptyList()
+        else recentIds.flatMap { repo.getEvents(it) }.filter { it.hasPosition }.take(MAX_EVENT_PINS)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -63,14 +79,19 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilterChip(selected = true, onClick = {}, label = { Text("Routes") })
-            FilterChip(selected = false, enabled = false, onClick = {}, label = { Text("Trouble spots") })
+            FilterChip(selected = showRoutes, onClick = { showRoutes = !showRoutes }, label = { Text("Routes") })
+            FilterChip(selected = showEvents, onClick = { showEvents = !showEvents }, label = { Text("Events") })
+            FilterChip(selected = false, enabled = false, onClick = {}, label = { Text("Speeding") })
             FilterChip(selected = false, enabled = false, onClick = {}, label = { Text("Heatmap") })
         }
         Text(
             when (val r = routes) {
                 null -> "Loading recent routes..."
-                else -> "${r.size} recent ${if (r.size == 1) "route" else "routes"} $MIDDOT tap a route to open it"
+                else -> buildString {
+                    append("${r.size} recent ${if (r.size == 1) "route" else "routes"}")
+                    if (showEvents) append(" $MIDDOT ${events.size} events")
+                    else append(" $MIDDOT tap a route to open it")
+                }
             },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -87,14 +108,25 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                else -> RouteOverlayMap(r, onOpenTrip)
+                else -> RouteOverlayMap(
+                    routes = r,
+                    events = if (showEvents) events else emptyList(),
+                    showRoutes = showRoutes,
+                    onOpenTrip = onOpenTrip,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun RouteOverlayMap(routes: List<Pair<Long, List<LatLng>>>, onOpenTrip: (Long) -> Unit) {
+private fun RouteOverlayMap(
+    routes: List<Pair<Long, List<LatLng>>>,
+    events: List<TripEvent>,
+    showRoutes: Boolean,
+    onOpenTrip: (Long) -> Unit,
+) {
+    // Frame to the routes (loaded regardless of the toggle) so the view is stable as layers turn on/off.
     val all = remember(routes) { routes.flatMap { it.second } }
     val bounds = remember(all) {
         val b = LatLngBounds.builder()
@@ -114,15 +146,24 @@ private fun RouteOverlayMap(routes: List<Pair<Long, List<LatLng>>>, onOpenTrip: 
         onMapLoaded = { mapLoaded = true },
         uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false, myLocationButtonEnabled = false),
     ) {
-        routes.forEach { (id, line) ->
-            Polyline(
-                points = line,
-                color = RouteBlue,
-                width = 8f,
-                jointType = JointType.ROUND,
-                clickable = true,
-                tag = id,
-                onClick = { poly -> (poly.tag as? Long)?.let(onOpenTrip) },
+        if (showRoutes) {
+            routes.forEach { (id, line) ->
+                Polyline(
+                    points = line,
+                    color = RouteBlue,
+                    width = 8f,
+                    jointType = JointType.ROUND,
+                    clickable = true,
+                    tag = id,
+                    onClick = { poly -> (poly.tag as? Long)?.let(onOpenTrip) },
+                )
+            }
+        }
+        events.forEach { e ->
+            Marker(
+                state = MarkerState(LatLng(e.lat, e.lon)),
+                icon = BitmapDescriptorFactory.defaultMarker(eventHue(e.kind)),
+                title = eventTitle(e.kind),
             )
         }
     }
@@ -135,6 +176,24 @@ private fun List<RoutePoint>.downsample(max: Int): List<RoutePoint> {
     return filterIndexed { i, _ -> i % step == 0 || i == lastIndex }
 }
 
+/** Google-marker hue per event kind (rough colour code for the trouble-spot pins). */
+private fun eventHue(kind: TripEventKind): Float = when (kind) {
+    TripEventKind.HARD_BRAKE -> BitmapDescriptorFactory.HUE_RED
+    TripEventKind.HARD_ACCEL -> BitmapDescriptorFactory.HUE_ORANGE
+    TripEventKind.HARD_CORNER -> BitmapDescriptorFactory.HUE_VIOLET
+    TripEventKind.ROUGH_ROAD -> BitmapDescriptorFactory.HUE_YELLOW
+    TripEventKind.OTHER -> BitmapDescriptorFactory.HUE_AZURE
+}
+
+private fun eventTitle(kind: TripEventKind): String = when (kind) {
+    TripEventKind.HARD_BRAKE -> "Hard brake"
+    TripEventKind.HARD_ACCEL -> "Hard accel"
+    TripEventKind.HARD_CORNER -> "Hard corner"
+    TripEventKind.ROUGH_ROAD -> "Rough road"
+    TripEventKind.OTHER -> "Event"
+}
+
 private val RouteBlue = Color(0xFF4285F4)
 private const val RECENT_LIMIT = 10
 private const val MAX_POINTS_PER_ROUTE = 120
+private const val MAX_EVENT_PINS = 250

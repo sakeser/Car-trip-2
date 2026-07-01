@@ -192,6 +192,8 @@ class TripSummaryMapperTest {
         val start = 1_700_000_000_000L
         fun ev(tMs: Long, type: String, mag: Double) =
             DriveEventEntity(tripId = 1L, t = tMs, type = type, magnitude = mag)
+        // A single origin sample at `start` with no valid coord: anchors offsets, leaves events unpositioned.
+        val points = listOf(AnalysisPointEntity(tripId = 1L, t = start, lat = 0.0, lon = 0.0, speedKmh = 0.0, longAccel = 0.0, latAccel = 0.0))
         val events = listOf(
             ev(start + 10_000L, "CORNER", 0.4),
             ev(start + 1_000L, "BRAKE", 0.5),
@@ -199,7 +201,7 @@ class TripSummaryMapperTest {
             ev(start + 3_000L, "ACCEL", 0.3),
             ev(start + 7_000L, "POTHOLE", 1.2),
             ev(start + 9_000L, "MYSTERY", 0.1),
-        ).toEvents(start)
+        ).toEvents(points)
 
         // Sorted by time.
         assertEquals(listOf(1, 3, 5, 7, 9, 10), events.map { it.offsetSeconds })
@@ -209,6 +211,28 @@ class TripSummaryMapperTest {
         assertEquals(TripEventKind.ROUGH_ROAD, events[3].kind)       // POTHOLE
         assertEquals(TripEventKind.OTHER, events[4].kind)            // unknown -> OTHER, not dropped
         assertEquals(TripEventKind.HARD_CORNER, events[5].kind)      // CORNER
+    }
+
+    @Test fun toEvents_positions_from_nearest_sample_within_tolerance() {
+        val start = 1_700_000_000_000L
+        fun pt(tMs: Long, lat: Double, lon: Double) =
+            AnalysisPointEntity(tripId = 1L, t = tMs, lat = lat, lon = lon, speedKmh = 0.0, longAccel = 0.0, latAccel = 0.0)
+        val points = listOf(
+            pt(start, 43.70, -79.40),
+            pt(start + 10_000L, 43.75, -79.45),   // valid, near the first event
+            pt(start + 60_000L, 0.0, 0.0),         // gap-fill: no usable coord
+        )
+        val events = listOf(
+            DriveEventEntity(tripId = 1L, t = start + 11_000L, type = "BRAKE", magnitude = 0.5),  // 1 s from the valid +10s sample -> positioned
+            DriveEventEntity(tripId = 1L, t = start + 60_000L, type = "CORNER", magnitude = 0.4), // nearest sample is (0,0) -> unpositioned
+            DriveEventEntity(tripId = 1L, t = start + 200_000L, type = "ACCEL", magnitude = 0.3), // 140 s from any sample (> tolerance) -> unpositioned
+        ).toEvents(points)
+
+        assertTrue("event near a valid sample is positioned", events[0].hasPosition)
+        assertEquals(43.75, events[0].lat, 0.0)
+        assertEquals(-79.45, events[0].lon, 0.0)
+        assertFalse("nearest sample is (0,0)", events[1].hasPosition)
+        assertFalse("nearest sample is beyond the 15 s tolerance", events[2].hasPosition)
     }
 
     @Test fun eventKind_maps_every_known_type() {
