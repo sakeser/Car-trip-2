@@ -43,5 +43,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
+    // Map hero on the trip-detail screen. The Maps API key comes from the host :app's merged manifest.
+    implementation("com.google.maps.android:maps-compose:4.4.2")
+
     testImplementation("junit:junit:4.13.2")
 }

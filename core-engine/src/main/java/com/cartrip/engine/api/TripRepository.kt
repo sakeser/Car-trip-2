@@ -3,11 +3,13 @@ package com.cartrip.engine.api
 import android.content.Context
 import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.StressScore
+import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.AppDatabase
 import com.cartrip.analyzer.data.TripDao
 import com.cartrip.analyzer.data.TripEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlin.math.abs
 
 /**
  * Read-side engine API for trips — the first facade seam (Phase 1 engine-API). Exposes [TripSummary]s, never
@@ -25,6 +27,12 @@ interface TripRepository {
 
     /** One trip as a summary, or `null` if no trip has that id. */
     suspend fun getTrip(id: Long): TripSummary?
+
+    /**
+     * The trip's route as lat/lon [RoutePoint]s (from the persisted 1 Hz analysis track), with invalid /
+     * zero-coordinate fixes dropped. Empty when the trip has no usable track (or the raw data was purged).
+     */
+    suspend fun getRoute(id: Long): List<RoutePoint>
 
     companion object {
         /** The default implementation, backed by the app's Room database. */
@@ -57,7 +65,17 @@ internal fun TripEntity.toSummary(): TripSummary {
     )
 }
 
-/** DAO-backed [TripRepository]; a thin adapter (map the entity stream/lookup to summaries). */
+/**
+ * Pure: map persisted analysis points to [RoutePoint]s, dropping invalid / (0,0) coordinates (gap fills and
+ * cold-fix rows). Directly unit-testable without a Room fake.
+ */
+internal fun List<AnalysisPointEntity>.toRoute(): List<RoutePoint> =
+    mapNotNull { p ->
+        if ((p.lat == 0.0 && p.lon == 0.0) || abs(p.lat) > 90.0 || abs(p.lon) > 180.0) null
+        else RoutePoint(p.lat, p.lon)
+    }
+
+/** DAO-backed [TripRepository]; a thin adapter (map the entity stream/lookup to summaries + route). */
 internal class DefaultTripRepository(private val dao: TripDao) : TripRepository {
 
     override fun observeTrips(): Flow<List<TripSummary>> =
@@ -65,4 +83,7 @@ internal class DefaultTripRepository(private val dao: TripDao) : TripRepository 
 
     override suspend fun getTrip(id: Long): TripSummary? =
         dao.getTrip(id)?.toSummary()
+
+    override suspend fun getRoute(id: Long): List<RoutePoint> =
+        dao.getAnalysisPoints(id).toRoute()
 }

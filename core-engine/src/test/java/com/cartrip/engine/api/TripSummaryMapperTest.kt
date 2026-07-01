@@ -2,6 +2,7 @@ package com.cartrip.engine.api
 
 import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.StressScore
+import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.TripEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -60,5 +61,21 @@ class TripSummaryMapperTest {
         assertNull(s.stressBand)
         assertNull(s.smoothnessScore)
         assertNull(s.driveQuality)
+    }
+
+    @Test fun toRoute_keeps_valid_points_and_drops_zero_or_out_of_range() {
+        fun pt(lat: Double, lon: Double) =
+            AnalysisPointEntity(tripId = 1L, t = 0L, lat = lat, lon = lon, speedKmh = 0.0, longAccel = 0.0, latAccel = 0.0)
+        val route = listOf(
+            pt(43.76, -79.41),   // valid
+            pt(0.0, 0.0),        // gap-fill / cold fix -> dropped
+            pt(43.77, -79.40),   // valid
+            pt(200.0, 10.0),     // out-of-range lat -> dropped
+        ).toRoute()
+
+        assertEquals(2, route.size)
+        assertEquals(43.76, route[0].lat, 0.0)
+        assertEquals(-79.41, route[0].lon, 0.0)
+        assertEquals(43.77, route[1].lat, 0.0)
     }
 }

@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
@@ -23,21 +26,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.cartrip.engine.api.RoutePoint
 import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
 
 /**
- * :ui-next trip detail - loads one [TripSummary] via [TripRepository.getTrip] and shows only the basic fields
- * in a premium card. No maps / scores / labels / charts / export / sync / recording. Engine access via
- * com.cartrip.engine.api.* only.
+ * :ui-next trip detail — a **map-first** trip story: the route map hero, a clean summary headline, then the
+ * Driving Intelligence read (conditional Drive-Quality headline + Smoothness / Demand pillars). Efficiency
+ * needs a vehicle profile the engine-api mapper doesn't hold, so it's added later via a vehicle gateway.
+ * Engine access via com.cartrip.engine.api.* only. ASCII source (Cp1252 trap).
  */
 @Composable
 fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
     val context = LocalContext.current
     val repo = remember { TripRepository.create(context) }
-    val trip by produceState<TripSummary?>(initialValue = null, tripId) {
-        value = repo.getTrip(tripId)
-    }
+    val trip by produceState<TripSummary?>(initialValue = null, tripId) { value = repo.getTrip(tripId) }
+    val route by produceState<List<RoutePoint>>(initialValue = emptyList(), tripId) { value = repo.getRoute(tripId) }
 
     NextScaffold(title = "Trip", onBack = onBack) { padding ->
         val t = trip
@@ -47,25 +51,45 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
         } else {
-            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Text("Trip #${t.id}", style = MaterialTheme.typography.titleLarge)
-                        HorizontalDivider()
-                        DetailRow("Start", formatStart(t.startEpochMs))
-                        DetailRow("Distance", formatKm(t.distanceMeters))
-                        DetailRow("Duration", formatDuration(t.durationSeconds))
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
+            ) {
+                if (route.size >= 2) {
+                    TripMapHero(route = route, modifier = Modifier.fillMaxWidth().height(240.dp))
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    // Summary headline
+                    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Text(
+                                formatStart(t.startEpochMs),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                            ) {
+                                Stat("Distance", formatKm(t.distanceMeters))
+                                Stat("Duration", formatDuration(t.durationSeconds))
+                            }
+                        }
+                    }
 
-                        // Driving Intelligence: the conditional "Drive Quality" headline + the Smoothness (style)
-                        // and Demand (context) pillars. Efficiency needs a vehicle profile the engine-api mapper
-                        // doesn't hold yet, so it's added later via a vehicle gateway.
-                        val dq = t.driveQuality
-                        if (dq != null) {
-                            HorizontalDivider()
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Driving Intelligence
+                    val dq = t.driveQuality
+                    if (dq != null) {
+                        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
                                         "DRIVE QUALITY",
@@ -74,6 +98,7 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                                     )
                                     Text(dq, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 }
+                                HorizontalDivider()
                                 t.smoothnessScore?.let { s ->
                                     PillarRow("Smoothness", t.smoothnessBand) { ScoreChip(s) }
                                 }
@@ -89,18 +114,16 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
     }
 }
 
+/** A stacked label + value stat (used in the summary headline row). */
 @Composable
-private fun DetailRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
+private fun Stat(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             label,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(value, style = MaterialTheme.typography.titleMedium)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 

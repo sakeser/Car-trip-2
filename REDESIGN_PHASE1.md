@@ -241,6 +241,17 @@ Drive-Quality "drive mix" count) — no vehicle needed, efficiency still deferre
 (boundary-clean). Device-verified: 43 scorable drives, Smoothness 88 / Demand 41, mix 26 easy-smooth / 16
 smooth-under-pressure / 1 demanding-rough; tab switching + `EngineBoundaryTest` green.
 
+**`:ui-next` map-first Trip Detail (v3.42/build 153, on `main`; build green, ON-DEVICE VERIFY PENDING — S25
+was disconnected):** implements the UX-spec's #1 principle ("map first, numbers second") on the detail screen.
+Added the first read gateway beyond summaries: engine-API **`RoutePoint`** value type + **`TripRepository.getRoute(id)`**
+(maps the persisted 1 Hz `AnalysisPointEntity` track to lat/lon, drops zero/invalid fixes; pure `toRoute()` mapper,
+unit-tested). New **`TripMapHero`** (`maps-compose` added to `:ui-next`; API key from the host app's merged
+manifest) renders the route polyline + start/end markers, framed to the route on `onMapLoaded`. `TripDetailNextScreen`
+restructured: map hero -> date/distance/duration summary card -> the DI card. Boundary still clean (map SDK imports
+allowed; only `com.cartrip.engine.api.*` from the engine). **NEXT: on-device check that the map tiles render (key
+propagation across the merged manifest can only be confirmed on a device); then push.** Efficiency pillar still
+deferred (vehicle gateway).
+
 Then more screens; add gateways (`RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`) only as a
 screen needs them. **M1** (engine self-describing manifest) before `:ui-next` hosts recording; **M3** (Room migration
 tests) before any schema change.
