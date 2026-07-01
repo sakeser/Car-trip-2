@@ -14,7 +14,12 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.54 / build 165, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.55 / build 166, Room schema v22** (no schema change in any recent UI work).
+- **Map Speeding layer + event-dot refinement (2026-07-01, commit `5406064`, S25 PASS):** the Speeding chip is a
+  real layer now — over-limit route segments tiered yellow (0-10 over) / red (10+), from the pure
+  `SpeedingLayer.kt` (`speedingSegments` over the position-enriched `getTrack`); no new gateway. Event markers
+  shrunk from teardrop pins to small round dots so 100+ events stay legible. Map layers: Routes (coloured by
+  Smoothness) / Events / Speeding / Heatmap (still placeholder).
 - **Map routes coloured by Smoothness (2026-07-01, commit `cce481a`, S25 PASS):** Map-hub route polylines are
   coloured by their trip's Smoothness (green/amber/red, ScoreChip thresholds) with a Smooth/OK/Rough legend. No
   new data (reuses `TripSummary.smoothnessScore`).
@@ -147,10 +152,10 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
 3. **Efficiency pillar** across detail + Health: add a **vehicle gateway** (`SettingsStore` exposing the
    `settings/VehiclePrefs` profile through engine-api) so `DrivingIntelligence.from(trip, vehicle)` can run in
    `:ui-next`; then show the 3rd pillar + fuel/cost.
-4. **Map tab** (spec's 4th tab): ✅ **ROUGHED IN + INTERACTIVE + EVENTS (`b587073`, `bdb6219`, `1388e17`):**
-   `MapHubScreen` overlays recent routes (`getRoute`); tap a route -> detail; the **Events/trouble-spots** layer
-   plots position-enriched events (`TripEvent.lat/lon`). **Next depth:** cluster the dense pins; wire the
-   **Speeding** + **Heatmap** placeholder chips (need aggregate read gateways / a speeding-segment source).
+4. **Map tab** (spec's 4th tab): ✅ **RICH SURFACE (`b587073`, `bdb6219`, `1388e17`, `cce481a`, `5406064`):**
+   `MapHubScreen` = routes coloured by Smoothness + tap-to-open + an **Events** dot layer + a **Speeding** overlay
+   (yellow/red over-limit segments). **Next depth:** wire the **Heatmap** chip (route/event density) — likely a
+   real aggregate read gateway; optional pin clustering; a tap-an-event/segment peek.
 5. **Drive tab + recording** (biggest): ✅ **PLACEHOLDER IN (`b587073`, `DriveScreen`).** The real flow still
    needs a `RecordingController` gateway + the `RecordingState` surface + M1 (engine self-describing manifest)
    before `:ui-next` can host the foreground recording flow — do later.
