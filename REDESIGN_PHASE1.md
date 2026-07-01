@@ -14,7 +14,9 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.51 / build 162, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.52 / build 163, Room schema v22** (no schema change in any recent UI work).
+- **Interactive Map (2026-07-01, commit `bdb6219`, S25 PASS):** Map-hub route polylines are now clickable
+  (tagged with trip id) — tap a route -> opens that trip's detail. No new gateway.
 - **Trip Detail "At a glance" stats grid (2026-07-01, commit `9778ff4`, S25 PASS):** a read-only grid of raw
   measured stats (top speed, avg moving speed, moving vs idle time, hard brake/accel/corner counts) via a new
   engine-api `TripStats` value type + `TripSummary.stats` (mapped from existing `TripEntity` fields). **Known
@@ -136,9 +138,9 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
 3. **Efficiency pillar** across detail + Health: add a **vehicle gateway** (`SettingsStore` exposing the
    `settings/VehiclePrefs` profile through engine-api) so `DrivingIntelligence.from(trip, vehicle)` can run in
    `:ui-next`; then show the 3rd pillar + fuel/cost.
-4. **Map tab** (spec's 4th tab): ✅ **ROUGHED IN (`b587073`):** `MapHubScreen` overlays recent routes via
-   `getRoute`. **Next depth:** a real route **heatmap** + **trouble-spots** layer (the disabled chips) — needs new
-   aggregate read gateways; tapping a route -> its trip detail.
+4. **Map tab** (spec's 4th tab): ✅ **ROUGHED IN + INTERACTIVE (`b587073`, `bdb6219`):** `MapHubScreen` overlays
+   recent routes via `getRoute`; tapping a route opens its trip detail. **Next depth:** a real route **heatmap** +
+   **trouble-spots** layer (the disabled chips) — needs new aggregate read gateways (e.g. events with lat/lon).
 5. **Drive tab + recording** (biggest): ✅ **PLACEHOLDER IN (`b587073`, `DriveScreen`).** The real flow still
    needs a `RecordingController` gateway + the `RecordingState` surface + M1 (engine self-describing manifest)
    before `:ui-next` can host the foreground recording flow — do later.
