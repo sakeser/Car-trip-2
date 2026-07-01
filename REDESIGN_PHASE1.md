@@ -35,7 +35,10 @@ cosmetic polish for its own sake, but do not let rough scaffolding harden into t
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). Recent `:ui-next` UI batches continue as normal commits on `main`; always confirm
   live push/local state with `git status --short --branch` and `git log origin/main..main` before pushing.
-- **Version 3.56 / build 167, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.57 / build 168, Room schema v22** (no schema change in any recent UI work).
+- **Compact map markers (2026-07-01, commit `27dcba0`, S25 PASS):** the trip-detail map hero's oversized default
+  Google teardrop pins (start/end/scrubber) are replaced with small custom dots (white ring + colour) via a shared
+  `MapMarkers.mapDotIcon` — start green, end red, scrubber blue. The Map hub already used equivalent small dots.
 - **Map tap-to-peek (2026-07-01, commit `b9cd0b5`, S25 PASS):** tapping an event dot or speeding segment shows a
   lightweight `MapPeek` card (what / when = trip date + offset / Open trip) instead of jumping straight to the
   full detail. Events + segments now carry their trip id. No new gateway.
