@@ -40,6 +40,12 @@ threshold change — pure roll-up of existing aggregates. **On-device verify sti
   until a vehicle gateway. `TripDetailNextScreen` now shows a Driving Intelligence hero (Drive Quality headline +
   Smoothness & Demand pillar rows) via a new green=good `ScoreChip`; `EngineBoundaryTest` still passes (no legacy
   imports), `TripSummaryMapperTest` extended. Row/list unchanged this pass.
+- **On-device PASS (S25, 2026-07-01, v3.38/build 149):** Trip Detail renders the Driving Intelligence hero
+  correctly ("Easy, smooth drive" + Smoothness 92 / Demand 23 / Efficiency 80 tiles + per-pillar reads + the
+  demoted "Safety 88 · Comfort 96 · Pace 100 · Stress 23 (Calm)" drill-down line, middle-dots clean = no Cp1252
+  mojibake); Insights shows the Driving Intelligence summary card (Smoothness 88 / Demand 42 / Efficiency 80,
+  "25 trips … mostly easy & smooth") atop the pillar section headers. **Polish fix (v3.38):** the pillar-read
+  label column wrapped "Smoothness:" -> widened to 104dp + softWrap=false, verified fixed on-device.
 
 ## Rev CW (2026-06-29, v3.35/build 146) — Driver Load / "Drive readiness" model (marquee R&D, v1)
 

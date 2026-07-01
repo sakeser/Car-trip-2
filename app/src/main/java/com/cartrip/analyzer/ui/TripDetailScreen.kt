@@ -728,9 +728,11 @@ private fun PillarRead(label: String, read: String) {
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(82.dp)
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.width(104.dp)
         )
-        Text(read, style = MaterialTheme.typography.bodySmall)
+        Text(read, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
     }
 }
 
