@@ -1,14 +1,20 @@
 package com.cartrip.uinext
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +64,8 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
 
     var showRoutes by remember { mutableStateOf(true) }
     var showEvents by remember { mutableStateOf(false) }
+    // Each trip's Smoothness (0..100, or null) so routes can be coloured green=smooth -> red=rough.
+    val smoothById = remember(trips) { trips.orEmpty().associate { it.id to it.smoothnessScore } }
 
     // Keep each route paired with its trip id so a tap can open that trip.
     val routes by produceState<List<Pair<Long, List<LatLng>>>?>(initialValue = null, recentIds) {
@@ -97,6 +105,17 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         )
+        if (showRoutes) {
+            // Routes are coloured by Smoothness; a compact legend so the colour reads.
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                LegendDot(SmoothGreen, "Smooth")
+                LegendDot(SmoothAmber, "OK")
+                LegendDot(SmoothRed, "Rough")
+            }
+        }
         Box(modifier = Modifier.fillMaxSize()) {
             val r = routes
             when {
@@ -112,6 +131,7 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
                     routes = r,
                     events = if (showEvents) events else emptyList(),
                     showRoutes = showRoutes,
+                    smoothById = smoothById,
                     onOpenTrip = onOpenTrip,
                 )
             }
@@ -124,6 +144,7 @@ private fun RouteOverlayMap(
     routes: List<Pair<Long, List<LatLng>>>,
     events: List<TripEvent>,
     showRoutes: Boolean,
+    smoothById: Map<Long, Int?>,
     onOpenTrip: (Long) -> Unit,
 ) {
     // Frame to the routes (loaded regardless of the toggle) so the view is stable as layers turn on/off.
@@ -150,7 +171,7 @@ private fun RouteOverlayMap(
             routes.forEach { (id, line) ->
                 Polyline(
                     points = line,
-                    color = RouteBlue,
+                    color = routeColor(smoothById[id]),
                     width = 8f,
                     jointType = JointType.ROUND,
                     clickable = true,
@@ -167,6 +188,30 @@ private fun RouteOverlayMap(
             )
         }
     }
+}
+
+/** A small colour swatch + label for the route-colour legend. */
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(9.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Route colour by the trip's Smoothness (green=smooth -> red=rough); unknown falls back to route blue. Mirrors
+ *  the ScoreChip thresholds (80 / 60) so the map reads consistently with the rest of :ui-next. */
+private fun routeColor(smoothness: Int?): Color = when {
+    smoothness == null -> RouteBlue
+    smoothness >= 80 -> SmoothGreen
+    smoothness >= 60 -> SmoothAmber
+    else -> SmoothRed
 }
 
 /** Keep at most [max] evenly-spaced points (endpoints preserved) so the hub stays light with many routes. */
@@ -194,6 +239,9 @@ private fun eventTitle(kind: TripEventKind): String = when (kind) {
 }
 
 private val RouteBlue = Color(0xFF4285F4)
+private val SmoothGreen = Color(0xFF22C55E)
+private val SmoothAmber = Color(0xFFF59E0B)
+private val SmoothRed = Color(0xFFEF4444)
 private const val RECENT_LIMIT = 10
 private const val MAX_POINTS_PER_ROUTE = 120
 private const val MAX_EVENT_PINS = 250
