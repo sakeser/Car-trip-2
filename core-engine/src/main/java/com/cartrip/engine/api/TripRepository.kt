@@ -3,8 +3,10 @@ package com.cartrip.engine.api
 import android.content.Context
 import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.StressScore
+import com.cartrip.analyzer.analysis.TripKind
 import com.cartrip.analyzer.data.AnalysisPointEntity
 import com.cartrip.analyzer.data.AppDatabase
+import com.cartrip.analyzer.data.DriveEventEntity
 import com.cartrip.analyzer.data.TripDao
 import com.cartrip.analyzer.data.TripEntity
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +36,18 @@ interface TripRepository {
      */
     suspend fun getRoute(id: Long): List<RoutePoint>
 
+    /**
+     * The trip's speed timeline (from the persisted 1 Hz analysis track) as [TripTrackPoint]s, ordered by time,
+     * with each point's offset measured from the trip's start. Empty when the trip is unknown or has no track.
+     */
+    suspend fun getTrack(id: Long): List<TripTrackPoint>
+
+    /**
+     * The trip's notable driving [TripEvent]s (hard brake/accel/corner, road events), ordered by time, offsets
+     * measured from the trip's start (the same x-axis as [getTrack]). Empty when the trip is unknown or eventless.
+     */
+    suspend fun getEvents(id: Long): List<TripEvent>
+
     companion object {
         /** The default implementation, backed by the app's Room database. */
         fun create(context: Context): TripRepository =
@@ -51,6 +65,9 @@ internal fun TripEntity.toSummary(): TripSummary {
     // Driving Intelligence without a vehicle profile → Smoothness + Demand + the conditional headline (the
     // Efficiency pillar needs a vehicle the engine-api mapper doesn't hold, so it's omitted here).
     val di = DrivingIntelligence.from(this)
+    // "You vs traffic" is only meaningful for a real drive with a fetched with-traffic ETA (mirrors the legacy
+    // TripDetail gate). Expose the raw seconds; the UI derives the verdict/colours.
+    val hasEta = !TripKind.isLikelyNonDrive(this) && etaSource.isNotEmpty() && googleEtaTrafficS > 0.0
     return TripSummary(
         id = id,
         startEpochMs = startTime,
@@ -62,6 +79,8 @@ internal fun TripEntity.toSummary(): TripSummary {
         smoothnessScore = di?.smoothness?.score,
         smoothnessBand = di?.smoothness?.label,
         driveQuality = di?.headline,
+        etaTrafficSeconds = if (hasEta) googleEtaTrafficS else null,
+        etaFreeFlowSeconds = if (hasEta) googleEtaFreeFlowS.takeIf { it > 0.0 } else null,
     )
 }
 
@@ -75,6 +94,47 @@ internal fun List<AnalysisPointEntity>.toRoute(): List<RoutePoint> =
         else RoutePoint(p.lat, p.lon)
     }
 
+/**
+ * Pure: map persisted analysis points to the speed-timeline [TripTrackPoint]s. Offsets are seconds since
+ * [startEpochMs] (clamped at 0 so a sample logged just before the recorded start still lands on the axis);
+ * points are sorted by time so the line is monotonic in x. Unknown limits (`<= 0`) surface as `null` rather
+ * than 0 km/h. Unlike [toRoute] this keeps every sample — a speed line needs no valid coordinate.
+ */
+internal fun List<AnalysisPointEntity>.toTrack(startEpochMs: Long): List<TripTrackPoint> =
+    sortedBy { it.t }.mapNotNull { p ->
+        // Defend the boundary: drop any non-finite speed (a corrupt sample would poison a chart's scaling with
+        // NaN/Infinity), and treat a non-finite or <= 0 limit as "unknown" (null) rather than a real 0 km/h.
+        if (!p.speedKmh.isFinite()) return@mapNotNull null
+        TripTrackPoint(
+            offsetSeconds = (((p.t - startEpochMs) / 1000L).toInt()).coerceAtLeast(0),
+            speedKmh = p.speedKmh,
+            speedLimitKmh = if (p.speedLimitKmh.isFinite() && p.speedLimitKmh > 0.0) p.speedLimitKmh else null,
+        )
+    }
+
+/**
+ * Pure: map persisted drive events to timeline [TripEvent]s (offsets seconds since [startEpochMs], same x-axis
+ * as [toTrack]), sorted by time. The raw detector `type` (an `analysis.EventType.name`) is folded into the
+ * UI-stable [TripEventKind]; an unrecognized type maps to [TripEventKind.OTHER] rather than being dropped.
+ */
+internal fun List<DriveEventEntity>.toEvents(startEpochMs: Long): List<TripEvent> =
+    sortedBy { it.t }.map { e ->
+        TripEvent(
+            offsetSeconds = (((e.t - startEpochMs) / 1000L).toInt()).coerceAtLeast(0),
+            kind = eventKindOf(e.type),
+            magnitude = e.magnitude,
+        )
+    }
+
+/** Fold a raw `analysis.EventType.name` into the UI-stable [TripEventKind]. Unknown -> [TripEventKind.OTHER]. */
+internal fun eventKindOf(rawType: String): TripEventKind = when (rawType) {
+    "BRAKE", "HARSH_STOP" -> TripEventKind.HARD_BRAKE
+    "ACCEL" -> TripEventKind.HARD_ACCEL
+    "CORNER", "SWERVE" -> TripEventKind.HARD_CORNER
+    "POTHOLE" -> TripEventKind.ROUGH_ROAD
+    else -> TripEventKind.OTHER
+}
+
 /** DAO-backed [TripRepository]; a thin adapter (map the entity stream/lookup to summaries + route). */
 internal class DefaultTripRepository(private val dao: TripDao) : TripRepository {
 
@@ -86,4 +146,14 @@ internal class DefaultTripRepository(private val dao: TripDao) : TripRepository 
 
     override suspend fun getRoute(id: Long): List<RoutePoint> =
         dao.getAnalysisPoints(id).toRoute()
+
+    override suspend fun getTrack(id: Long): List<TripTrackPoint> {
+        val start = dao.getTrip(id)?.startTime ?: return emptyList()
+        return dao.getAnalysisPoints(id).toTrack(start)
+    }
+
+    override suspend fun getEvents(id: Long): List<TripEvent> {
+        val start = dao.getTrip(id)?.startTime ?: return emptyList()
+        return dao.getDriveEvents(id).toEvents(start)
+    }
 }

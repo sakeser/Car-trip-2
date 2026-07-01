@@ -27,8 +27,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.RoutePoint
+import com.cartrip.engine.api.TripEvent
 import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
+import com.cartrip.engine.api.TripTrackPoint
 
 /**
  * :ui-next trip detail — a **map-first** trip story: the route map hero, a clean summary headline, then the
@@ -42,6 +44,8 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
     val repo = remember { TripRepository.create(context) }
     val trip by produceState<TripSummary?>(initialValue = null, tripId) { value = repo.getTrip(tripId) }
     val route by produceState<List<RoutePoint>>(initialValue = emptyList(), tripId) { value = repo.getRoute(tripId) }
+    val track by produceState<List<TripTrackPoint>>(initialValue = emptyList(), tripId) { value = repo.getTrack(tripId) }
+    val events by produceState<List<TripEvent>>(initialValue = emptyList(), tripId) { value = repo.getEvents(tripId) }
 
     NextScaffold(title = "Trip", onBack = onBack) { padding ->
         val t = trip
@@ -79,6 +83,30 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                                 Stat("Distance", formatKm(t.distanceMeters))
                                 Stat("Duration", formatDuration(t.durationSeconds))
                             }
+                        }
+                    }
+
+                    // Trip Line: speed-vs-time story with the posted limit + events.
+                    if (track.size >= 2) {
+                        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                            TripLine(
+                                track = track,
+                                events = events,
+                                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                            )
+                        }
+                    }
+
+                    // You vs Traffic: actual time against Google's with-traffic ETA (read-only; drives with a
+                    // fetched ETA only -> the engine exposes etaTrafficSeconds as null otherwise).
+                    t.etaTrafficSeconds?.let { typical ->
+                        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                            YouVsTraffic(
+                                actualSeconds = t.durationSeconds,
+                                typicalSeconds = typical,
+                                freeFlowSeconds = t.etaFreeFlowSeconds,
+                                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                            )
                         }
                     }
 

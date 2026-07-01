@@ -37,4 +37,12 @@ data class TripSummary(
      * here — it needs a vehicle profile the engine-api mapper doesn't have; add it via a vehicle gateway later.
      */
     val driveQuality: String? = null,
+    /**
+     * Google's **with-traffic "typical" ETA** for this trip's route (seconds), or `null` when there's no usable
+     * traffic comparison (no ETA fetched, or a non-drive where a driving ETA is meaningless). Compare against
+     * [durationSeconds] for the "You vs traffic" read; `null` -> the UI omits that section.
+     */
+    val etaTrafficSeconds: Double? = null,
+    /** Google's **free-flow** (no-traffic, best-case) ETA for the route (seconds), or `null` when unknown. */
+    val etaFreeFlowSeconds: Double? = null,
 )
