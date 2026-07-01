@@ -7,7 +7,9 @@ object CloudPrefs {
 
     private fun p(c: Context) = c.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
-    fun autoSync(c: Context): Boolean = p(c).getBoolean("auto", true)
+    // Default OFF (owner decision 2026-06-30, ADVISORY §2.3): signing into Google must NOT silently
+    // start uploading trips. Sheets sync is opt-in / legacy-export only; user enables it explicitly.
+    fun autoSync(c: Context): Boolean = p(c).getBoolean("auto", false)
     fun setAutoSync(c: Context, v: Boolean) = p(c).edit().putBoolean("auto", v).apply()
 
     fun spreadsheetId(c: Context): String? = p(c).getString("sheet", null)

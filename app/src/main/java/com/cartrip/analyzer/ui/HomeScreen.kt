@@ -68,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cartrip.analyzer.export.TripExcel
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
+import com.cartrip.analyzer.cloud.ConnectedFeaturesPrefs
 import com.cartrip.analyzer.record.AutoRecordLog
 import com.cartrip.analyzer.record.AutoRecordPrefs
 import com.cartrip.analyzer.record.AutoRecordWatchService
@@ -378,6 +379,41 @@ private fun OptionsSheet(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
 
+            // Connected features (opt-out + disclosed, owner decision 2026-06-30 / ADVISORY §2.3).
+            var connected by remember { mutableStateOf(ConnectedFeaturesPrefs.enabled(context)) }
+            Text(
+                "Connected features",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 12.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Switch(
+                    checked = connected,
+                    onCheckedChange = {
+                        connected = it
+                        ConnectedFeaturesPrefs.setEnabled(context, it)
+                    }
+                )
+                Text(
+                    "  Look up speed limits & traffic times online",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Text(
+                "On: trips are enriched with posted speed limits (OpenStreetMap) and traffic-time " +
+                    "estimates (Google) from your route. Off: trips still record and analyze fully on " +
+                    "this device — those extras are just reduced. Your trip history is never uploaded by this.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 2.dp)
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+
             // Sheets sync lives here now (de-emphasized — it doesn't need Home-screen prominence).
             CloudSection(
                 onConnect = onConnectCloud,
@@ -549,7 +585,8 @@ private fun CloudSection(
             Spacer(Modifier.height(6.dp))
             if (cloud.email == null) {
                 Text(
-                    "Connect a Google account to auto-append every trip to a Google Sheet (opens in Excel / 365).",
+                    "Connect a Google account to sync trips to your own Google Sheet (opens in Excel / 365). " +
+                        "Syncing stays off until you turn it on.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

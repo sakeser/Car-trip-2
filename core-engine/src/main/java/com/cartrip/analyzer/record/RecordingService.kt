@@ -30,6 +30,7 @@ import com.cartrip.analyzer.analysis.GeoUtils
 import com.cartrip.analyzer.analysis.TripAnalyzer
 import com.cartrip.analyzer.cloud.CloudPrefs
 import com.cartrip.analyzer.cloud.CloudState
+import com.cartrip.analyzer.cloud.ConnectedFeaturesPrefs
 import com.cartrip.analyzer.cloud.GoogleAuth
 import com.cartrip.analyzer.cloud.RoutesClient
 import com.cartrip.analyzer.cloud.RoutesConfig
@@ -333,7 +334,9 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
                                 )
                             )
                         }
-                        runCatching { SpeedLimits.refreshForTrip(dao, finishedId) }
+                        if (ConnectedFeaturesPrefs.enabled(applicationContext)) {
+                            runCatching { SpeedLimits.refreshForTrip(dao, finishedId) }
+                        }
                     }
                     val exportTrip = dao.getTrip(finishedId) ?: updated
                     runCatching { TripExcel.write(applicationContext, exportTrip, analysis) }
@@ -498,6 +501,7 @@ class RecordingService : Service(), SensorEventListener, LocationListener {
      * there's no clear start/end, no key, or the call fails — the trip still saves fine.
      */
     private fun fetchLiveEta(analysis: TripAnalysis): RoutesClient.RouteResult? {
+        if (!ConnectedFeaturesPrefs.enabled(applicationContext)) return null
         val start = analysis.points.firstOrNull() ?: return null
         val end = analysis.points.lastOrNull() ?: return null
         if (GeoUtils.haversine(start.lat, start.lon, end.lat, end.lon) < 300.0) return null
