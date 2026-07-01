@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
@@ -57,23 +58,27 @@ fun TripDetailNextScreen(tripId: Long, onBack: () -> Unit) {
                         DetailRow("Start", formatStart(t.startEpochMs))
                         DetailRow("Distance", formatKm(t.distanceMeters))
                         DetailRow("Duration", formatDuration(t.durationSeconds))
-                        val stress = t.stressScore
-                        val band = t.stressBand
-                        if (stress != null && band != null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    "Drive stress",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    StressChip(stress)
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(band, style = MaterialTheme.typography.titleMedium)
+
+                        // Driving Intelligence: the conditional "Drive Quality" headline + the Smoothness (style)
+                        // and Demand (context) pillars. Efficiency needs a vehicle profile the engine-api mapper
+                        // doesn't hold yet, so it's added later via a vehicle gateway.
+                        val dq = t.driveQuality
+                        if (dq != null) {
+                            HorizontalDivider()
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        "DRIVE QUALITY",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(dq, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                }
+                                t.smoothnessScore?.let { s ->
+                                    PillarRow("Smoothness", t.smoothnessBand) { ScoreChip(s) }
+                                }
+                                t.stressScore?.let { s ->
+                                    PillarRow("Demand", t.stressBand) { StressChip(s) }
                                 }
                             }
                         }
@@ -96,5 +101,28 @@ private fun DetailRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(value, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/** A Driving Intelligence pillar row: label on the left, a score chip + band word on the right. */
+@Composable
+private fun PillarRow(label: String, band: String?, chip: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            chip()
+            band?.let {
+                Spacer(Modifier.width(10.dp))
+                Text(it, style = MaterialTheme.typography.titleMedium)
+            }
+        }
     }
 }

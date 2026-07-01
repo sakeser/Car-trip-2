@@ -67,10 +67,12 @@ object DrivingIntelligence {
 
     /**
      * Per-trip Driving Intelligence, or null when the trip isn't a scorable drive (walks / too short — same
-     * gate as [StressScore]). [personalAvgL100] is the driver's own recent economy for the "vs your average"
-     * read; when null the efficiency read compares against the vehicle's combined rating instead.
+     * gate as [StressScore]). [vehicle] is only needed for the Efficiency pillar; pass null (e.g. from the
+     * `:ui-next` engine-api mapper, which has no vehicle profile) to get Smoothness + Demand + the headline with
+     * `efficiency = null`. [personalAvgL100] is the driver's own recent economy for the "vs your average" read;
+     * when null the efficiency read compares against the vehicle's combined rating instead.
      */
-    fun from(trip: TripEntity, vehicle: FuelEstimator.Vehicle, personalAvgL100: Double? = null): Result? {
+    fun from(trip: TripEntity, vehicle: FuelEstimator.Vehicle? = null, personalAvgL100: Double? = null): Result? {
         val stress = StressScore.from(trip) ?: return null
         val scores = TripScores.from(trip)
 
@@ -96,8 +98,8 @@ object DrivingIntelligence {
         }
         val demand = Pillar(demandScore, demandBand(demandScore), demandRead(trip, level))
 
-        // --- Efficiency (outcome) = fuel economy ---
-        val efficiency = efficiencyPillar(trip, vehicle, personalAvgL100)
+        // --- Efficiency (outcome) = fuel economy (only when a vehicle profile is available) ---
+        val efficiency = vehicle?.let { efficiencyPillar(trip, it, personalAvgL100) }
 
         // --- Conditional headline via the 2x2 grid ---
         val smooth = smoothnessScore >= SMOOTH_AT

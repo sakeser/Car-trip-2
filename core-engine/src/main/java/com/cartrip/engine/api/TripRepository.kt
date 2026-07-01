@@ -1,6 +1,7 @@
 package com.cartrip.engine.api
 
 import android.content.Context
+import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.data.AppDatabase
 import com.cartrip.analyzer.data.TripDao
@@ -39,6 +40,9 @@ interface TripRepository {
  */
 internal fun TripEntity.toSummary(): TripSummary {
     val stress = StressScore.from(this)
+    // Driving Intelligence without a vehicle profile → Smoothness + Demand + the conditional headline (the
+    // Efficiency pillar needs a vehicle the engine-api mapper doesn't hold, so it's omitted here).
+    val di = DrivingIntelligence.from(this)
     return TripSummary(
         id = id,
         startEpochMs = startTime,
@@ -47,6 +51,9 @@ internal fun TripEntity.toSummary(): TripSummary {
         durationSeconds = durationS,
         stressScore = stress?.score,
         stressBand = stress?.band,
+        smoothnessScore = di?.smoothness?.score,
+        smoothnessBand = di?.smoothness?.label,
+        driveQuality = di?.headline,
     )
 }
 

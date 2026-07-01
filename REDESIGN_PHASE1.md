@@ -222,11 +222,15 @@ in any `:ui-next` / stress-chip code and is tracked separately (fix deferred, ow
 question is settled by the `StressScore` precedent — **pure scoring/label logic → `:core-engine` `analysis`; colour →
 the UI module**. ✅ **The `TripScores` move is DONE (Rev CX, 2026-06-30):** `TripScores.from` now lives in
 `:core-engine/analysis` (Compose `Color` dropped; green=good colour → new `ui/ScoreColors`; `TripScoresTest` moved
-engine-side). It shipped alongside the new pure `analysis/DrivingIntelligence.kt` three-pillar model, currently
-surfaced in the **legacy** `app/ui` screens (Trip Detail / Insights / AI export). **`:ui-next` adoption of the
-Driving Intelligence hero + pillar cards is the next enrichment slice** (add Safety/Comfort/efficiency to
-`TripSummary` or compute the pillars engine-side for `:ui-next`). `TripLabeler` is a later, heavier slice (needs the
-per-point list + carries a stale hardcoded home).
+engine-side). It shipped alongside the new pure `analysis/DrivingIntelligence.kt` three-pillar model, surfaced in the
+**legacy** `app/ui` screens (Trip Detail / Insights / AI export). ✅ **`:ui-next` adoption STARTED (Rev CX):**
+`TripSummary` gained `smoothnessScore` / `smoothnessBand` / `driveQuality` (computed vehicle-free in the pure
+`toSummary()` mapper via `DrivingIntelligence.from(this)`), and `TripDetailNextScreen` renders a Driving
+Intelligence hero (Drive Quality headline + Smoothness & Demand pillar rows, new green=good `ScoreChip`).
+**Efficiency is deferred in `:ui-next`** — it needs a vehicle profile the engine-api mapper can't hold (the
+boundary test forbids `:ui-next` importing `settings.VehiclePrefs`); add it when a **`SettingsStore` / vehicle
+gateway** lands, then show the third pillar + enrich the list row. `TripLabeler` is a later, heavier slice (needs
+the per-point list + carries a stale hardcoded home).
 Then more screens; add gateways (`RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`) only as a
 screen needs them. **M1** (engine self-describing manifest) before `:ui-next` hosts recording; **M3** (Room migration
 tests) before any schema change.

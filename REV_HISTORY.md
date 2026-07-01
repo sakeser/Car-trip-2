@@ -34,6 +34,12 @@ threshold change — pure roll-up of existing aggregates. **On-device verify sti
 - **AI export (`ui/AiInsightsExport.kt`):** coaching prompt rewritten around the three pillars (separate style
   from demand); new "Driving Intelligence (style vs demand vs outcome)" section (avg pillars + style×demand trip
   mix) + per-drive verdict tag on the recent-drives list. +1 test.
+- **`:ui-next` adoption (premium module):** `DrivingIntelligence.from` made vehicle-optional (efficiency null
+  without a profile) so the pure engine-api mapper can compute it; `TripSummary` gained `smoothnessScore` /
+  `smoothnessBand` / `driveQuality` (the headline) — **Demand = the existing `stressScore`, Efficiency deferred**
+  until a vehicle gateway. `TripDetailNextScreen` now shows a Driving Intelligence hero (Drive Quality headline +
+  Smoothness & Demand pillar rows) via a new green=good `ScoreChip`; `EngineBoundaryTest` still passes (no legacy
+  imports), `TripSummaryMapperTest` extended. Row/list unchanged this pass.
 
 ## Rev CW (2026-06-29, v3.35/build 146) — Driver Load / "Drive readiness" model (marquee R&D, v1)
 

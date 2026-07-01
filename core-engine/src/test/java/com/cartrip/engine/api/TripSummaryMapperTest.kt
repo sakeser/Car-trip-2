@@ -1,5 +1,6 @@
 package com.cartrip.engine.api
 
+import com.cartrip.analyzer.analysis.DrivingIntelligence
 import com.cartrip.analyzer.analysis.StressScore
 import com.cartrip.analyzer.data.TripEntity
 import org.junit.Assert.assertEquals
@@ -36,6 +37,13 @@ class TripSummaryMapperTest {
         assertNotNull("a 12 km / 11 min drive should be scorable", expected)
         assertEquals(expected?.score, s.stressScore)
         assertEquals(expected?.band, s.stressBand)
+
+        // Driving Intelligence pillars (Smoothness + the conditional headline) are derived vehicle-free.
+        val di = DrivingIntelligence.from(trip)
+        assertNotNull(di)
+        assertEquals(di?.smoothness?.score, s.smoothnessScore)
+        assertEquals(di?.smoothness?.label, s.smoothnessBand)
+        assertEquals(di?.headline, s.driveQuality)
     }
 
     @Test fun ongoing_trip_maps_zero_end_and_defaulted_metrics() {
@@ -47,8 +55,10 @@ class TripSummaryMapperTest {
         assertEquals(0L, s.endEpochMs)
         assertEquals(0.0, s.distanceMeters, 0.0)
         assertEquals(0.0, s.durationSeconds, 0.0)
-        // 0 m / 0 s is below the StressScore scorability floor -> no score.
+        // 0 m / 0 s is below the StressScore scorability floor -> no score, and no Driving Intelligence.
         assertNull(s.stressScore)
         assertNull(s.stressBand)
+        assertNull(s.smoothnessScore)
+        assertNull(s.driveQuality)
     }
 }

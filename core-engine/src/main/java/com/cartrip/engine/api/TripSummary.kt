@@ -19,8 +19,22 @@ data class TripSummary(
     /**
      * Drive Stress score, 0..100 (higher = more demanding), or `null` when the trip isn't scorable
      * (a non-drive, or too short). Derived from the trip's stored metrics by `analysis.StressScore`.
+     * In the Driving Intelligence model this is the **Demand / Load** pillar.
      */
     val stressScore: Int? = null,
     /** Human band for [stressScore] ("Calm" / "Moderate" / "Busy" / "High stress"), or `null` when unscored. */
     val stressBand: String? = null,
+    /**
+     * Driving Intelligence **Smoothness** pillar (driver style), 0..100 (higher = smoother), or `null` when the
+     * trip isn't scorable. Derived by `analysis.DrivingIntelligence` (a blend of Safety + Comfort).
+     */
+    val smoothnessScore: Int? = null,
+    /** Human band for [smoothnessScore] ("Very smooth" / "Smooth" / "A bit rough" / "Rough"), or `null`. */
+    val smoothnessBand: String? = null,
+    /**
+     * The conditional "Drive Quality" headline (Smoothness read against the demand band, e.g. "Smooth for a
+     * demanding drive"), or `null` when the trip isn't scorable. The Efficiency pillar is intentionally omitted
+     * here — it needs a vehicle profile the engine-api mapper doesn't have; add it via a vehicle gateway later.
+     */
+    val driveQuality: String? = null,
 )
