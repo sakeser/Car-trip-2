@@ -35,7 +35,11 @@ cosmetic polish for its own sake, but do not let rough scaffolding harden into t
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). Recent `:ui-next` UI batches continue as normal commits on `main`; always confirm
   live push/local state with `git status --short --branch` and `git log origin/main..main` before pushing.
-- **Version 3.57 / build 168, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.58 / build 169, Room schema v22** (no schema change in any recent UI work).
+- **More drill-in sections (2026-07-01, commit `4eadced`, S25 PASS):** the More rows now navigate to a
+  `MoreDetailScreen` (nav route `more/{key}`) — **About** is real read-only content; the rest are structured
+  "coming soon" details. Establishes the More -> detail -> back settings pattern. Read-only, no gateway.
+  *(Cosmetic for the later polish pass: the About/section copy uses "--" as an ASCII stand-in for an em-dash.)*
 - **Compact map markers (2026-07-01, commit `27dcba0`, S25 PASS):** the trip-detail map hero's oversized default
   Google teardrop pins (start/end/scrubber) are replaced with small custom dots (white ring + colour) via a shared
   `MapMarkers.mapDotIcon` — start green, end red, scrubber blue. The Map hub already used equivalent small dots.
