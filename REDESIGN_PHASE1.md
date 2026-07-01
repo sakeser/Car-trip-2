@@ -14,7 +14,13 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.50 / build 161, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.51 / build 162, Room schema v22** (no schema change in any recent UI work).
+- **Trip Detail "At a glance" stats grid (2026-07-01, commit `9778ff4`, S25 PASS):** a read-only grid of raw
+  measured stats (top speed, avg moving speed, moving vs idle time, hard brake/accel/corner counts) via a new
+  engine-api `TripStats` value type + `TripSummary.stats` (mapped from existing `TripEntity` fields). **Known
+  rough edge (flagged, deferred):** the grid's hard-X counts use `TripEntity.hardXCount` (threshold-based) while
+  the Trip Line ticks use `drive_events` (softer detections) — they can disagree under the shared "Hard ..."
+  labeling; reconciling touches event/threshold semantics the owner wants kept stable.
 - **Insights v2 charts (2026-07-01, commit `5d95624`, S25 PASS):** the Insights tab gained two read-only chart
   surfaces — **Distance by day** (7-day vertical bar chart) + **When you drive** (time-of-day daypart bars),
   windowed by the shared recency chips. Pure aggregation (`InsightsMetrics.kt`: `dailyDistanceKm`/`daypartCounts`
