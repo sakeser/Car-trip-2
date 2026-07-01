@@ -14,16 +14,20 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.43 / build 154, Room schema v22** (no schema change in any recent UI work).
-- **Latest batch (2026-07-01, commit `589d8fd`, build-green, S25 verify PENDING — no device attached at build
-  time):** Trip Detail depth — the **Trip Line** (`TripLine.kt`, a Canvas speed-vs-time chart: filled speed
-  curve + dashed posted-limit + coloured event ticks + adaptive legend) and **You-vs-Traffic** (`YouVsTraffic.kt`,
-  verdict + proportional You/Typical/Free-flow bars). New engine-api reads: `TripRepository.getTrack`/`getEvents`
-  (+ `TripTrackPoint`/`TripEvent`/`TripEventKind` value types, pure unit-tested mappers) and
-  `TripSummary.etaTrafficSeconds`/`etaFreeFlowSeconds` (gated to real drives with a fetched ETA). Codex-reviewed
-  (boundary clean, non-finite-speed guard added in `toTrack`). **This knocks out most of priority #1's detail
-  sections; still open on the detail: map<->timeline scrub sync, an explicit Drive-Stress explainer, efficiency
-  pillar.**
+- **Version 3.44 / build 155, Room schema v22** (no schema change in any recent UI work).
+- **Latest batch (2026-07-01, commits `589d8fd` + fix `65b6af8`, build-green, S25 PASS):** Trip Detail depth — the
+  **Trip Line** (`TripLine.kt`, a Canvas speed-vs-time chart: filled speed curve + dashed posted-limit + coloured
+  event ticks + adaptive legend) and **You-vs-Traffic** (`YouVsTraffic.kt`, verdict + proportional
+  You/Typical/Free-flow bars). New engine-api reads: `TripRepository.getTrack`/`getEvents` (+
+  `TripTrackPoint`/`TripEvent`/`TripEventKind` value types, pure unit-tested mappers) and
+  `TripSummary.etaTrafficSeconds`/`etaFreeFlowSeconds` (gated to real drives with a fetched ETA). Codex-reviewed.
+  **⚠️ On-device bug caught + fixed (`65b6af8`):** `AnalysisPointEntity.t`/`DriveEventEntity.t` are a **monotonic
+  recording clock (elapsedRealtime), NOT epoch ms** — the first cut offset from the trip's epoch `startTime`, so
+  every point clamped to x=0 (chart was a vertical line). Fix = derive the x-origin from the earliest sample `t`
+  (`TripDao.getFirstAnalysisPointTime`); regression test uses a non-epoch base. **S25 PASS on trips 1190 (amber
+  "1 min slower") + 1189 (red "7 min slower", stop-and-go dip visible); every value matched DB-replay.** **This
+  knocks out most of priority #1's detail sections; still open on the detail: map<->timeline scrub sync, an
+  explicit Drive-Stress explainer, efficiency pillar.**
 - **Modules:** `:app` (legacy UI + host), `:core-engine` (all engine: analysis/data/cloud/record/export/settings
   + the `com.cartrip.engine.api` seam), `:ui-next` (premium Compose UI). Packages stay `com.cartrip.analyzer.*`
   inside the engine — **do not rename.**
