@@ -1,6 +1,37 @@
 # Speed-Interruption Parameter Sweep — Evidence Report
 
-## Conclusion / Next action
+## ⚠️ REAL-DATA UPDATE (2026-07-01) — supersedes the synthetic conclusion below
+
+Ran the sweep on **51 real trips** (44,976 `AnalysisPointEntity` points, exported via Diagnostics →
+"Export trip tracks (CSV)" and pulled off the S25). Aggregate results (per config: total events / trips with
+≥1 event / traffic-wave-typed events):
+
+| Config | events | trips ≥1 | traffic-waves |
+|---|--:|--:|--:|
+| **CurrentDrawdowns (prod)** | **55** | **19 / 51** | n/a (major only) |
+| CurrentStrict (relative cruise-exit, same thresholds) | 64 | 22 | 0 |
+| Balanced (loss 38%, cruise 55) | 95 | 27 | 9 |
+| HighwayWave (loss 30%, cruise 70) | 49 | 14 | 13 |
+| UrbanWave (loss 35%, cruise 45) | 151 | 34 | 13 |
+| Sensitive (loss 30%, cruise 45) | 163 | 34 | 23 |
+
+**This refutes the synthetic "0 events on all trips" conclusion.** On real data, production `Drawdowns`
+detects **55 major slowdowns across 19 of 51 trips** — it is NOT blind. The relative cruise-exit fix adds only
+~16% (55→64). Genuine **traffic-wave** events (moderate 30–43% losses at highway cruise, e.g. trip 1189's
+112→60→76 km/h) are **real but rare** (9–23 across 51 trips), and there is **no trip where prod finds 0 but a
+candidate finds ≥2** — the looser configs mostly add events to already-flagged trips, not new ones.
+
+**Decision (evidence-backed): do NOT add a production Traffic Wave / Speed-Interruption detector now.** Prod's
+Major-Slowdown behaviour is sound on real data; trip *demand* (incl. 1189-style crawls) is already captured by
+`StopAndGo` / Drive Stress v2 (1189 scores 78). A Traffic-Wave band would be a **display-only insight** (rare
+payoff) at best, and adding it as a scoring input would force a recalibration of owner-tuned `StressScore` /
+`DriverLoad` for little gain. The relative cruise-exit is a valid latent correctness tweak (+16%) but likewise
+shifts scores → gate + recalibrate; low priority. **No production `Drawdowns`/`StressScore`/`DriverLoad`
+changed.** (Full real-data md/csv kept off-repo in the session scratchpad; raw `all_tracks.csv` not committed.)
+
+---
+
+## Conclusion / Next action _(SYNTHETIC-ONLY run — see the real-data update above; this section is now historical)_
 
 Production `Drawdowns` is behaving as a **strict Major Slowdown detector**, not as a broad traffic-wave /
 speed-interruption detector. In this synthetic sweep it detected **0 discrete events across all 8 test
