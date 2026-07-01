@@ -10,10 +10,31 @@ its vision = a Material-3 **5-tab** product: **Drive · Trips · Insights · Map
 local-first). Legacy `app/ui` is the **working oracle — do not break it**; `:ui-next` is the new premium UI,
 still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip list (preview)").
 
+### Product design directive (owner)
+
+The current `:ui-next` build is a **transitional framework**, not the final premium visual/product standard.
+The recent breadth work deliberately exposed many tabs, sections, charts, map layers, and data elements quickly so
+the full product architecture is visible. Do not mistake that rough, numeric-heavy scaffolding for the desired end
+state.
+
+The final premium app must feel materially cleaner and more polished than legacy, not merely reorganized legacy.
+Use the framework phase to prove screens and data surfaces, then schedule a dedicated premium UI/product-design pass
+that:
+- reduces raw numeric clutter and text-heavy cards;
+- puts plain-English interpretation before raw values;
+- turns dense metrics into cleaner charts, chips, maps, icons, and compact summaries;
+- uses progressive disclosure for details (peek cards, drill-ins, expanders) instead of showing everything at once;
+- creates a consistent `:ui-next` component language for cards, legends, markers, charts, tabs, and settings rows;
+- keeps source-code ASCII/encoding safety separate from UX: ASCII-safe code is not a reason for ASCII-looking UI.
+
+Near term, continue expanding breadth when it clarifies the product shape. Targeted refinement is also welcome when
+it materially improves a core feature's usability (for example, oversized map pins or unreadable map density). Avoid
+cosmetic polish for its own sake, but do not let rough scaffolding harden into the final design.
+
 ### Where things stand
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
-  merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
-  + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
+  merge commit `3dcb781`, pushed). Recent `:ui-next` UI batches continue as normal commits on `main`; always confirm
+  live push/local state with `git status --short --branch` and `git log origin/main..main` before pushing.
 - **Version 3.56 / build 167, Room schema v22** (no schema change in any recent UI work).
 - **Map tap-to-peek (2026-07-01, commit `b9cd0b5`, S25 PASS):** tapping an event dot or speeding segment shows a
   lightweight `MapPeek` card (what / when = trip date + offset / Open trip) instead of jumping straight to the
@@ -80,16 +101,21 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
   inside the engine — **do not rename.**
 
 ### What `:ui-next` has today (all S25-verified)
-- **App shell:** `TripsNextRoot` → `HomeShell` = one `Scaffold` with a **bottom nav (Trips / Health)** + top bar;
-  trip data observed once and shared; trip **detail is a full-screen drill-in** (nav route `detail/{id}`).
-- **Trips tab** (`TripListContent`): premium rows — date, `km · duration`, the **Drive-Quality verdict**, a
-  green=good **Smoothness** `ScoreChip`. Tap → detail.
-- **Trip Detail** (`TripDetailNextScreen`): **map-first** — `TripMapHero` (route polyline + start/end markers,
-  framed to the route) → date/distance/duration summary → the **Driving Intelligence** card (Drive-Quality
-  headline + Smoothness & Demand pillars via `PillarRow`/`ScoreChip`/`StressChip`). **Efficiency pillar is
-  deliberately omitted** (needs a vehicle profile the engine-api mapper can't hold).
-- **Health tab** (`InsightsContent`): a Driving-Intelligence overview aggregated from `TripSummary` — avg
-  Smoothness + Demand pillars + a Drive-Quality "drive mix" count.
+- **App shell:** `TripsNextRoot` → `HomeShell` = one `Scaffold` with the full **5-tab** bottom nav:
+  **Drive / Trips / Insights / Map / More**. Trip data is observed once and shared; trip detail is a full-screen
+  drill-in (nav route `detail/{id}`).
+- **Drive tab:** rough read-only recording-home placeholder. Legacy still owns the real recording flow until a
+  `RecordingController`/`RecordingState` gateway exists.
+- **Trips tab** (`TripListContent`): recency filters, drive-only window summary, empty states, non-drive labels,
+  premium rows with Drive-Quality verdict + Smoothness chip. Tap → detail.
+- **Insights tab** (`InsightsContent`): windowed Driving-Intelligence overview, Smoothness trend, drive mix,
+  Distance-by-day, and When-you-drive charts.
+- **Map tab** (`MapHubScreen`): real spatial-intelligence hub — recent routes coloured by Smoothness, tap route
+  → detail, Events/trouble-spots dots, Speeding overlay, tap-to-peek cards, Heatmap placeholder.
+- **More tab:** rough settings hub menu. Real settings screens still need `SettingsStore`/vehicle gateways.
+- **Trip Detail** (`TripDetailNextScreen`): map-first route hero + summary + At-a-glance raw stats + Trip Line
+  with map scrub sync + You-vs-Traffic + Driving Intelligence + Events + Efficiency placeholder. The screen is
+  functional and broad, but still subject to the product-design pass above to reduce density.
 - Own theme `CarTripNextTheme` (teal-on-deep-neutral, dark/light). ASCII source only (Cp1252 trap; build glyphs
   from code points, e.g. `MIDDOT = 0x00B7.toChar()`).
 
@@ -107,7 +133,8 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - Pure value types that stay public: `DrivingIntelligence`, `StressScore`, `TripScores`, `DriverLoad`,
   `FuelEstimator`, `StopAndGo`, `TripKind` (in `analysis`), but **`:ui-next` must NOT import `analysis.*`** — the
   `EngineBoundaryTest` (a source scan in `:ui-next` test) fails the build if `:ui-next` imports
-  `com.cartrip.analyzer.{data,cloud,record,export,settings,ui}`. Derive band words / colours locally in `:ui-next`.
+  `com.cartrip.analyzer.{analysis,data,cloud,record,export,settings,ui}`. Derive band words / colours locally in
+  `:ui-next`.
 - **Add gateways only when a screen needs one** (the last one added was `getRoute` for the map). Documented but
   not built: `RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`/vehicle gateway.
 
@@ -126,12 +153,11 @@ one S25 pass at the end of a coherent batch (ADB at `...\cartrip-build-tools\and
 screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — it can't be unit-verified).
 
 ### Known gaps / carry-forward
-- `8f6c44e` (map-first detail) is **committed locally on `main` but not pushed.**
-- `:ui-next` still doesn't replace legacy: **no Drive (record) tab, no Map tab, no More/Settings, no efficiency
-  pillar, no fuel/cost on the detail.** (DONE since this note: Trip Line + events + you-vs-traffic on the detail,
-  map<->timeline scrub sync, 1-finger map pan, Trips-tab recency filters + summary + non-drive rows, and Health-tab
-  windowed overview + smoothness trend.) **Drive-Stress explainer: DEFERRED by the owner** (scoring/explanation
-  model still subject to change — don't build UI explaining it yet).
+- `:ui-next` still doesn't replace legacy: **real recording, real settings, vehicle/fuel editing, efficiency/fuel
+  pillar, route names, heatmap aggregation, and production-grade premium visual polish are still open.** Drive/Map/More
+  shells exist, but Drive and More are mostly placeholders and Map is still in breadth/refinement mode.
+- **Drive-Stress explainer: DEFERRED by the owner** (scoring/explanation model still subject to change — don't build
+  UI explaining it yet).
 - Naming: `:ui-next` has no trip **route names** yet (`TripSummary` has none) — the detail headline uses the
   date. Real names come from legacy `GeoNamer`/`TripLabeler` (presentation-domain, not engine) — a later gateway.
 - Do NOT reopen: **Speed-Interruption / Traffic-Wave** (real-data calibration decided *no new detector*) and

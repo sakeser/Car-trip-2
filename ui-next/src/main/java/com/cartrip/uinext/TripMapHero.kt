@@ -12,7 +12,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import com.cartrip.engine.api.RoutePoint
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLng
@@ -44,6 +43,10 @@ internal fun TripMapHero(
         latLngs.forEach(b::include)
         b.build()
     }
+    // Compact markers (built once): start green, end red, scrubber a slightly larger "you" blue.
+    val startIcon = remember { mapDotIcon(0xFF22C55E.toInt(), 40) }
+    val endIcon = remember { mapDotIcon(0xFFEF4444.toInt(), 40) }
+    val selectedIcon = remember { mapDotIcon(0xFF0EA5E9.toInt(), 46) }
     val camera = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(latLngs.first(), 12f)
     }
@@ -63,9 +66,10 @@ internal fun TripMapHero(
         ),
     ) {
         Polyline(points = latLngs, color = RouteBlue, width = 12f, jointType = JointType.ROUND)
-        Marker(state = MarkerState(latLngs.first()), title = "Start")
-        Marker(state = MarkerState(latLngs.last()), title = "End")
-        // The Trip Line scrubber's position, synced onto the route (a cyan "you are here" dot). maps-compose
+        // Compact custom dots instead of the oversized default teardrop pins (start green, end red).
+        Marker(state = MarkerState(latLngs.first()), icon = startIcon, anchor = Offset(0.5f, 0.5f), title = "Start")
+        Marker(state = MarkerState(latLngs.last()), icon = endIcon, anchor = Offset(0.5f, 0.5f), title = "End")
+        // The Trip Line scrubber's position, synced onto the route (a small "you are here" dot). maps-compose
         // 4.4.2 has no rememberUpdatedMarkerState, and a fresh MarkerState(pos) each recomposition does NOT move
         // the marker, so keep one remembered state and push new positions into it via SideEffect.
         selected?.let { sel ->
@@ -73,7 +77,7 @@ internal fun TripMapHero(
             SideEffect { markerState.position = LatLng(sel.lat, sel.lon) }
             Marker(
                 state = markerState,
-                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN),
+                icon = selectedIcon,
                 anchor = Offset(0.5f, 0.5f),
                 zIndex = 5f,
             )

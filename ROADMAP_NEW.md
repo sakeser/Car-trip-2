@@ -330,6 +330,26 @@ Sequencing notes:
 - These features fit the future Settings/Privacy area: threshold sliders, map layer toggles, connected-feature
   disclosure if Places is used, and a one-tap "clear parked-car pin."
 
+## Premium UI product-design pass - framework first, refinement next
+**Status: explicit owner directive (2026-07-01).** The current `:ui-next` breadth work is intentionally rough
+framework-building: make the 5-tab product, major screens, map layers, charts, menus, and data surfaces visible
+first. This is useful progress, but it is **not** the final UI standard.
+
+After the main product framework is roughed in, schedule a dedicated premium UI/product-design pass. The goal is for
+`:ui-next` to feel cleaner, sleeker, and more premium than legacy, not like the same legacy density moved into new
+tabs. The design pass should:
+- collapse raw numeric detail behind summaries, peeks, drill-ins, and expandable sections;
+- lead each surface with a plain-English interpretation, then show the supporting data second;
+- replace text-heavy/stat-heavy blocks with charts, maps, icons, chips, and compact visual summaries;
+- standardize the `:ui-next` component language for route cards, legends, markers, chart cards, setting rows, and
+  status/empty states;
+- keep dense diagnostics and calibration detail out of the primary user path unless explicitly requested;
+- treat targeted refinement on core features as worthwhile when it improves usability, while avoiding low-impact
+  alignment/aesthetic churn during the breadth phase.
+
+This means it is acceptable for current screens to look like wireframes or data-rich scaffolding while breadth is
+still being built, but future agents should not confuse that scaffolding with the intended premium destination.
+
 ## Cross-cutting principle (owner): always look for novel, innovative ways to present and add value/analysis.
 Examples to fold in opportunistically: AI coaching from the CN export; stress/drawdown trends over time;
 "your worst-traffic times/routes"; per-destination analytics once POI naming (CM) lands.

@@ -84,6 +84,11 @@ This is the **authoritative** continuation brief. It supersedes `CLAUDE_CODE_HAN
 (June 23, pre-Rev-G — now historical). `REV_HISTORY.md` has the per-revision changelog;
 `FIELD_TEST_PLAN.md` has the on-road test scenarios.
 
+**Premium UI direction:** for current `:ui-next` work, read the top of `REDESIGN_PHASE1.md` first. It now captures
+the owner directive that today's numeric-heavy `:ui-next` screens are transitional framework scaffolding, not the
+final premium design standard. Future work should keep expanding the product shape while planning a later pass to
+make the UI cleaner, sleeker, less numeric, and more interpretation-led than legacy.
+
 ---
 
 ## 1. TL;DR — current state
