@@ -14,7 +14,10 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.53 / build 164, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.54 / build 165, Room schema v22** (no schema change in any recent UI work).
+- **Map routes coloured by Smoothness (2026-07-01, commit `cce481a`, S25 PASS):** Map-hub route polylines are
+  coloured by their trip's Smoothness (green/amber/red, ScoreChip thresholds) with a Smooth/OK/Rough legend. No
+  new data (reuses `TripSummary.smoothnessScore`).
 - **Interactive Map (2026-07-01, commit `bdb6219`, S25 PASS):** Map-hub route polylines are now clickable
   (tagged with trip id) — tap a route -> opens that trip's detail. No new gateway.
 - **Map Events/trouble-spots layer (2026-07-01, commit `1388e17`, S25 PASS):** layer chips are toggles now
