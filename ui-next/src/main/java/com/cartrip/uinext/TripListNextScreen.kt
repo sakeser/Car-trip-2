@@ -21,57 +21,43 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
 
 /**
- * :ui-next trip list - a tiny premium list from [TripRepository.observeTrips], rows tappable -> detail
- * (see [TripsNextRoot]). Three states: loading / empty / list. No labels / scores / maps / charts / recording.
- * Engine access via com.cartrip.engine.api.* only; ASCII source (Cp1252 trap).
+ * Trips-tab content: a premium list of [TripSummary] rows (loading / empty / list), rows tappable -> detail.
+ * The trip data is hoisted into the shell ([TripsNextRoot]) and passed in, so the Trips and Health tabs share
+ * one observation. No labels / maps / charts / recording. Engine access via com.cartrip.engine.api.* only;
+ * ASCII source (Cp1252 trap).
  */
 @Composable
-fun TripListNextScreen(onOpenTrip: (Long) -> Unit, onBack: () -> Unit) {
-    val context = LocalContext.current
-    val repo = remember { TripRepository.create(context) }
-    val trips: List<TripSummary>? by repo.observeTrips().collectAsState(initial = null)
-
-    NextScaffold(title = "Trips", onBack = onBack) { padding ->
-        val list = trips
-        when {
-            list == null -> Centered(padding) { CircularProgressIndicator() }
-            list.isEmpty() -> Centered(padding) {
-                Text(
-                    "No trips yet",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(list, key = { it.id }) { trip ->
-                    TripRow(trip, onClick = { onOpenTrip(trip.id) })
-                }
+internal fun TripListContent(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit) {
+    when {
+        trips == null -> Centered { CircularProgressIndicator() }
+        trips.isEmpty() -> Centered {
+            Text(
+                "No trips yet",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(trips, key = { it.id }) { trip ->
+                TripRow(trip, onClick = { onOpenTrip(trip.id) })
             }
         }
     }
 }
 
 @Composable
-private fun Centered(padding: PaddingValues, content: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().padding(padding),
-        contentAlignment = Alignment.Center,
-    ) { content() }
+internal fun Centered(content: @Composable () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
 }
 
 @Composable

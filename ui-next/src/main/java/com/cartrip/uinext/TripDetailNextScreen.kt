@@ -104,9 +104,10 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
-/** A Driving Intelligence pillar row: label on the left, a score chip + band word on the right. */
+/** A Driving Intelligence pillar row: label on the left, a score chip + band word on the right. Shared with
+ *  the Health screen ([InsightsContent]). */
 @Composable
-private fun PillarRow(label: String, band: String?, chip: @Composable () -> Unit) {
+internal fun PillarRow(label: String, band: String?, chip: @Composable () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,

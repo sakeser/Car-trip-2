@@ -231,6 +231,16 @@ Intelligence hero (Drive Quality headline + Smoothness & Demand pillar rows, new
 boundary test forbids `:ui-next` importing `settings.VehiclePrefs`); add it when a **`SettingsStore` / vehicle
 gateway** lands, then show the third pillar + enrich the list row. `TripLabeler` is a later, heavier slice (needs
 the per-point list + carries a stale hardcoded home).
+
+✅ **`:ui-next` premium app shell (v3.41/build 152, S25-verified 2026-07-01):** graduated from a single
+list+detail flow to a **bottom-nav shell (Trips / Health)** — one `Scaffold` in `TripsNextRoot` → `HomeShell`
+(top bar + `NavigationBar`), trip data observed once and shared by both tabs; detail stays a full-screen
+drill-in. The **Health tab** (`InsightsNextScreen`) is a Driving-Intelligence overview aggregated purely from
+`TripSummary` (avg Smoothness + Demand pillars via the shared `PillarRow`/`ScoreChip`/`StressChip`, plus a
+Drive-Quality "drive mix" count) — no vehicle needed, efficiency still deferred, band words derived locally
+(boundary-clean). Device-verified: 43 scorable drives, Smoothness 88 / Demand 41, mix 26 easy-smooth / 16
+smooth-under-pressure / 1 demanding-rough; tab switching + `EngineBoundaryTest` green.
+
 Then more screens; add gateways (`RecordingController`, `SyncGateway`, `ExportGateway`, `SettingsStore`) only as a
 screen needs them. **M1** (engine self-describing manifest) before `:ui-next` hosts recording; **M3** (Room migration
 tests) before any schema change.
