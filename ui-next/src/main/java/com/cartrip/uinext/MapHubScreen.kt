@@ -20,9 +20,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cartrip.engine.api.RoutePoint
 import com.cartrip.engine.api.TripEvent
@@ -56,11 +59,12 @@ import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 
 /**
- * Map tab (spec's 4th tab) — a **Map Hub** for the spatial-intelligence surface. Real, read-only data: it
- * overlays the recent drives' routes (via `getRoute`) and, when the Events layer is on, the trouble spots
- * (hard brake/accel/corner + rough-road events, via the position-enriched `getEvents`) as coloured pins, framed
- * to fit. Layer chips toggle Routes + Events; Speeding / Heatmap are disabled placeholders for later aggregate
- * gateways. Rough, read-only. ASCII source (Cp1252 trap).
+ * Map tab (spec's 4th tab) — a **Map Hub** for the spatial-intelligence surface. Real, read-only data over the
+ * recent drives: **Routes** (coloured by Smoothness; tap to open the trip), an **Events** layer of trouble-spot
+ * dots (position-enriched `getEvents`), and a **Speeding** overlay of over-limit segments (`getTrack` ->
+ * `speedingSegments`). Tapping an event dot or speeding segment shows a lightweight [MapPeek] card (what / when /
+ * which trip + "Open trip") instead of jumping to the full detail. Heatmap is still a placeholder chip. Framed to
+ * fit; layers lazy-load + are capped. ASCII source (Cp1252 trap).
  */
 @Composable
 internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit) {
@@ -73,6 +77,10 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
     var showSpeeding by remember { mutableStateOf(false) }
     // Each trip's Smoothness (0..100, or null) so routes can be coloured green=smooth -> red=rough.
     val smoothById = remember(trips) { trips.orEmpty().associate { it.id to it.smoothnessScore } }
+    // Trip lookup for the peek card (date of the tapped dot/segment).
+    val tripById = remember(trips) { trips.orEmpty().associateBy { it.id } }
+    // The lightweight "what is this?" peek for a tapped event / speeding segment (null = nothing selected).
+    var peek by remember { mutableStateOf<MapPeek?>(null) }
 
     // Keep each route paired with its trip id so a tap can open that trip.
     val routes by produceState<List<Pair<Long, List<LatLng>>>?>(initialValue = null, recentIds) {
@@ -81,16 +89,16 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
             if (r.size < 2) null else id to r.downsample(MAX_POINTS_PER_ROUTE).map { p -> LatLng(p.lat, p.lon) }
         }
     }
-    // Positioned events across the recent trips — loaded lazily only when the layer is on (getEvents reads the
-    // analysis track to place each event, so it isn't free). Capped so a busy history can't flood the map.
-    val events by produceState<List<TripEvent>>(initialValue = emptyList(), recentIds, showEvents) {
+    // Positioned events (paired with their trip id for the peek) — lazy (getEvents reads the analysis track to
+    // place each event, so it isn't free). Capped so a busy history can't flood the map.
+    val events by produceState<List<Pair<Long, TripEvent>>>(initialValue = emptyList(), recentIds, showEvents) {
         value = if (!showEvents) emptyList()
-        else recentIds.flatMap { repo.getEvents(it) }.filter { it.hasPosition }.take(MAX_EVENT_PINS)
+        else recentIds.flatMap { id -> repo.getEvents(id).filter { it.hasPosition }.map { id to it } }.take(MAX_EVENT_PINS)
     }
-    // Over-limit route segments, tiered minor/major — lazy (getTrack reads the analysis track), capped.
-    val speeding by produceState<List<SpeedingSegment>>(initialValue = emptyList(), recentIds, showSpeeding) {
+    // Over-limit route segments (paired with trip id), tiered minor/major — lazy (getTrack), capped.
+    val speeding by produceState<List<Pair<Long, SpeedingSegment>>>(initialValue = emptyList(), recentIds, showSpeeding) {
         value = if (!showSpeeding) emptyList()
-        else recentIds.flatMap { repo.getTrack(it).speedingSegments() }.take(MAX_SPEEDING_SEGMENTS)
+        else recentIds.flatMap { id -> repo.getTrack(id).speedingSegments().map { id to it } }.take(MAX_SPEEDING_SEGMENTS)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -146,7 +154,17 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
                     speeding = if (showSpeeding) speeding else emptyList(),
                     showRoutes = showRoutes,
                     smoothById = smoothById,
+                    tripById = tripById,
                     onOpenTrip = onOpenTrip,
+                    onPeek = { peek = it },
+                )
+            }
+            peek?.let { p ->
+                PeekCard(
+                    peek = p,
+                    onOpen = { peek = null; onOpenTrip(p.tripId) },
+                    onDismiss = { peek = null },
+                    modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
         }
@@ -156,11 +174,13 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
 @Composable
 private fun RouteOverlayMap(
     routes: List<Pair<Long, List<LatLng>>>,
-    events: List<TripEvent>,
-    speeding: List<SpeedingSegment>,
+    events: List<Pair<Long, TripEvent>>,
+    speeding: List<Pair<Long, SpeedingSegment>>,
     showRoutes: Boolean,
     smoothById: Map<Long, Int?>,
+    tripById: Map<Long, TripSummary>,
     onOpenTrip: (Long) -> Unit,
+    onPeek: (MapPeek) -> Unit,
 ) {
     // Small round pins for events (the default teardrop markers overlap into an unreadable wall at density).
     val dotIcons = remember { TripEventKind.values().associateWith { dotIcon(eventArgb(it)) } }
@@ -197,23 +217,57 @@ private fun RouteOverlayMap(
                 )
             }
         }
-        // Over-limit segments drawn above the routes (yellow = minor, red = major).
-        speeding.forEach { seg ->
+        // Over-limit segments drawn above the routes (yellow = minor, red = major); tap for a peek.
+        speeding.forEach { (tid, seg) ->
             Polyline(
                 points = seg.points.map { LatLng(it.lat, it.lon) },
                 color = if (seg.tier == SpeedTier.MAJOR) SpeedRed else SpeedYellow,
                 width = 12f,
                 jointType = JointType.ROUND,
                 zIndex = 1f,
+                clickable = true,
+                onClick = { onPeek(speedingPeek(tid, seg, tripById)) },
             )
         }
-        events.forEach { e ->
+        events.forEach { (tid, e) ->
             Marker(
                 state = MarkerState(LatLng(e.lat, e.lon)),
                 icon = dotIcons[e.kind],
                 anchor = Offset(0.5f, 0.5f),
-                title = eventTitle(e.kind),
+                onClick = { onPeek(eventPeek(tid, e, tripById)); true },
             )
+        }
+    }
+}
+
+/** A lightweight "what is this?" description of a tapped map item (event dot or speeding segment). */
+private data class MapPeek(val tripId: Long, val title: String, val subtitle: String)
+
+private fun eventPeek(tripId: Long, e: TripEvent, tripById: Map<Long, TripSummary>): MapPeek {
+    val whenStr = tripById[tripId]?.let { formatStart(it.startEpochMs) } ?: "Trip"
+    return MapPeek(tripId, eventTitle(e.kind), "$whenStr $MIDDOT ${formatDuration(e.offsetSeconds.toDouble())} in")
+}
+
+private fun speedingPeek(tripId: Long, seg: SpeedingSegment, tripById: Map<Long, TripSummary>): MapPeek {
+    val whenStr = tripById[tripId]?.let { formatStart(it.startEpochMs) } ?: "Trip"
+    val tier = if (seg.tier == SpeedTier.MAJOR) "10+ km/h over" else "up to 10 km/h over"
+    return MapPeek(tripId, "Speeding $MIDDOT $tier", whenStr)
+}
+
+/** The peek card: a small floating card describing the tapped item, with "Open trip" for the full detail. */
+@Composable
+private fun PeekCard(peek: MapPeek, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    ElevatedCard(modifier = modifier.fillMaxWidth().padding(16.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(peek.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(peek.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onOpen) { Text("Open trip") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
         }
     }
 }
