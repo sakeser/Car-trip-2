@@ -14,9 +14,14 @@ still **debug-gated** (Home → Options → Diagnostics → "Open :ui-next trip 
 - **Everything is on `main`.** The whole premium-modular redesign was merged (`ux-premium-modular-v1` → `main`,
   merge commit `3dcb781`, pushed). ⚠️ **One newer commit is on LOCAL `main` and NOT pushed: `589d8fd`** (Trip Line
   + You-vs-Traffic, below) — confirm with `git log origin/main..main`; push needs explicit owner OK.
-- **Version 3.46 / build 157, Room schema v22** (no schema change in any recent UI work).
+- **Version 3.47 / build 158, Room schema v22** (no schema change in any recent UI work).
 - **Map-interaction batch (2026-07-01, commit `f12e5d3`, S25 PASS):** 1-finger map pan + Trip Line<->map scrub
   sync (see priority #1 below). `TripTrackPoint` gained `lat`/`lon`/`hasPosition`.
+- **Trips-tab v2 (2026-07-01, commit `80a5ccd`, S25 PASS):** recency filter chips (24h/3d/7d/30d/All) + a
+  drive-only window summary bar + per-filter empty state + "Walk / non-drive" rows. `TripSummary` gained
+  `isDrive`; pure `:ui-next` `TripWindow.kt` (`RecencyWindow`/`inWindow`/`windowSummary`) does the filtering.
+  **`EngineBoundaryTest` hardened to also forbid `analysis.*` imports in `:ui-next`** (was a documented-intent
+  gap). Codex did the pure logic+tests and a diff review.
 - **Latest batch (2026-07-01, commits `589d8fd` + fix `65b6af8`, build-green, S25 PASS):** Trip Detail depth — the
   **Trip Line** (`TripLine.kt`, a Canvas speed-vs-time chart: filled speed curve + dashed posted-limit + coloured
   event ticks + adaptive legend) and **You-vs-Traffic** (`YouVsTraffic.kt`, verdict + proportional
@@ -82,8 +87,10 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
 
 ### Known gaps / carry-forward
 - `8f6c44e` (map-first detail) is **committed locally on `main` but not pushed.**
-- `:ui-next` is far from replacing legacy: **no Drive (record) tab, no Map tab, no More/Settings, no Trip Line,
-  no events/you-vs-traffic/fuel on the detail, no efficiency pillar, no windowing/filters on Trips/Health.**
+- `:ui-next` still doesn't replace legacy: **no Drive (record) tab, no Map tab, no More/Settings, no efficiency
+  pillar, no fuel/cost on the detail, no Drive-Stress explainer, no Health-tab windowing/filters.** (DONE since
+  this note: Trip Line + events + you-vs-traffic on the detail, map<->timeline scrub sync, 1-finger map pan, and
+  Trips-tab recency filters + summary + non-drive rows.)
 - Naming: `:ui-next` has no trip **route names** yet (`TripSummary` has none) — the detail headline uses the
   date. Real names come from legacy `GeoNamer`/`TripLabeler` (presentation-domain, not engine) — a later gateway.
 - Do NOT reopen: **Speed-Interruption / Traffic-Wave** (real-data calibration decided *no new detector*) and
@@ -101,8 +108,9 @@ screencap to a non-OneDrive path; the `:ui-next` map/UI needs a real device — 
      `MarkerState(pos)` each recomposition does NOT move the marker — keep one `rememberMarkerState()` and push
      positions in via `SideEffect`. A scrubber gesture needs a single `awaitPointerEventScope` loop (tap+drag);
      `detectHorizontalDragGestures` + `detectTapGestures` together conflict.
-2. **Trips tab polish:** recency filter chips (24h/3d/7d/30d/All) + a frozen map preview header + explicit
-   "Open details" affordance (the spec calls out replacing the legacy hidden two-tap).
+2. **Trips tab polish:** ✅ **DONE (`80a5ccd`):** recency filter chips (24h/3d/7d/30d/All) + a drive-only window
+   summary + per-filter empty state + "Walk / non-drive" rows (via `TripSummary.isDrive` + pure `TripWindow`).
+   **Still open (optional):** a frozen map preview header per row / thumbnail.
 3. **Efficiency pillar** across detail + Health: add a **vehicle gateway** (`SettingsStore` exposing the
    `settings/VehiclePrefs` profile through engine-api) so `DrivingIntelligence.from(trip, vehicle)` can run in
    `:ui-next`; then show the 3rd pillar + fuel/cost.
