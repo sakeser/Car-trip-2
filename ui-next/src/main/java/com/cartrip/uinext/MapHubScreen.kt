@@ -1,5 +1,9 @@
 package com.cartrip.uinext
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -37,6 +42,7 @@ import com.cartrip.engine.api.TripEventKind
 import com.cartrip.engine.api.TripRepository
 import com.cartrip.engine.api.TripSummary
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.JointType
@@ -64,6 +70,7 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
 
     var showRoutes by remember { mutableStateOf(true) }
     var showEvents by remember { mutableStateOf(false) }
+    var showSpeeding by remember { mutableStateOf(false) }
     // Each trip's Smoothness (0..100, or null) so routes can be coloured green=smooth -> red=rough.
     val smoothById = remember(trips) { trips.orEmpty().associate { it.id to it.smoothnessScore } }
 
@@ -80,6 +87,11 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
         value = if (!showEvents) emptyList()
         else recentIds.flatMap { repo.getEvents(it) }.filter { it.hasPosition }.take(MAX_EVENT_PINS)
     }
+    // Over-limit route segments, tiered minor/major — lazy (getTrack reads the analysis track), capped.
+    val speeding by produceState<List<SpeedingSegment>>(initialValue = emptyList(), recentIds, showSpeeding) {
+        value = if (!showSpeeding) emptyList()
+        else recentIds.flatMap { repo.getTrack(it).speedingSegments() }.take(MAX_SPEEDING_SEGMENTS)
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -89,7 +101,7 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
         ) {
             FilterChip(selected = showRoutes, onClick = { showRoutes = !showRoutes }, label = { Text("Routes") })
             FilterChip(selected = showEvents, onClick = { showEvents = !showEvents }, label = { Text("Events") })
-            FilterChip(selected = false, enabled = false, onClick = {}, label = { Text("Speeding") })
+            FilterChip(selected = showSpeeding, onClick = { showSpeeding = !showSpeeding }, label = { Text("Speeding") })
             FilterChip(selected = false, enabled = false, onClick = {}, label = { Text("Heatmap") })
         }
         Text(
@@ -98,7 +110,8 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
                 else -> buildString {
                     append("${r.size} recent ${if (r.size == 1) "route" else "routes"}")
                     if (showEvents) append(" $MIDDOT ${events.size} events")
-                    else append(" $MIDDOT tap a route to open it")
+                    if (showSpeeding) append(" $MIDDOT ${speeding.size} speeding")
+                    if (!showEvents && !showSpeeding) append(" $MIDDOT tap a route to open it")
                 }
             },
             style = MaterialTheme.typography.labelMedium,
@@ -130,6 +143,7 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
                 else -> RouteOverlayMap(
                     routes = r,
                     events = if (showEvents) events else emptyList(),
+                    speeding = if (showSpeeding) speeding else emptyList(),
                     showRoutes = showRoutes,
                     smoothById = smoothById,
                     onOpenTrip = onOpenTrip,
@@ -143,10 +157,13 @@ internal fun MapHubScreen(trips: List<TripSummary>?, onOpenTrip: (Long) -> Unit)
 private fun RouteOverlayMap(
     routes: List<Pair<Long, List<LatLng>>>,
     events: List<TripEvent>,
+    speeding: List<SpeedingSegment>,
     showRoutes: Boolean,
     smoothById: Map<Long, Int?>,
     onOpenTrip: (Long) -> Unit,
 ) {
+    // Small round pins for events (the default teardrop markers overlap into an unreadable wall at density).
+    val dotIcons = remember { TripEventKind.values().associateWith { dotIcon(eventArgb(it)) } }
     // Frame to the routes (loaded regardless of the toggle) so the view is stable as layers turn on/off.
     val all = remember(routes) { routes.flatMap { it.second } }
     val bounds = remember(all) {
@@ -180,10 +197,21 @@ private fun RouteOverlayMap(
                 )
             }
         }
+        // Over-limit segments drawn above the routes (yellow = minor, red = major).
+        speeding.forEach { seg ->
+            Polyline(
+                points = seg.points.map { LatLng(it.lat, it.lon) },
+                color = if (seg.tier == SpeedTier.MAJOR) SpeedRed else SpeedYellow,
+                width = 12f,
+                jointType = JointType.ROUND,
+                zIndex = 1f,
+            )
+        }
         events.forEach { e ->
             Marker(
                 state = MarkerState(LatLng(e.lat, e.lon)),
-                icon = BitmapDescriptorFactory.defaultMarker(eventHue(e.kind)),
+                icon = dotIcons[e.kind],
+                anchor = Offset(0.5f, 0.5f),
                 title = eventTitle(e.kind),
             )
         }
@@ -221,13 +249,28 @@ private fun List<RoutePoint>.downsample(max: Int): List<RoutePoint> {
     return filterIndexed { i, _ -> i % step == 0 || i == lastIndex }
 }
 
-/** Google-marker hue per event kind (rough colour code for the trouble-spot pins). */
-private fun eventHue(kind: TripEventKind): Float = when (kind) {
-    TripEventKind.HARD_BRAKE -> BitmapDescriptorFactory.HUE_RED
-    TripEventKind.HARD_ACCEL -> BitmapDescriptorFactory.HUE_ORANGE
-    TripEventKind.HARD_CORNER -> BitmapDescriptorFactory.HUE_VIOLET
-    TripEventKind.ROUGH_ROAD -> BitmapDescriptorFactory.HUE_YELLOW
-    TripEventKind.OTHER -> BitmapDescriptorFactory.HUE_AZURE
+/** ARGB colour per event kind (matches the Trip Line event palette). */
+private fun eventArgb(kind: TripEventKind): Int = when (kind) {
+    TripEventKind.HARD_BRAKE -> 0xFFEF4444.toInt()
+    TripEventKind.HARD_ACCEL -> 0xFFF59E0B.toInt()
+    TripEventKind.HARD_CORNER -> 0xFF6366F1.toInt()
+    TripEventKind.ROUGH_ROAD -> 0xFF9CA3AF.toInt()
+    TripEventKind.OTHER -> 0xFF9CA3AF.toInt()
+}
+
+/** A small round marker bitmap (white ring + coloured centre) — far more legible than the default teardrop when
+ *  many events overlap. */
+private fun dotIcon(argb: Int): BitmapDescriptor {
+    val size = 30
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val c = size / 2f
+    paint.color = AndroidColor.WHITE
+    canvas.drawCircle(c, c, c, paint)
+    paint.color = argb
+    canvas.drawCircle(c, c, c - 4f, paint)
+    return BitmapDescriptorFactory.fromBitmap(bmp)
 }
 
 private fun eventTitle(kind: TripEventKind): String = when (kind) {
@@ -242,6 +285,9 @@ private val RouteBlue = Color(0xFF4285F4)
 private val SmoothGreen = Color(0xFF22C55E)
 private val SmoothAmber = Color(0xFFF59E0B)
 private val SmoothRed = Color(0xFFEF4444)
+private val SpeedYellow = Color(0xFFEAB308)   // minor: 0..10 km/h over
+private val SpeedRed = Color(0xFFDC2626)       // major: 10+ km/h over
 private const val RECENT_LIMIT = 10
 private const val MAX_POINTS_PER_ROUTE = 120
 private const val MAX_EVENT_PINS = 250
+private const val MAX_SPEEDING_SEGMENTS = 400
